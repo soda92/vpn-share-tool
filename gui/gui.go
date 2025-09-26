@@ -22,9 +22,10 @@ import (
 )
 
 const (
-	serverAddr    = "127.0.0.1"
-	serverPort    = 7000
-	vhostHTTPPort = 8080
+	serverBindAddr = "0.0.0.0"
+	serverAddr     = "127.0.0.1"
+	serverPort     = 7000
+	startPort      = 8081
 )
 
 // sharedProxy holds information about a shared URL.
@@ -37,9 +38,10 @@ type sharedProxy struct {
 }
 
 var (
-	proxies     []*sharedProxy
-	proxiesLock sync.RWMutex
-	lanIP       string
+	proxies        []*sharedProxy
+	proxiesLock    sync.RWMutex
+	lanIP          string
+	nextRemotePort = startPort
 )
 
 func Run() {
@@ -136,6 +138,11 @@ func addAndStartProxy(rawURL string) (*sharedProxy, error) {
 		}
 	}
 
+	proxiesLock.Lock()
+	remotePort := nextRemotePort
+	nextRemotePort++
+	proxiesLock.Unlock()
+
 	// Each proxy needs a unique name.
 	proxyName := fmt.Sprintf("web_%s_%s", strings.ReplaceAll(localHost, ".", "_"), localPort)
 
@@ -146,11 +153,11 @@ server_addr = %s
 server_port = %d
 
 [%s]
-type = http
+type = tcp
 local_ip = %s
 local_port = %s
-custom_domains = %s
-`, serverAddr, serverPort, proxyName, localHost, localPort, lanIP)
+remote_port = %d
+`, serverAddr, serverPort, proxyName, localHost, localPort, remotePort)
 
 	// Write config to a temporary file
 	tmpfile, err := ioutil.TempFile("", "frpc-*.ini")
@@ -192,7 +199,7 @@ custom_domains = %s
 
 	newProxy := &sharedProxy{
 		OriginalURL: rawURL,
-		SharedURL:   fmt.Sprintf("http://%s:%d", lanIP, vhostHTTPPort),
+		SharedURL:   fmt.Sprintf("http://%s:%d (or http://localhost:%d)", lanIP, remotePort, remotePort),
 		service:     service,
 		cancel:      cancel,
 		tmpFile:     tmpfile.Name(),
@@ -206,8 +213,7 @@ func startFrps(statusLabel *widget.Label) {
 [common]
 bind_addr = %s
 bind_port = %d
-vhost_http_port = %d
-`, serverAddr, serverPort, vhostHTTPPort)
+`, serverBindAddr, serverPort)
 
 	tmpfile, err := ioutil.TempFile("", "frps-*.ini")
 	if err != nil {
@@ -236,7 +242,7 @@ vhost_http_port = %d
 		return
 	}
 
-	statusLabel.SetText(fmt.Sprintf("Server running. Share base URL: http://%s:%d", lanIP, vhostHTTPPort))
+	statusLabel.SetText("Server running.")
 
 	// FIX 3: Call Run without expecting a return value. It's a blocking call.
 	service.Run(context.Background())
