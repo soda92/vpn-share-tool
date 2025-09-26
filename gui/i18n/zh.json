@@ -21,5 +21,7 @@
     "failedToLoadClientConfig": "从文件加载客户端配置失败: {error}",
     "failedToCreateClientService": "创建客户端服务失败: {w}",
     "frpcServiceExited": "frpc服务 [{proxyName}] 异常退出: {error}",
-    "noSuitableLanIpFound": "未找到合适的局域网IP"
+    "noSuitableLanIpFound": "未找到合适的局域网IP",
+    "copiedTitle": "URL 已复制",
+    "copiedContent": "已将分享 URL 复制到剪贴板"
 }

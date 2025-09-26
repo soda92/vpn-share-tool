@@ -21,5 +21,7 @@
     "failedToLoadClientConfig": "failed to load client config from file: {error}",
     "failedToCreateClientService": "failed to create client service: {w}",
     "frpcServiceExited": "frpc service [{proxyName}] exited with error: {error}",
-    "noSuitableLanIpFound": "no suitable LAN IP found"
+    "noSuitableLanIpFound": "no suitable LAN IP found",
+    "copiedTitle": "URL Copied",
+    "copiedContent": "Shared URL copied to clipboard"
 }

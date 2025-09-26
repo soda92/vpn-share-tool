@@ -109,7 +109,8 @@ func Run() {
 
 	sharedListData := binding.NewStringList()
 
-	sharedList := widget.NewListWithData(
+	var sharedList *widget.List
+	sharedList = widget.NewListWithData(
 		sharedListData,
 		func() fyne.CanvasObject {
 			return widget.NewLabel("template")
@@ -119,10 +120,38 @@ func Run() {
 		},
 	)
 
+	sharedList.OnSelected = func(id widget.ListItemID) {
+		proxiesLock.RLock()
+		if id >= len(proxies) {
+			proxiesLock.RUnlock()
+			return
+		}
+		proxyToCopy := proxies[id]
+		proxiesLock.RUnlock()
+
+		// The full shared URL is "http://<lanIP>:<port> (or http://localhost:<port>)"
+		// We extract just the LAN part to copy.
+		urlToCopy := strings.Split(proxyToCopy.SharedURL, " ")[0]
+
+		myWindow.Clipboard().SetContent(urlToCopy)
+		fyne.CurrentApp().SendNotification(&fyne.Notification{
+			Title:   l("copiedTitle"),
+			Content: l("copiedContent"),
+		})
+
+		// Unselect the item so it can be clicked again.
+		sharedList.Unselect(id)
+	}
+
 	addButton := widget.NewButton(l("shareButton"), func() {
 		rawURL := urlEntry.Text
 		if rawURL == "" {
 			return
+		}
+
+		// Automatically prepend "http://" if no scheme is present.
+		if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+			rawURL = "http://" + rawURL
 		}
 
 		newProxy, err := addAndStartProxy(rawURL)
