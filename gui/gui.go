@@ -3,10 +3,11 @@ package gui
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/url"
-	"strconv"
+	"os"
 	"strings"
 	"sync"
 
@@ -21,8 +22,9 @@ import (
 )
 
 const (
-	serverAddr = "127.0.0.1"
-	serverPort = 7000
+	serverAddr    = "127.0.0.1"
+	serverPort    = 7000
+	vhostHTTPPort = 8080
 )
 
 // sharedProxy holds information about a shared URL.
@@ -31,13 +33,13 @@ type sharedProxy struct {
 	SharedURL   string
 	service     *client.Service
 	cancel      context.CancelFunc
+	tmpFile     string
 }
 
 var (
-	proxies        []*sharedProxy
-	proxiesLock    sync.RWMutex
-	lanIP          string
-	nextRemotePort = 8081 // Starting port for shared URLs
+	proxies     []*sharedProxy
+	proxiesLock sync.RWMutex
+	lanIP       string
 )
 
 func Run() {
@@ -105,11 +107,12 @@ func Run() {
 	))
 
 	myWindow.SetOnClosed(func() {
-		// Clean up all running frpc services on exit
+		// Clean up all running frpc services and temp files on exit
 		proxiesLock.Lock()
 		defer proxiesLock.Unlock()
 		for _, p := range proxies {
 			p.cancel()
+			os.Remove(p.tmpFile)
 		}
 	})
 
@@ -124,52 +127,64 @@ func addAndStartProxy(rawURL string) (*sharedProxy, error) {
 	}
 
 	localHost := parsedURL.Hostname()
-	localPortStr := parsedURL.Port()
-	if localPortStr == "" {
+	localPort := parsedURL.Port()
+	if localPort == "" {
 		if parsedURL.Scheme == "https" {
-			localPortStr = "443"
+			localPort = "443"
 		} else {
-			localPortStr = "80"
+			localPort = "80"
 		}
 	}
-	localPort, err := strconv.Atoi(localPortStr)
+
+	// Each proxy needs a unique name.
+	proxyName := fmt.Sprintf("web_%s_%s", strings.ReplaceAll(localHost, ".", "_"), localPort)
+
+	// Generate config as a string for the legacy INI format
+	clientCfgStr := fmt.Sprintf(`
+[common]
+server_addr = %s
+server_port = %d
+
+[%s]
+type = http
+local_ip = %s
+local_port = %s
+custom_domains = %s
+`, serverAddr, serverPort, proxyName, localHost, localPort, lanIP)
+
+	// Write config to a temporary file
+	tmpfile, err := ioutil.TempFile("", "frpc-*.ini")
 	if err != nil {
-		return nil, fmt.Errorf("invalid port in URL: %w", err)
+		return nil, fmt.Errorf("could not create temp file: %w", err)
+	}
+	if _, err := tmpfile.Write([]byte(clientCfgStr)); err != nil {
+		tmpfile.Close()
+		os.Remove(tmpfile.Name())
+		return nil, fmt.Errorf("could not write to temp file: %w", err)
+	}
+	tmpfile.Close()
+
+	// Load config from the temporary file
+	clientCfg, pxyCfgs, visitorCfgs, _, err := config.LoadClientConfig(tmpfile.Name(), false)
+	if err != nil {
+		os.Remove(tmpfile.Name())
+		return nil, fmt.Errorf("failed to load client config from file: %w", err)
 	}
 
-	proxiesLock.Lock()
-	remotePort := nextRemotePort
-	nextRemotePort++
-	proxiesLock.Unlock()
-
-	proxyName := fmt.Sprintf("web_%s_%d", strings.ReplaceAll(localHost, ".", "_"), remotePort)
-
-	// Build config structs directly
-	cfg := &config.ClientCommonConf{}
-	config.MustLoadDefaultClientConf(cfg)
-	cfg.ServerAddr = serverAddr
-	cfg.ServerPort = serverPort
-
-	pxyCfgs := make(map[string]config.ProxyConf)
-	pxyCfgs[proxyName] = &config.HTTPProxyConf{
-		BaseProxyConf: config.BaseProxyConf{
-			ProxyName: proxyName,
-			ProxyType: "http",
-			LocalSvrConf: config.LocalSvrConf{
-				LocalIP:   localHost,
-				LocalPort: localPort,
-			},
-		},
-		RemotePort: remotePort,
-	}
-
-	service, err := client.NewService(cfg, pxyCfgs, nil, "")
+	// FIX 1: Pass ServiceOptions by value, not by pointer.
+	service, err := client.NewService(client.ServiceOptions{
+		Common:      clientCfg,
+		ProxyCfgs:   pxyCfgs,
+		VisitorCfgs: visitorCfgs,
+	})
 	if err != nil {
+		os.Remove(tmpfile.Name())
 		return nil, fmt.Errorf("failed to create client service: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
+		defer os.Remove(tmpfile.Name()) // Clean up file when service stops
 		if err := service.Run(ctx); err != nil {
 			log.Printf("frpc service [%s] exited with error: %v", proxyName, err)
 		}
@@ -177,30 +192,56 @@ func addAndStartProxy(rawURL string) (*sharedProxy, error) {
 
 	newProxy := &sharedProxy{
 		OriginalURL: rawURL,
-		SharedURL:   fmt.Sprintf("http://%s:%d", lanIP, remotePort),
+		SharedURL:   fmt.Sprintf("http://%s:%d", lanIP, vhostHTTPPort),
 		service:     service,
 		cancel:      cancel,
+		tmpFile:     tmpfile.Name(),
 	}
 
 	return newProxy, nil
 }
 
 func startFrps(statusLabel *widget.Label) {
-	// Build server config struct directly
-	cfg := config.GetDefaultServerConf()
-	cfg.BindAddr = serverAddr
-	cfg.BindPort = serverPort
+	serverCfgStr := fmt.Sprintf(`
+[common]
+bind_addr = %s
+bind_port = %d
+vhost_http_port = %d
+`, serverAddr, serverPort, vhostHTTPPort)
 
-	service, err := server.NewService(cfg)
+	tmpfile, err := ioutil.TempFile("", "frps-*.ini")
 	if err != nil {
-		statusLabel.SetText(fmt.Sprintf("Error: %v", err))
+		statusLabel.SetText(fmt.Sprintf("Error creating temp file: %v", err))
+		return
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := tmpfile.Write([]byte(serverCfgStr)); err != nil {
+		tmpfile.Close()
+		statusLabel.SetText(fmt.Sprintf("Error writing temp file: %v", err))
+		return
+	}
+	tmpfile.Close()
+
+	serverCfg, _, err := config.LoadServerConfig(tmpfile.Name(), false)
+	if err != nil {
+		statusLabel.SetText(fmt.Sprintf("Error loading server config: %v", err))
 		return
 	}
 
-	statusLabel.SetText(fmt.Sprintf("Server running on %s:%d. Ready to share.", serverAddr, serverPort))
-	if err = service.Run(context.Background()); err != nil {
-		statusLabel.SetText(fmt.Sprintf("Server failed: %v", err))
+	// FIX 2: Pass serverCfg directly to NewService.
+	service, err := server.NewService(serverCfg)
+	if err != nil {
+		statusLabel.SetText(fmt.Sprintf("Error creating server service: %v", err))
+		return
 	}
+
+	statusLabel.SetText(fmt.Sprintf("Server running. Share base URL: http://%s:%d", lanIP, vhostHTTPPort))
+
+	// FIX 3: Call Run without expecting a return value. It's a blocking call.
+	service.Run(context.Background())
+	log.Printf("Server service has stopped.")
+	statusLabel.SetText("Server stopped.")
 }
 
 // getLanIP finds the local IP address of the machine.
