@@ -182,7 +182,7 @@ func Run() {
 		urlEntry.SetText("")
 	})
 
-	myWindow.SetContent(container.NewVBox(
+	topContent := container.NewVBox(
 		widget.NewLabel(l("localServerStatusLabel")),
 		serverStatus,
 		widget.NewSeparator(),
@@ -191,8 +191,9 @@ func Run() {
 		addButton,
 		widget.NewSeparator(),
 		widget.NewLabel(l("sharedUrlsLabel")),
-		sharedList,
-	))
+	)
+
+	myWindow.SetContent(container.NewBorder(topContent, nil, nil, nil, sharedList))
 
 	myWindow.SetOnClosed(func() {
 		// Clean up all running frpc services and temp files on exit
