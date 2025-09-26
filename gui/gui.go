@@ -39,6 +39,7 @@ const (
 type sharedProxy struct {
 	OriginalURL string
 	RemotePort  int
+	Path        string
 	service     *client.Service
 	cancel      context.CancelFunc
 	tmpFile     string
@@ -158,13 +159,12 @@ func Run() {
 		sharedList.Unselect(id)
 	}
 
-	addButton := widget.NewButton(l("shareButton"), func() {
-		rawURL := urlEntry.Text
+	// Define the core sharing logic as a function to be reused.
+	shareLogic := func(rawURL string) {
 		if rawURL == "" {
 			return
 		}
 
-		// Automatically prepend "http://" if no scheme is present.
 		if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 			rawURL = "http://" + rawURL
 		}
@@ -172,7 +172,6 @@ func Run() {
 		newProxy, err := addAndStartProxy(rawURL)
 		if err != nil {
 			log.Printf(l("errorAddingProxy", map[string]interface{}{"url": rawURL, "error": err}))
-			// Optionally, show this error in the UI
 			return
 		}
 
@@ -182,7 +181,8 @@ func Run() {
 
 		// Add a line for each IP address
 		for _, ip := range lanIPs {
-			sharedURL := fmt.Sprintf("http://%s:%d", ip, newProxy.RemotePort)
+			// Append the path from the original URL.
+			sharedURL := fmt.Sprintf("http://%s:%d%s", ip, newProxy.RemotePort, newProxy.Path)
 			displayString := l("sharedUrlFormat", map[string]interface{}{
 				"originalUrl": newProxy.OriginalURL,
 				"sharedUrl":   sharedURL,
@@ -191,6 +191,14 @@ func Run() {
 		}
 
 		urlEntry.SetText("")
+	}
+
+	urlEntry.OnSubmitted = func(text string) {
+		shareLogic(text)
+	}
+
+	addButton := widget.NewButton(l("shareButton"), func() {
+		shareLogic(urlEntry.Text)
 	})
 
 	topContent := container.NewVBox(
@@ -305,6 +313,7 @@ remote_port = %d
 	newProxy := &sharedProxy{
 		OriginalURL: rawURL,
 		RemotePort:  remotePort,
+		Path:        parsedURL.Path,
 		service:     service,
 		cancel:      cancel,
 		tmpFile:     tmpfile.Name(),
