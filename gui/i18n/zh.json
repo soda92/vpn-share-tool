@@ -23,5 +23,6 @@
     "frpcServiceExited": "frpc服务 [{{.proxyName}}] 异常退出: {{.error}}",
     "noSuitableLanIpFound": "未找到合适的局域网IP",
     "copiedTitle": "URL 已复制",
-    "copiedContent": "已将分享 URL 复制到剪贴板"
+    "copiedContent": "已将分享 URL 复制到剪贴板",
+    "errorNoServerPort": "未能为服务器找到可用端口。"
 }

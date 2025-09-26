@@ -32,7 +32,6 @@ var i18nFS embed.FS
 const (
 	serverBindAddr = "0.0.0.0"
 	serverAddr     = "127.0.0.1"
-	serverPort     = 7000
 	startPort      = 8081
 )
 
@@ -49,9 +48,21 @@ var (
 	proxies        []*sharedProxy
 	proxiesLock    sync.RWMutex
 	lanIPs         []string
+	serverPort     = 7000 // Start with default server port
 	nextRemotePort = startPort
 	localizer      *i18n.Localizer
 )
+
+// isPortAvailable checks if a TCP port is available to be listened on.
+func isPortAvailable(port int) bool {
+	address := fmt.Sprintf(":%d", port)
+	ln, err := net.Listen("tcp", address)
+	if err != nil {
+		return false
+	}
+	_ = ln.Close()
+	return true
+}
 
 func initI18n() {
 	bundle := i18n.NewBundle(language.English)
@@ -226,8 +237,15 @@ func addAndStartProxy(rawURL string) (*sharedProxy, error) {
 	}
 
 	proxiesLock.Lock()
-	remotePort := nextRemotePort
-	nextRemotePort++
+	var remotePort int
+	for {
+		port := nextRemotePort
+		nextRemotePort++
+		if isPortAvailable(port) {
+			remotePort = port
+			break
+		}
+	}
 	proxiesLock.Unlock()
 
 	// Each proxy needs a unique name.
@@ -296,6 +314,23 @@ remote_port = %d
 }
 
 func startFrps(statusLabel *widget.Label) {
+	proxiesLock.Lock()
+	var foundPort int
+	port := serverPort
+	for i := 0; i < 100; i++ { // Try up to 100 ports from the base
+		if isPortAvailable(port + i) {
+			foundPort = port + i
+			break
+		}
+	}
+	if foundPort == 0 {
+		proxiesLock.Unlock()
+		statusLabel.SetText(l("errorNoServerPort"))
+		return
+	}
+	serverPort = foundPort // Update global server port for clients to use
+	proxiesLock.Unlock()
+
 	serverCfgStr := fmt.Sprintf(`
 [common]
 bind_addr = %s

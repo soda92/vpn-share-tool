@@ -23,5 +23,6 @@
     "frpcServiceExited": "frpc service [{{.proxyName}}] exited with error: {{.error}}",
     "noSuitableLanIpFound": "no suitable LAN IP found",
     "copiedTitle": "URL Copied",
-    "copiedContent": "Shared URL copied to clipboard"
+    "copiedContent": "Shared URL copied to clipboard",
+    "errorNoServerPort": "Could not find an available port for the server."
 }
