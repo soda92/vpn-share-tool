@@ -2,6 +2,7 @@ package gui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -16,9 +17,12 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
+	"github.com/Xuanwo/go-locale"
 	"github.com/fatedier/frp/client"
 	"github.com/fatedier/frp/pkg/config"
 	"github.com/fatedier/frp/server"
+	"github.com/nicksnyder/go-i18n/v2/i18n"
+	"golang.org/x/text/language"
 )
 
 const (
@@ -42,26 +46,66 @@ var (
 	proxiesLock    sync.RWMutex
 	lanIP          string
 	nextRemotePort = startPort
+	localizer      *i18n.Localizer
 )
 
+func initI18n() {
+	bundle := i18n.NewBundle(language.English)
+	bundle.RegisterUnmarshalFunc("json", json.Unmarshal)
+	bundle.LoadMessageFile("gui/i18n/en.json")
+	bundle.LoadMessageFile("gui/i18n/zh.json")
+
+	langTag, err := locale.Detect()
+	if err != nil {
+		log.Printf("Failed to detect locale, falling back to English: %v", err)
+		langTag = language.English
+	}
+
+	matcher := language.NewMatcher([]language.Tag{
+		language.English,
+		language.Chinese,
+	})
+	tag, _, _ := matcher.Match(langTag)
+
+	localizer = i18n.NewLocalizer(bundle, tag.String())
+}
+
+func l(messageID string, templateData ...map[string]interface{}) string {
+	var data map[string]interface{}
+	if len(templateData) > 0 {
+		data = templateData[0]
+	}
+	msg, err := localizer.Localize(&i18n.LocalizeConfig{
+		MessageID:    messageID,
+		TemplateData: data,
+	})
+	if err != nil {
+		log.Printf("Failed to localize message '%s': %v", messageID, err)
+		return messageID // Fallback to message ID
+	}
+	return msg
+}
+
 func Run() {
+	initI18n()
+
 	myApp := app.New()
-	myWindow := myApp.NewWindow("VPN Share Tool")
+	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
 
 	var err error
 	lanIP, err = getLanIP()
 	if err != nil {
 		lanIP = "127.0.0.1" // Fallback
-		log.Printf("Could not determine LAN IP, falling back to %s: %v", lanIP, err)
+		log.Printf(l("couldNotDetermineLanIp", map[string]interface{}{"ip": lanIP, "error": err}))
 	}
 
 	// Server section
-	serverStatus := widget.NewLabel("Starting server...")
+	serverStatus := widget.NewLabel(l("startingServer"))
 	go startFrps(serverStatus)
 
 	// Client/Proxy section
 	urlEntry := widget.NewEntry()
-	urlEntry.SetPlaceHolder("http://internal.site.com or http://localhost:3000")
+	urlEntry.SetPlaceHolder(l("urlPlaceholder"))
 
 	sharedListData := binding.NewStringList()
 
@@ -75,7 +119,7 @@ func Run() {
 		},
 	)
 
-	addButton := widget.NewButton("Share", func() {
+	addButton := widget.NewButton(l("shareButton"), func() {
 		rawURL := urlEntry.Text
 		if rawURL == "" {
 			return
@@ -83,7 +127,7 @@ func Run() {
 
 		newProxy, err := addAndStartProxy(rawURL)
 		if err != nil {
-			log.Printf("Error adding proxy for %s: %v", rawURL, err)
+			log.Printf(l("errorAddingProxy", map[string]interface{}{"url": rawURL, "error": err}))
 			// Optionally, show this error in the UI
 			return
 		}
@@ -92,19 +136,22 @@ func Run() {
 		proxies = append(proxies, newProxy)
 		proxiesLock.Unlock()
 
-		sharedListData.Append(fmt.Sprintf("%s -> %s", newProxy.OriginalURL, newProxy.SharedURL))
+		sharedListData.Append(l("sharedUrlFormat", map[string]interface{}{
+			"originalUrl": newProxy.OriginalURL,
+			"sharedUrl":   newProxy.SharedURL,
+		}))
 		urlEntry.SetText("")
 	})
 
 	myWindow.SetContent(container.NewVBox(
-		widget.NewLabel("Local Server Status"),
+		widget.NewLabel(l("localServerStatusLabel")),
 		serverStatus,
 		widget.NewSeparator(),
-		widget.NewLabel("Add a URL to share"),
+		widget.NewLabel(l("addUrlLabel")),
 		urlEntry,
 		addButton,
 		widget.NewSeparator(),
-		widget.NewLabel("Shared URLs (accessible on your LAN)"),
+		widget.NewLabel(l("sharedUrlsLabel")),
 		sharedList,
 	))
 
@@ -125,7 +172,7 @@ func Run() {
 func addAndStartProxy(rawURL string) (*sharedProxy, error) {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid URL: %w", err)
+		return nil, fmt.Errorf(l("invalidUrl", map[string]interface{}{"error": err}))
 	}
 
 	localHost := parsedURL.Hostname()
@@ -162,12 +209,12 @@ remote_port = %d
 	// Write config to a temporary file
 	tmpfile, err := ioutil.TempFile("", "frpc-*.ini")
 	if err != nil {
-		return nil, fmt.Errorf("could not create temp file: %w", err)
+		return nil, fmt.Errorf(l("couldNotCreateTempFile", map[string]interface{}{"error": err}))
 	}
 	if _, err := tmpfile.Write([]byte(clientCfgStr)); err != nil {
 		tmpfile.Close()
 		os.Remove(tmpfile.Name())
-		return nil, fmt.Errorf("could not write to temp file: %w", err)
+		return nil, fmt.Errorf(l("couldNotWriteToTempFile", map[string]interface{}{"error": err}))
 	}
 	tmpfile.Close()
 
@@ -175,7 +222,7 @@ remote_port = %d
 	clientCfg, pxyCfgs, visitorCfgs, _, err := config.LoadClientConfig(tmpfile.Name(), false)
 	if err != nil {
 		os.Remove(tmpfile.Name())
-		return nil, fmt.Errorf("failed to load client config from file: %w", err)
+		return nil, fmt.Errorf(l("failedToLoadClientConfig", map[string]interface{}{"error": err}))
 	}
 
 	// FIX 1: Pass ServiceOptions by value, not by pointer.
@@ -186,14 +233,14 @@ remote_port = %d
 	})
 	if err != nil {
 		os.Remove(tmpfile.Name())
-		return nil, fmt.Errorf("failed to create client service: %w", err)
+		return nil, fmt.Errorf(l("failedToCreateClientService", map[string]interface{}{"w": err}))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer os.Remove(tmpfile.Name()) // Clean up file when service stops
 		if err := service.Run(ctx); err != nil {
-			log.Printf("frpc service [%s] exited with error: %v", proxyName, err)
+			log.Printf(l("frpcServiceExited", map[string]interface{}{"proxyName": proxyName, "error": err}))
 		}
 	}()
 
@@ -217,37 +264,37 @@ bind_port = %d
 
 	tmpfile, err := ioutil.TempFile("", "frps-*.ini")
 	if err != nil {
-		statusLabel.SetText(fmt.Sprintf("Error creating temp file: %v", err))
+		statusLabel.SetText(l("errorCreatingTempFile", map[string]interface{}{"error": err}))
 		return
 	}
 	defer os.Remove(tmpfile.Name())
 
 	if _, err := tmpfile.Write([]byte(serverCfgStr)); err != nil {
 		tmpfile.Close()
-		statusLabel.SetText(fmt.Sprintf("Error writing temp file: %v", err))
+		statusLabel.SetText(l("errorWritingTempFile", map[string]interface{}{"error": err}))
 		return
 	}
 	tmpfile.Close()
 
 	serverCfg, _, err := config.LoadServerConfig(tmpfile.Name(), false)
 	if err != nil {
-		statusLabel.SetText(fmt.Sprintf("Error loading server config: %v", err))
+		statusLabel.SetText(l("errorLoadingServerConfig", map[string]interface{}{"error": err}))
 		return
 	}
 
 	// FIX 2: Pass serverCfg directly to NewService.
 	service, err := server.NewService(serverCfg)
 	if err != nil {
-		statusLabel.SetText(fmt.Sprintf("Error creating server service: %v", err))
+		statusLabel.SetText(l("errorCreatingServerService", map[string]interface{}{"error": err}))
 		return
 	}
 
-	statusLabel.SetText("Server running.")
+	statusLabel.SetText(l("serverRunning"))
 
 	// FIX 3: Call Run without expecting a return value. It's a blocking call.
 	service.Run(context.Background())
 	log.Printf("Server service has stopped.")
-	statusLabel.SetText("Server stopped.")
+	statusLabel.SetText(l("serverStopped"))
 }
 
 // getLanIP finds the local IP address of the machine.
@@ -263,5 +310,5 @@ func getLanIP() (string, error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("no suitable LAN IP found")
+	return "", fmt.Errorf(l("noSuitableLanIpFound"))
 }
