@@ -2,6 +2,7 @@ package gui
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -25,6 +26,9 @@ import (
 	"golang.org/x/text/language"
 )
 
+//go:embed i18n/*.json
+var i18nFS embed.FS
+
 const (
 	serverBindAddr = "0.0.0.0"
 	serverAddr     = "127.0.0.1"
@@ -35,7 +39,7 @@ const (
 // sharedProxy holds information about a shared URL.
 type sharedProxy struct {
 	OriginalURL string
-	SharedURL   string
+	RemotePort  int
 	service     *client.Service
 	cancel      context.CancelFunc
 	tmpFile     string
@@ -44,7 +48,7 @@ type sharedProxy struct {
 var (
 	proxies        []*sharedProxy
 	proxiesLock    sync.RWMutex
-	lanIP          string
+	lanIPs         []string
 	nextRemotePort = startPort
 	localizer      *i18n.Localizer
 )
@@ -52,8 +56,9 @@ var (
 func initI18n() {
 	bundle := i18n.NewBundle(language.English)
 	bundle.RegisterUnmarshalFunc("json", json.Unmarshal)
-	bundle.LoadMessageFile("gui/i18n/en.json")
-	bundle.LoadMessageFile("gui/i18n/zh.json")
+
+	bundle.LoadMessageFileFS(i18nFS, "i18n/en.json")
+	bundle.LoadMessageFileFS(i18nFS, "i18n/zh.json")
 
 	langTag, err := locale.Detect()
 	if err != nil {
@@ -93,10 +98,10 @@ func Run() {
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
 
 	var err error
-	lanIP, err = getLanIP()
+	lanIPs, err = getLanIPs()
 	if err != nil {
-		lanIP = "127.0.0.1" // Fallback
-		log.Printf(l("couldNotDetermineLanIp", map[string]interface{}{"ip": lanIP, "error": err}))
+		log.Printf(l("couldNotDetermineLanIp", map[string]interface{}{"ip": "N/A", "error": err}))
+		lanIPs = []string{}
 	}
 
 	// Server section
@@ -121,17 +126,16 @@ func Run() {
 	)
 
 	sharedList.OnSelected = func(id widget.ListItemID) {
-		proxiesLock.RLock()
-		if id >= len(proxies) {
-			proxiesLock.RUnlock()
+		itemText, err := sharedListData.GetValue(id)
+		if err != nil {
 			return
 		}
-		proxyToCopy := proxies[id]
-		proxiesLock.RUnlock()
 
-		// The full shared URL is "http://<lanIP>:<port> (or http://localhost:<port>)"
-		// We extract just the LAN part to copy.
-		urlToCopy := strings.Split(proxyToCopy.SharedURL, " ")[0]
+		parts := strings.Split(itemText, " -> ")
+		if len(parts) < 2 {
+			return
+		}
+		urlToCopy := parts[1]
 
 		myWindow.Clipboard().SetContent(urlToCopy)
 		fyne.CurrentApp().SendNotification(&fyne.Notification{
@@ -165,10 +169,16 @@ func Run() {
 		proxies = append(proxies, newProxy)
 		proxiesLock.Unlock()
 
-		sharedListData.Append(l("sharedUrlFormat", map[string]interface{}{
-			"originalUrl": newProxy.OriginalURL,
-			"sharedUrl":   newProxy.SharedURL,
-		}))
+		// Add a line for each IP address
+		for _, ip := range lanIPs {
+			sharedURL := fmt.Sprintf("http://%s:%d", ip, newProxy.RemotePort)
+			displayString := l("sharedUrlFormat", map[string]interface{}{
+				"originalUrl": newProxy.OriginalURL,
+				"sharedUrl":   sharedURL,
+			})
+			sharedListData.Append(displayString)
+		}
+
 		urlEntry.SetText("")
 	})
 
@@ -275,7 +285,7 @@ remote_port = %d
 
 	newProxy := &sharedProxy{
 		OriginalURL: rawURL,
-		SharedURL:   fmt.Sprintf("http://%s:%d (or http://localhost:%d)", lanIP, remotePort, remotePort),
+		RemotePort:  remotePort,
 		service:     service,
 		cancel:      cancel,
 		tmpFile:     tmpfile.Name(),
@@ -326,18 +336,35 @@ bind_port = %d
 	statusLabel.SetText(l("serverStopped"))
 }
 
-// getLanIP finds the local IP address of the machine.
-func getLanIP() (string, error) {
+// getLanIPs finds all suitable local private IP addresses of the machine.
+func getLanIPs() ([]string, error) {
+	var ips []string
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+
 	for _, address := range addrs {
 		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String(), nil
+			if ip := ipnet.IP.To4(); ip != nil && ip.IsPrivate() {
+				ips = append(ips, ip.String())
 			}
 		}
 	}
-	return "", fmt.Errorf(l("noSuitableLanIpFound"))
+
+	if len(ips) == 0 {
+		// If no private IP was found, try to find any usable IP that is not link-local.
+		for _, address := range addrs {
+			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+				if ip := ipnet.IP.To4(); ip != nil && !ip.IsLinkLocalUnicast() {
+					ips = append(ips, ip.String())
+				}
+			}
+		}
+	}
+
+	if len(ips) == 0 {
+		return nil, fmt.Errorf(l("noSuitableLanIpFound"))
+	}
+	return ips, nil
 }
