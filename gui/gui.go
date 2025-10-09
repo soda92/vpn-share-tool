@@ -19,6 +19,8 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/Xuanwo/go-locale"
 	"github.com/fatedier/frp/client"
@@ -32,11 +34,11 @@ import (
 var i18nFS embed.FS
 
 const (
-	serverBindAddr    = "0.0.0.0"
-	serverAddr        = "127.0.0.1"
-	startPort         = 10081
-	discoveryPort     = 45678
-	discoveryReqPrefix = "DISCOVER_REQ:"
+	serverBindAddr      = "0.0.0.0"
+	serverAddr          = "127.0.0.1"
+	startPort           = 10081
+	discoveryPort       = 45678
+	discoveryReqPrefix  = "DISCOVER_REQ:"
 	discoveryRespPrefix = "DISCOVER_RESP:"
 )
 
@@ -116,6 +118,20 @@ func Run() {
 
 	myApp := app.New()
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
+
+	// Setup system tray
+	if desk, ok := myApp.(desktop.App); ok {
+		menu := fyne.NewMenu("VPN Share Tool",
+			fyne.NewMenuItem(l("showMenuItem"), func() {
+				myWindow.Show()
+			}),
+			fyne.NewMenuItem(l("exitMenuItem"), func() {
+				myApp.Quit()
+			}),
+		)
+		desk.SetSystemTrayMenu(menu)
+		desk.SetSystemTrayIcon(theme.InfoIcon()) // Using a standard icon
+	}
 
 	var err error
 	lanIPs, err = getLanIPs()
@@ -221,7 +237,10 @@ func Run() {
 	)
 
 	myWindow.SetContent(container.NewBorder(topContent, nil, nil, nil, sharedList))
-
+	// Intercept close to hide window instead of quitting
+	myWindow.SetCloseIntercept(func() {
+		myWindow.Hide()
+	})
 	myWindow.SetOnClosed(func() {
 		// Clean up all running frpc services and temp files on exit
 		proxiesLock.Lock()
