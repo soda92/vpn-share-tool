@@ -32,7 +32,7 @@ var i18nFS embed.FS
 const (
 	serverBindAddr = "0.0.0.0"
 	serverAddr     = "127.0.0.1"
-	startPort      = 8081
+	startPort      = 10081
 )
 
 // sharedProxy holds information about a shared URL.
