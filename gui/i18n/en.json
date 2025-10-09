@@ -24,5 +24,7 @@
     "noSuitableLanIpFound": "no suitable LAN IP found",
     "copiedTitle": "URL Copied",
     "copiedContent": "Shared URL copied to clipboard",
-    "errorNoServerPort": "Could not find an available port for the server."
+    "errorNoServerPort": "Could not find an available port for the server.",
+    "showMenuItem": "Show",
+    "exitMenuItem": "Exit"
 }

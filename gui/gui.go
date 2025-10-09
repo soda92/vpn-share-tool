@@ -8,10 +8,12 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -30,9 +32,12 @@ import (
 var i18nFS embed.FS
 
 const (
-	serverBindAddr = "0.0.0.0"
-	serverAddr     = "127.0.0.1"
-	startPort      = 10081
+	serverBindAddr    = "0.0.0.0"
+	serverAddr        = "127.0.0.1"
+	startPort         = 10081
+	discoveryPort     = 45678
+	discoveryReqPrefix = "DISCOVER_REQ:"
+	discoveryRespPrefix = "DISCOVER_RESP:"
 )
 
 // sharedProxy holds information about a shared URL.
@@ -105,6 +110,9 @@ func l(messageID string, templateData ...map[string]interface{}) string {
 
 func Run() {
 	initI18n()
+
+	// Start the discovery server in the background
+	go startDiscoveryServer()
 
 	myApp := app.New()
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
@@ -226,6 +234,113 @@ func Run() {
 
 	myWindow.Resize(fyne.NewSize(600, 400))
 	myWindow.ShowAndRun()
+}
+
+func isURLReachable(targetURL string) bool {
+	client := http.Client{
+		Timeout: 3 * time.Second,
+	}
+	// Use HEAD request for efficiency
+	req, err := http.NewRequest("HEAD", targetURL, nil)
+	if err != nil {
+		log.Printf("Discovery: could not create request for %s: %v", targetURL, err)
+		return false
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Discovery: URL %s is not reachable: %v", targetURL, err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	// Any status code (even 401/403) means the server is alive.
+	log.Printf("Discovery: URL %s is reachable with status %d", targetURL, resp.StatusCode)
+	return true
+}
+
+func startDiscoveryServer() {
+	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf(":%d", discoveryPort))
+	if err != nil {
+		log.Printf("Discovery server failed to resolve UDP address: %v", err)
+		return
+	}
+
+	conn, err := net.ListenUDP("udp4", addr)
+	if err != nil {
+		log.Printf("Discovery server failed to listen on UDP port: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	log.Printf("Discovery server listening on port %d", discoveryPort)
+
+	buf := make([]byte, 1024)
+	for {
+		n, remoteAddr, err := conn.ReadFromUDP(buf)
+		if err != nil {
+			log.Printf("Discovery server error reading from UDP: %v", err)
+			continue
+		}
+
+		msg := string(buf[:n])
+		if !strings.HasPrefix(msg, discoveryReqPrefix) {
+			continue
+		}
+
+		targetURL := strings.TrimPrefix(msg, discoveryReqPrefix)
+		log.Printf("Discovery: received request for URL: %s", targetURL)
+
+		// Check if this instance can reach the URL
+		if !isURLReachable(targetURL) {
+			continue
+		}
+
+		// Check if a proxy for this host already exists
+		parsedURL, err := url.Parse(targetURL)
+		if err != nil {
+			continue
+		}
+		hostname := parsedURL.Hostname()
+
+		proxiesLock.RLock()
+		var existingProxy *sharedProxy
+		for _, p := range proxies {
+			if strings.Contains(p.OriginalURL, hostname) {
+				existingProxy = p
+				break
+			}
+		}
+		proxiesLock.RUnlock()
+
+		var proxyToRespond *sharedProxy
+		if existingProxy != nil {
+			log.Printf("Discovery: found existing proxy for host %s", hostname)
+			proxyToRespond = existingProxy
+		} else {
+			log.Printf("Discovery: no existing proxy for %s, creating a new one...", targetURL)
+			newProxy, err := addAndStartProxy(targetURL)
+			if err != nil {
+				log.Printf("Discovery: failed to create new proxy: %v", err)
+				continue
+			}
+			proxiesLock.Lock()
+			proxies = append(proxies, newProxy)
+			proxiesLock.Unlock()
+			proxyToRespond = newProxy
+		}
+
+		// Respond to the client
+		if len(lanIPs) > 0 {
+			proxyURL := fmt.Sprintf("http://%s:%d", lanIPs[0], proxyToRespond.RemotePort)
+			responseMsg := discoveryRespPrefix + proxyURL
+			_, err = conn.WriteToUDP([]byte(responseMsg), remoteAddr)
+			if err != nil {
+				log.Printf("Discovery: failed to send response: %v", err)
+			}
+			log.Printf("Discovery: sent response '%s' to %s", responseMsg, remoteAddr)
+		}
+	}
 }
 
 func addAndStartProxy(rawURL string) (*sharedProxy, error) {
