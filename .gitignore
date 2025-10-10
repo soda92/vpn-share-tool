@@ -2,3 +2,4 @@
 *.exe
 
 /fyne-cross
+libproxy/libproxy
