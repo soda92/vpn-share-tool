@@ -33,7 +33,13 @@ import (
 //go:embed i18n/*.json
 var i18nFS embed.FS
 
+// Config holds the data to be saved to a JSON file.
+type Config struct {
+	OriginalURLs []string `json:"original_urls"`
+}
+
 const (
+	configFile          = "vpn_share_config.json"
 	serverBindAddr      = "0.0.0.0"
 	serverAddr          = "127.0.0.1"
 	startPort           = 10081
@@ -60,6 +66,52 @@ var (
 	nextRemotePort = startPort
 	localizer      *i18n.Localizer
 )
+
+// saveConfig saves the current list of original URLs to the config file.
+func saveConfig() {
+	proxiesLock.RLock()
+	defer proxiesLock.RUnlock()
+
+	var urls []string
+	for _, p := range proxies {
+		urls = append(urls, p.OriginalURL)
+	}
+
+	config := Config{OriginalURLs: urls}
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		log.Printf("Failed to marshal config to JSON: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(configFile, data, 0644); err != nil {
+		log.Printf("Failed to write config file: %v", err)
+	}
+}
+
+// loadConfig loads URLs from the config file and re-initializes the proxies.
+func loadConfig(shareFunc func(string)) {
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return // No config file yet
+	}
+
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		log.Printf("Failed to read config file: %v", err)
+		return
+	}
+
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		log.Printf("Failed to unmarshal config JSON: %v", err)
+		return
+	}
+
+	log.Printf("Loading %d URLs from config...", len(config.OriginalURLs))
+	for _, u := range config.OriginalURLs {
+		shareFunc(u)
+	}
+}
 
 // isPortAvailable checks if a TCP port is available to be listened on.
 func isPortAvailable(port int) bool {
@@ -215,15 +267,16 @@ func Run() {
 		}
 
 		urlEntry.SetText("")
-	}
-
-	urlEntry.OnSubmitted = func(text string) {
-		shareLogic(text)
+		// Save config whenever a new proxy is added
+		saveConfig()
 	}
 
 	addButton := widget.NewButton(l("shareButton"), func() {
 		shareLogic(urlEntry.Text)
 	})
+
+	// Load config on startup
+	loadConfig(shareLogic)
 
 	topContent := container.NewVBox(
 		widget.NewLabel(l("localServerStatusLabel")),
