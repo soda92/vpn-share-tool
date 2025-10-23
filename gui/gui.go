@@ -6,7 +6,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -77,7 +77,7 @@ func (t *cachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		resp := &http.Response{
 			StatusCode: http.StatusOK,
 			Header:     cached.Header,
-			Body:       ioutil.NopCloser(bytes.NewReader(cached.Body)),
+			Body:       io.NopCloser(bytes.NewReader(cached.Body)),
 			Request:    req,
 		}
 		return resp, nil
@@ -91,14 +91,14 @@ func (t *cachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 
 	// Read the response body.
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 	resp.Body.Close() // We've read it, so close it.
 
 	// Create a new body for the original response.
-	resp.Body = ioutil.NopCloser(bytes.NewReader(body))
+	resp.Body = io.NopCloser(bytes.NewReader(body))
 
 	// Cache the response.
 	entry := cacheEntry{
