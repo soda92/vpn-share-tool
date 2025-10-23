@@ -455,6 +455,11 @@ func addAndStartProxy(rawURL string, statusLabel *widget.Label) (*sharedProxy, e
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.Director = func(req *http.Request) {
+		req.URL.Scheme = target.Scheme
+		req.URL.Host = target.Host
+		req.Host = target.Host
+	}
 
 	proxiesLock.Lock()
 	var remotePort int
