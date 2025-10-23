@@ -1,134 +1,85 @@
 package gui
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
 
 	"fyne.io/fyne/v2/widget"
+	"github.com/grandcat/zeroconf"
 )
 
-func startDiscoveryServer(newProxyChan chan<- *sharedProxy) {
-	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf(":%d", discoveryPort))
-	if err != nil {
-		log.Printf("Discovery server failed to resolve UDP address: %v", err)
-		return
+const (
+	apiPort = 10080
+)
+
+// servicesHandler provides the list of currently shared proxies as a JSON response.
+func servicesHandler(w http.ResponseWriter, r *http.Request) {
+	proxiesLock.RLock()
+	defer proxiesLock.RUnlock()
+
+	// We need to construct the response with accessible URLs.
+	// Since this handler will be called from another machine, we use the LAN IPs.
+	type sharedURLInfo struct {
+		OriginalURL string `json:"original_url"`
+		SharedURL   string `json:"shared_url"`
 	}
 
-	conn, err := net.ListenUDP("udp4", addr)
-	if err != nil {
-		log.Printf("Discovery server failed to listen on UDP port: %v", err)
-		return
-	}
-	defer conn.Close()
-
-	log.Printf("Discovery server listening on port %d", discoveryPort)
-
-	buf := make([]byte, 1024)
-	for {
-		n, remoteAddr, err := conn.ReadFromUDP(buf)
-		if err != nil {
-			log.Printf("Discovery server error reading from UDP: %v", err)
-			continue
-		}
-
-		msg := string(buf[:n])
-		if !strings.HasPrefix(msg, discoveryReqPrefix) {
-			continue
-		}
-
-		targetURL := strings.TrimPrefix(msg, discoveryReqPrefix)
-		log.Printf("Discovery: received request for URL: %s", targetURL)
-
-		// Check if the requested URL is already a proxied URL.
-		parsedDiscoveryURL, parseErr := url.Parse(targetURL)
-		if parseErr != nil {
-			log.Printf("Discovery: could not parse target URL %s: %v", targetURL, parseErr)
-			continue
-		}
-		hostname := parsedDiscoveryURL.Hostname()
-		isProxiedURL := false
-		for _, ip := range lanIPs {
-			if hostname == ip {
-				isProxiedURL = true
-				break
-			}
-		}
-		if isProxiedURL {
-			log.Printf("Discovery: request for already proxied URL %s. Responding directly.", targetURL)
-			responseMsg := discoveryRespPrefix + targetURL
-			// Ensure conn is not nil before writing
-			if conn != nil {
-				_, err = conn.WriteToUDP([]byte(responseMsg), remoteAddr)
-				if err != nil {
-					log.Printf("Discovery: failed to send response for already proxied URL %s: %v", targetURL, err) // Include targetURL in log
-				}
-				log.Printf("Discovery: sent response '%s' to %s", responseMsg, remoteAddr)
-			} else {
-				log.Printf("Discovery: connection is nil, cannot respond to %s", targetURL)
-			}
-			continue
-		}
-
-		// Check if this instance can reach the URL
-		if !isURLReachable(targetURL) {
-			continue
-		}
-
-		// Check if a proxy for this host already exists
-		parsedURL, err := url.Parse(targetURL)
-		if err != nil {
-			continue
-		}
-		hostname = parsedURL.Hostname()
-
-		proxiesLock.RLock()
-		var existingProxy *sharedProxy
+	var response []sharedURLInfo
+	if len(lanIPs) > 0 {
+		// Just use the first LAN IP for the response. The client can substitute it if needed.
+		ip := lanIPs[0]
 		for _, p := range proxies {
-			if strings.Contains(p.OriginalURL, hostname) {
-				existingProxy = p
-				break
-			}
+			sharedURL := fmt.Sprintf("http://%s:%d%s", ip, p.RemotePort, p.Path)
+			response = append(response, sharedURLInfo{
+				OriginalURL: p.OriginalURL,
+				SharedURL:   sharedURL,
+			})
 		}
-		proxiesLock.RUnlock()
+	}
 
-		var proxyToRespond *sharedProxy
-		if existingProxy != nil {
-			log.Printf("Discovery: found existing proxy for host %s", hostname)
-			proxyToRespond = existingProxy
-		} else {
-			log.Printf("Discovery: no existing proxy for %s, creating a new one...", targetURL)
-			// Cannot update status label from here, so pass nil
-			newProxy, err := addAndStartProxy(targetURL, nil)
-			if err != nil {
-				log.Printf("Discovery: failed to create new proxy: %v", err)
-				continue
-			}
-			proxiesLock.Lock()
-			proxies = append(proxies, newProxy)
-			proxiesLock.Unlock()
-			proxyToRespond = newProxy
-
-			// Bug fix 1: Signal the main UI thread to update the list.
-			newProxyChan <- newProxy
-		}
-
-		// Respond to the client
-		if len(lanIPs) > 0 {
-			proxyURL := fmt.Sprintf("http://%s:%d%s", lanIPs[0], proxyToRespond.RemotePort, proxyToRespond.Path)
-			responseMsg := discoveryRespPrefix + proxyURL
-			_, err = conn.WriteToUDP([]byte(responseMsg), remoteAddr)
-			if err != nil {
-				log.Printf("Discovery: failed to send response: %v", err)
-			}
-			log.Printf("Discovery: sent response '%s' to %s", responseMsg, remoteAddr)
-		}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Failed to encode services to JSON: %v", err)
+		http.Error(w, "Failed to encode services", http.StatusInternalServerError)
 	}
 }
+
+// startMdnsServer registers the API service with mDNS and starts the API server.
+func startMdnsServer() {
+	// Register the service via mDNS
+	server, err := zeroconf.Register(
+		"VPN Share Tool API",       // service instance name
+		"_vpnshare-api._tcp",       // service type and protocol
+		"local.",                   // domain
+		apiPort,                    // port
+		[]string{"version=1.0"},    // TXT records
+		nil,                        // interfaces
+	)
+	if err != nil {
+		log.Fatalf("Failed to register mDNS service: %v", err)
+	}
+	defer server.Shutdown()
+	log.Printf("mDNS service registered and advertising on port %d", apiPort)
+
+
+	// Start the HTTP server to provide the list of services
+	mux := http.NewServeMux()
+	mux.HandleFunc("/services", servicesHandler)
+	apiServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", apiPort),
+		Handler: mux,
+	}
+
+	log.Printf("Starting API server on port %d", apiPort)
+	if err := apiServer.ListenAndServe(); err != http.ErrServerClosed {
+		log.Printf("API server stopped with error: %v", err)
+	}
+}
+
 
 func addAndStartProxy(rawURL string, statusLabel *widget.Label) (*sharedProxy, error) {
 	target, err := url.Parse(rawURL)

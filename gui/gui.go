@@ -34,11 +34,8 @@ type Config struct {
 }
 
 const (
-	configFile          = "vpn_share_config.json"
-	startPort           = 10081
-	discoveryPort       = 45678
-	discoveryReqPrefix  = "DISCOVER_REQ:"
-	discoveryRespPrefix = "DISCOVER_RESP:"
+	configFile = "vpn_share_config.json"
+	startPort  = 10081
 )
 
 // sharedProxy holds information about a shared URL.
@@ -79,9 +76,8 @@ func Run() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
 
-	// Channel to signal UI updates from the discovery server
-	newProxyChan := make(chan *sharedProxy)
-	go startDiscoveryServer(newProxyChan)
+	// Start the mDNS server to advertise the service
+	go startMdnsServer()
 
 	var err error
 	lanIPs, err = getLanIPs()
@@ -112,13 +108,6 @@ func Run() {
 		}
 		saveConfig()
 	}
-
-	// Goroutine to handle UI updates from the discovery server channel
-	go func() {
-		for newProxy := range newProxyChan {
-			addProxyToUI(newProxy)
-		}
-	}()
 
 	var sharedList *widget.List
 	sharedList = widget.NewListWithData(
