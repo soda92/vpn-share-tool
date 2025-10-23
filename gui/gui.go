@@ -347,11 +347,16 @@ func Run() {
 			proxiesLock.RLock()
 			var exists bool
 			for _, p := range proxies {
-				if strings.Contains(p.OriginalURL, hostname) {
-					exists = true
-					break
+					existingURL, err := url.Parse(p.OriginalURL)
+					if err != nil {
+						log.Printf("Skipping invalid stored URL: %s", p.OriginalURL)
+						continue
+					}
+					if existingURL.Hostname() == hostname {
+						exists = true
+						break
+					}
 				}
-			}
 			proxiesLock.RUnlock()
 			if exists {
 				log.Printf("Proxy for %s already exists.", rawURL)
@@ -384,7 +389,7 @@ func Run() {
 	})
 
 	// Load config on startup
-	go loadConfig(shareLogic, serverStatus)
+	loadConfig(shareLogic, serverStatus)
 
 	topContent := container.NewVBox(
 		widget.NewLabel(l("localServerStatusLabel")),
@@ -406,11 +411,22 @@ func Run() {
 		// Clean up all running proxy servers on exit
 		proxiesLock.Lock()
 		defer proxiesLock.Unlock()
+		var wg sync.WaitGroup
 		for _, p := range proxies {
 			if p.server != nil {
-				go p.server.Shutdown(context.Background())
+				wg.Add(1)
+				go func(s *http.Server) {
+					defer wg.Done()
+					// Give server 5 seconds to shutdown gracefully
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					if err := s.Shutdown(ctx); err != nil {
+						log.Printf("Error shutting down proxy server: %v", err)
+					}
+				}(p.server)
 			}
 		}
+		wg.Wait()
 	})
 
 	myWindow.Resize(fyne.NewSize(600, 400))
