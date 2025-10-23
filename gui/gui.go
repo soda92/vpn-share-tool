@@ -159,11 +159,12 @@ func l(messageID string, templateData ...map[string]interface{}) string {
 func Run() {
 	initI18n()
 
-	// Start the discovery server in the background
-	go startDiscoveryServer()
-
 	myApp := app.New()
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
+
+	// Channel to signal UI updates from the discovery server
+	newProxyChan := make(chan *sharedProxy)
+	go startDiscoveryServer(newProxyChan)
 
 	// Setup system tray
 	if desk, ok := myApp.(desktop.App); ok {
@@ -194,6 +195,27 @@ func Run() {
 	urlEntry.SetPlaceHolder(l("urlPlaceholder"))
 
 	sharedListData := binding.NewStringList()
+
+	// Function to add a proxy to the UI list and save config.
+	// This is thread-safe due to Fyne's data binding capabilities.
+	addProxyToUI := func(newProxy *sharedProxy) {
+		for _, ip := range lanIPs {
+			sharedURL := fmt.Sprintf("http://%s:%d%s", ip, newProxy.RemotePort, newProxy.Path)
+			displayString := l("sharedUrlFormat", map[string]interface{}{
+				"originalUrl": newProxy.OriginalURL,
+				"sharedUrl":   sharedURL,
+			})
+			sharedListData.Append(displayString)
+		}
+		saveConfig()
+	}
+
+	// Goroutine to handle UI updates from the discovery server channel
+	go func() {
+		for newProxy := range newProxyChan {
+			addProxyToUI(newProxy)
+		}
+	}()
 
 	var sharedList *widget.List
 	sharedList = widget.NewListWithData(
@@ -238,6 +260,25 @@ func Run() {
 			rawURL = "http://" + rawURL
 		}
 
+		// Prevent adding duplicate proxies from the UI
+		parsedURL, err := url.Parse(rawURL)
+		if err == nil {
+			hostname := parsedURL.Hostname()
+			proxiesLock.RLock()
+			var exists bool
+			for _, p := range proxies {
+				if strings.Contains(p.OriginalURL, hostname) {
+					exists = true
+					break
+				}
+			}
+			proxiesLock.RUnlock()
+			if exists {
+				log.Printf("Proxy for %s already exists.", rawURL)
+				return // Already exists, do nothing.
+			}
+		}
+
 		newProxy, err := addAndStartProxy(rawURL, serverStatus)
 		if err != nil {
 			log.Printf(l("errorAddingProxy", map[string]interface{}{"url": rawURL, "error": err}))
@@ -249,20 +290,13 @@ func Run() {
 		proxies = append(proxies, newProxy)
 		proxiesLock.Unlock()
 
-		// Add a line for each IP address
-		for _, ip := range lanIPs {
-			// Append the path from the original URL.
-			sharedURL := fmt.Sprintf("http://%s:%d%s", ip, newProxy.RemotePort, newProxy.Path)
-			displayString := l("sharedUrlFormat", map[string]interface{}{
-				"originalUrl": newProxy.OriginalURL,
-				"sharedUrl":   sharedURL,
-			})
-			sharedListData.Append(displayString)
-		}
-
+		addProxyToUI(newProxy)
 		urlEntry.SetText("")
-		// Save config whenever a new proxy is added
-		saveConfig()
+	}
+
+	// Bug fix 2: Handle 'Enter' key in the URL entry field.
+	urlEntry.OnSubmitted = func(text string) {
+		shareLogic(text)
 	}
 
 	addButton := widget.NewButton(l("shareButton"), func() {
@@ -326,7 +360,7 @@ func isURLReachable(targetURL string) bool {
 	return true
 }
 
-func startDiscoveryServer() {
+func startDiscoveryServer(newProxyChan chan<- *sharedProxy) {
 	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf(":%d", discoveryPort))
 	if err != nil {
 		log.Printf("Discovery server failed to resolve UDP address: %v", err)
@@ -396,6 +430,9 @@ func startDiscoveryServer() {
 			proxies = append(proxies, newProxy)
 			proxiesLock.Unlock()
 			proxyToRespond = newProxy
+
+			// Bug fix 1: Signal the main UI thread to update the list.
+			newProxyChan <- newProxy
 		}
 
 		// Respond to the client
