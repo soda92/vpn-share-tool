@@ -18,8 +18,8 @@ func saveConfig() {
 		urls = append(urls, p.OriginalURL)
 	}
 
-	config := Config{OriginalURLs: urls}
-	data, err := json.MarshalIndent(config, "", "  ")
+	gconfig.OriginalURLs = urls
+	data, err := json.MarshalIndent(gconfig, "", "  ")
 	if err != nil {
 		log.Printf("Failed to marshal config to JSON: %v", err)
 		return
@@ -42,14 +42,13 @@ func loadConfig(shareFunc func(string), statusLabel *widget.Label) {
 		return
 	}
 
-	var config Config
-	if err := json.Unmarshal(data, &config); err != nil {
+	if err := json.Unmarshal(data, &gconfig); err != nil {
 		log.Printf("Failed to unmarshal config JSON: %v", err)
 		return
 	}
 
-	log.Printf("Loading %d URLs from config...", len(config.OriginalURLs))
-	for _, u := range config.OriginalURLs {
+	log.Printf("Loading %d URLs from config...", len(gconfig.OriginalURLs))
+	for _, u := range gconfig.OriginalURLs {
 		shareFunc(u)
 	}
 	statusLabel.SetText(l("serverRunning"))

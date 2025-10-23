@@ -26,5 +26,6 @@
     "copiedContent": "已将分享 URL 复制到剪贴板",
     "errorNoServerPort": "未能为服务器找到可用端口。",
     "showMenuItem": "显示",
-    "exitMenuItem": "退出"
+    "exitMenuItem": "退出",
+    "enableAutostartMenuItem": "开机自启"
 }
