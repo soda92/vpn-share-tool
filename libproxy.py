@@ -15,21 +15,21 @@ class VpnShareListener(ServiceListener):
     def __init__(self):
         self.service_info = None
 
-    def remove_service(self, zeroconf, type, name):
+    def remove_service(self, zc, type_, name):
         logging.debug(f"Service {name} removed")
         self.service_info = None
 
-    def add_service(self, zeroconf, type, name):
+    def add_service(self, zc, type_, name):
         logging.debug(f"Service {name} added")
-        info = zeroconf.get_service_info(type, name)
+        info = zc.get_service_info(type_, name)
         if info:
             logging.debug(f"  Address: {socket.inet_ntoa(info.addresses[0])}")
             logging.debug(f"  Port: {info.port}")
             self.service_info = info
 
-    def update_service(self, zeroconf, type, name):
+    def update_service(self, zc, type_, name):
         # For simplicity, we'll just treat update as a new addition
-        self.add_service(zeroconf, type, name)
+        self.add_service(zc, type_, name)
 
 
 def discover_proxy(target_url, timeout=5):
@@ -49,7 +49,7 @@ def discover_proxy(target_url, timeout=5):
     browser = ServiceBrowser(zeroconf, "_vpnshare-api._tcp.local.", listener)
 
     logging.debug(f"Browsing for _vpnshare-api._tcp.local. for {timeout} seconds...")
-    time.sleep(timeout) # Wait for discovery
+    time.sleep(timeout)  # Wait for discovery
 
     browser.cancel()
     zeroconf.close()
@@ -94,7 +94,9 @@ def discover_proxy(target_url, timeout=5):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(
+        level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
 
     if len(sys.argv) < 2:
         print(f"Usage: python3 {sys.argv[0]} <url_to_discover>", file=sys.stderr)
