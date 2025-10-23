@@ -28,9 +28,11 @@ func getSuitableInterfaces() []net.Interface {
 			continue
 		}
 		for _, address := range addrs {
-			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && ipnet.IP.To4() != nil && ipnet.IP.IsPrivate() {
-				suitableInterfaces = append(suitableInterfaces, i)
-				break // Found a suitable IP on this interface, move to the next interface
+			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+				if ip := ipnet.IP.To4(); ip != nil && strings.HasPrefix(ip.String(), "192.168.") {
+					suitableInterfaces = append(suitableInterfaces, i)
+					break // Found a suitable IP on this interface, move to the next interface
+				}
 			}
 		}
 	}
@@ -49,7 +51,7 @@ func getLanIPs() ([]string, error) {
 		}
 		for _, address := range addrs {
 			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-				if ip := ipnet.IP.To4(); ip != nil && ip.IsPrivate() {
+				if ip := ipnet.IP.To4(); ip != nil && strings.HasPrefix(ip.String(), "192.168.") {
 					ips = append(ips, ip.String())
 				}
 			}
