@@ -29,9 +29,8 @@ var i18nFS embed.FS
 
 // Config holds the data to be saved to a JSON file.
 type Config struct {
-	OriginalURLs    []string `json:"original_urls"`
-	AutoStart       bool     `json:"autostart,omitempty"`
-	DiscoveryServer string   `json:"discovery_server,omitempty"`
+	OriginalURLs []string `json:"original_urls"`
+	AutoStart    bool     `json:"autostart,omitempty"`
 }
 
 const (

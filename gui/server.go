@@ -53,13 +53,7 @@ func servicesHandler(w http.ResponseWriter, r *http.Request) {
 func registerWithDiscoveryServer() {
 	// This loop ensures we keep trying to register if the connection fails
 	for {
-		if gconfig.DiscoveryServer == "" {
-			// If no discovery server is configured, just sleep and check again later.
-			time.Sleep(1 * time.Minute)
-			continue
-		}
-
-		serverAddr := net.JoinHostPort(gconfig.DiscoveryServer, discoverySrvPort)
+		serverAddr := net.JoinHostPort("192.168.1.81", discoverySrvPort)
 		conn, err := net.Dial("tcp", serverAddr)
 		if err != nil {
 			log.Printf("Failed to connect to discovery server at %s: %v. Retrying in 1 minute.", serverAddr, err)

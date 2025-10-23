@@ -1,0 +1,13 @@
+[Unit]
+Description=VPN Share Tool Discovery Server
+After=network.target
+
+[Service]
+Type=simple
+User=nobody
+ExecStart=/usr/local/bin/discovery-server
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
