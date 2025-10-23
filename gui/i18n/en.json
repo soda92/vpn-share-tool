@@ -26,5 +26,6 @@
     "copiedContent": "Shared URL copied to clipboard",
     "errorNoServerPort": "Could not find an available port for the server.",
     "showMenuItem": "Show",
-    "exitMenuItem": "Exit"
+    "exitMenuItem": "Exit",
+    "enableAutostartMenuItem": "Start with system"
 }

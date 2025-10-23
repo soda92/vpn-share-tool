@@ -3,6 +3,7 @@ package gui
 import (
 	"context"
 	"embed"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -29,6 +30,7 @@ var i18nFS embed.FS
 // Config holds the data to be saved to a JSON file.
 type Config struct {
 	OriginalURLs []string `json:"original_urls"`
+	AutoStart    bool     `json:"autostart,omitempty"`
 }
 
 const (
@@ -54,6 +56,7 @@ var (
 	lanIPs         []string
 	nextRemotePort = startPort
 	localizer      *i18n.Localizer
+	gconfig        Config
 )
 
 // isPortAvailable checks if a TCP port is available to be listened on.
@@ -68,6 +71,9 @@ func isPortAvailable(port int) bool {
 }
 
 func Run() {
+	startMinimized := flag.Bool("minimized", false, "start minimized with windows start")
+	flag.Parse()
+
 	initI18n()
 
 	myApp := app.New()
@@ -76,20 +82,6 @@ func Run() {
 	// Channel to signal UI updates from the discovery server
 	newProxyChan := make(chan *sharedProxy)
 	go startDiscoveryServer(newProxyChan)
-
-	// Setup system tray
-	if desk, ok := myApp.(desktop.App); ok {
-		menu := fyne.NewMenu("VPN Share Tool",
-			fyne.NewMenuItem(l("showMenuItem"), func() {
-				myWindow.Show()
-			}),
-			fyne.NewMenuItem(l("exitMenuItem"), func() {
-				myApp.Quit()
-			}),
-		)
-		desk.SetSystemTrayMenu(menu)
-		desk.SetSystemTrayIcon(theme.InfoIcon()) // Using a standard icon
-	}
 
 	var err error
 	lanIPs, err = getLanIPs()
@@ -222,6 +214,31 @@ func Run() {
 	// Load config on startup
 	loadConfig(shareLogic, serverStatus)
 
+	// Setup system tray
+	if desk, ok := myApp.(desktop.App); ok {
+		var autostartMenuItem *fyne.MenuItem
+		autostartMenuItem = fyne.NewMenuItem(l("enableAutostartMenuItem"), func() {
+			gconfig.AutoStart = !gconfig.AutoStart
+			autostartMenuItem.Checked = gconfig.AutoStart
+			SetAutostart(gconfig.AutoStart)
+			saveConfig()
+		})
+		autostartMenuItem.Checked = gconfig.AutoStart
+		SetAutostart(gconfig.AutoStart)
+
+		menu := fyne.NewMenu("VPN Share Tool",
+			fyne.NewMenuItem(l("showMenuItem"), func() {
+				myWindow.Show()
+			}),
+			autostartMenuItem,
+			fyne.NewMenuItem(l("exitMenuItem"), func() {
+				myApp.Quit()
+			}),
+		)
+		desk.SetSystemTrayMenu(menu)
+		desk.SetSystemTrayIcon(theme.InfoIcon()) // Using a standard icon
+	}
+
 	topContent := container.NewVBox(
 		widget.NewLabel(l("localServerStatusLabel")),
 		serverStatus,
@@ -261,5 +278,8 @@ func Run() {
 	})
 
 	myWindow.Resize(fyne.NewSize(600, 400))
-	myWindow.ShowAndRun()
+	if !*startMinimized {
+		myWindow.Show()
+	}
+	myApp.Run()
 }
