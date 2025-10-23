@@ -48,6 +48,78 @@ func servicesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func canReachHandler(w http.ResponseWriter, r *http.Request) {
+	targetURL := r.URL.Query().Get("url")
+	if targetURL == "" {
+		http.Error(w, "url query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	reachable := isURLReachable(targetURL)
+
+	response := struct {
+		Reachable bool `json:"reachable"`
+	}{
+		Reachable: reachable,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func addProxyHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		URL string `json:"url"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.URL == "" {
+		http.Error(w, "URL is required", http.StatusBadRequest)
+		return
+	}
+
+	// This function will be created in gui.go
+	newProxy, err := shareUrlAndGetProxy(req.URL)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create proxy: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Save the config in case a new proxy was added
+	saveConfig()
+
+	// Construct the response containing the full proxy details
+	// This ensures the client gets the externally accessible URL.
+	var sharedURL string
+	if len(lanIPs) > 0 {
+		sharedURL = fmt.Sprintf("http://%s:%d%s", lanIPs[0], newProxy.RemotePort, newProxy.Path)
+	}
+
+	type sharedURLInfo struct {
+		OriginalURL string `json:"original_url"`
+		SharedURL   string `json:"shared_url"`
+	}
+
+	response := sharedURLInfo{
+		OriginalURL: newProxy.OriginalURL,
+		SharedURL:   sharedURL,
+	}
+
+	// Respond with the details of the new proxy
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
+}
+
 // startMdnsServer registers the API service with mDNS and starts the API server.
 func startMdnsServer() {
 	// Find suitable network interfaces for mDNS advertising.
@@ -75,6 +147,8 @@ func startMdnsServer() {
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()
 	mux.HandleFunc("/services", servicesHandler)
+	mux.HandleFunc("/proxies", addProxyHandler)
+	mux.HandleFunc("/can-reach", canReachHandler)
 	apiServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", apiPort),
 		Handler: mux,

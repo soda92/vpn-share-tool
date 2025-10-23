@@ -48,12 +48,14 @@ type sharedProxy struct {
 }
 
 var (
-	proxies        []*sharedProxy
-	proxiesLock    sync.RWMutex
-	lanIPs         []string
-	nextRemotePort = startPort
-	localizer      *i18n.Localizer
-	gconfig        Config
+	proxies             []*sharedProxy
+	proxiesLock         sync.RWMutex
+	lanIPs              []string
+	nextRemotePort      = startPort
+	localizer           *i18n.Localizer
+	gconfig             Config
+	shareUrlAndGetProxy func(rawURL string) (*sharedProxy, error)
+	proxyAddedChan      = make(chan *sharedProxy)
 )
 
 // isPortAvailable checks if a TCP port is available to be listened on.
@@ -106,8 +108,16 @@ func Run() {
 			})
 			sharedListData.Append(displayString)
 		}
-		saveConfig()
+		// NOTE: saveConfig() is removed from here to prevent saving during startup loops.
+		// The caller is now responsible for saving the config.
 	}
+
+	// Goroutine to handle UI updates from any part of the application
+	go func() {
+		for newProxy := range proxyAddedChan {
+			addProxyToUI(newProxy)
+		}
+	}()
 
 	var sharedList *widget.List
 	sharedList = widget.NewListWithData(
@@ -142,53 +152,64 @@ func Run() {
 		sharedList.Unselect(id)
 	}
 
-	// Define the core sharing logic as a function to be reused.
-	shareLogic := func(rawURL string) {
+	// shareUrlAndGetProxy contains the core logic for creating and starting a proxy.
+	// It is designed to be called from both the GUI and API handlers.
+	shareUrlAndGetProxy = func(rawURL string) (*sharedProxy, error) {
 		if rawURL == "" {
-			return
+			return nil, fmt.Errorf("URL cannot be empty")
 		}
 
 		if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 			rawURL = "http://" + rawURL
 		}
 
-		// Prevent adding duplicate proxies from the UI
+		// Prevent adding duplicate proxies
 		parsedURL, err := url.Parse(rawURL)
 		if err == nil {
 			hostname := parsedURL.Hostname()
 			proxiesLock.RLock()
-			var exists bool
 			for _, p := range proxies {
 				existingURL, err := url.Parse(p.OriginalURL)
 				if err != nil {
-					log.Printf("Skipping invalid stored URL: %s", p.OriginalURL)
-					continue
+					continue // Skip invalid stored URL
 				}
 				if existingURL.Hostname() == hostname {
-					exists = true
-					break
+					proxiesLock.RUnlock()
+					log.Printf("Proxy for %s already exists, returning existing one.", rawURL)
+					return p, nil // Return existing proxy instead of an error
 				}
 			}
 			proxiesLock.RUnlock()
-			if exists {
-				log.Printf("Proxy for %s already exists.", rawURL)
-				return // Already exists, do nothing.
-			}
 		}
 
-		newProxy, err := addAndStartProxy(rawURL, serverStatus)
+		// Pass nil for statusLabel as this is a non-GUI context
+		newProxy, err := addAndStartProxy(rawURL, nil)
 		if err != nil {
-			log.Printf(l("errorAddingProxy", map[string]interface{}{"url": rawURL, "error": err}))
-			serverStatus.SetText(l("errorAddingProxy", map[string]interface{}{"url": rawURL, "error": err}))
-			return
+			return nil, fmt.Errorf("error adding proxy for %s: %w", rawURL, err)
 		}
 
 		proxiesLock.Lock()
 		proxies = append(proxies, newProxy)
 		proxiesLock.Unlock()
 
-		addProxyToUI(newProxy)
+		// Announce the new proxy to the UI
+		proxyAddedChan <- newProxy
+
+		return newProxy, nil
+	}
+
+	// Define the core sharing logic as a function to be reused.
+	shareLogic := func(rawURL string) {
+		_, err := shareUrlAndGetProxy(rawURL)
+		if err != nil {
+			// The error might be that it already exists, which is not a critical failure for the user.
+			log.Printf("Error sharing URL: %v", err)
+			serverStatus.SetText(err.Error())
+			return
+		}
+
 		urlEntry.SetText("")
+		saveConfig() // Save config after a successful manual share
 	}
 
 	// Bug fix 2: Handle 'Enter' key in the URL entry field.
