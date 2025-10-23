@@ -1,6 +1,7 @@
 import socket
 import sys
 from urllib.parse import urlparse
+import logging
 
 
 def discover_proxy(target_url, discovery_port=45678, timeout=10):
@@ -40,7 +41,7 @@ def discover_proxy(target_url, discovery_port=45678, timeout=10):
     try:
         # Send the broadcast message
         sock.sendto(message, broadcast_address)
-        print(f"Sent discovery request for {target_url}...")
+        logging.debug(f"Sent discovery request for {target_url}...")
 
         # Listen for a response
         while True:
@@ -48,11 +49,11 @@ def discover_proxy(target_url, discovery_port=45678, timeout=10):
             response = data.decode("utf-8")
             if response.startswith("DISCOVER_RESP:"):
                 proxy_url = response.replace("DISCOVER_RESP:", "", 1)
-                print(f"Discovered proxy at {proxy_url} from {addr[0]}")
+                logging.debug(f"Discovered proxy at {proxy_url} from {addr[0]}")
                 return proxy_url
     except socket.timeout:
         # This is expected if no server responds
-        print("Discovery timed out. No proxy found.")
+        logging.info("Discovery timed out. No proxy found.")
         return None
     finally:
         sock.close()
