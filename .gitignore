@@ -3,3 +3,5 @@
 
 /fyne-cross
 libproxy/libproxy
+web-cache-proxy
+vpn_share_config.json

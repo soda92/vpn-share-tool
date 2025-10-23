@@ -1,3 +1,4 @@
+#! /usr/bin/env fish
 set -x GOOS windows
 set -x GOARCH amd64
 set -x CGO_ENABLED 1
