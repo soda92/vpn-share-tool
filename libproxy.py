@@ -4,6 +4,7 @@ import sys
 import json
 import urllib.request
 from urllib.parse import urlparse
+import urllib.parse
 
 # Address of the central discovery server
 DISCOVERY_SERVER_HOST = "192.168.1.81"
@@ -13,7 +14,9 @@ DISCOVERY_SERVER_PORT = 45679
 def get_instance_list():
     """Gets the list of active vpn-share-tool instances from the central server."""
     try:
-        with socket.create_connection((DISCOVERY_SERVER_HOST, DISCOVERY_SERVER_PORT), timeout=5) as sock:
+        with socket.create_connection(
+            (DISCOVERY_SERVER_HOST, DISCOVERY_SERVER_PORT), timeout=5
+        ) as sock:
             sock.sendall(b"LIST\n")
             response = sock.makefile().readline()
             instances_raw = json.loads(response)
@@ -22,6 +25,7 @@ def get_instance_list():
     except Exception as e:
         logging.error(f"Failed to get instance list from discovery server: {e}")
         return []
+
 
 def discover_proxy(target_url, timeout=10):
     """
@@ -47,7 +51,9 @@ def discover_proxy(target_url, timeout=10):
             opener = urllib.request.build_opener(proxy_handler)
             with opener.open(api_url, timeout=5) as response:
                 if response.status != 200:
-                    logging.warning(f"API server at {api_url} returned status {response.status}")
+                    logging.warning(
+                        f"API server at {api_url} returned status {response.status}"
+                    )
                     continue
                 services = json.loads(response.read())
 
@@ -55,7 +61,9 @@ def discover_proxy(target_url, timeout=10):
                 original_url_hostname = urlparse(service.get("original_url")).hostname
                 if original_url_hostname == target_hostname:
                     proxy_url = service.get("shared_url")
-                    logging.debug(f"Found existing proxy: {proxy_url} on server {api_url}")
+                    logging.debug(
+                        f"Found existing proxy: {proxy_url} on server {api_url}"
+                    )
                     return proxy_url
         except Exception as e:
             logging.warning(f"Could not check services on {api_url}: {e}")
@@ -66,7 +74,9 @@ def discover_proxy(target_url, timeout=10):
     for instance_addr in instance_addresses:
         # First, check if this server can reach the target URL
         try:
-            can_reach_url = f"http://{instance_addr}/can-reach?url={urllib.parse.quote(target_url)}"
+            can_reach_url = (
+                f"http://{instance_addr}/can-reach?url={urllib.parse.quote(target_url)}"
+            )
             logging.debug(f"Checking reachability at {can_reach_url}")
             proxy_handler = urllib.request.ProxyHandler({})
             opener = urllib.request.build_opener(proxy_handler)
@@ -82,28 +92,36 @@ def discover_proxy(target_url, timeout=10):
             continue
 
         # This server can reach the URL, so ask it to create the proxy
-        logging.debug(f"Server {instance_addr} can reach the URL. Requesting proxy creation...")
+        logging.debug(
+            f"Server {instance_addr} can reach the URL. Requesting proxy creation..."
+        )
         try:
             create_url = f"http://{instance_addr}/proxies"
             post_data = json.dumps({"url": target_url}).encode("utf-8")
-            req = urllib.request.Request(create_url, data=post_data, headers={"Content-Type": "application/json"})
-            
+            req = urllib.request.Request(
+                create_url, data=post_data, headers={"Content-Type": "application/json"}
+            )
+
             proxy_handler = urllib.request.ProxyHandler({})
             opener = urllib.request.build_opener(proxy_handler)
             with opener.open(req, timeout=10) as response:
-                if response.status == 201: # StatusCreated
+                if response.status == 201:  # StatusCreated
                     new_proxy_data = json.loads(response.read())
                     proxy_url = new_proxy_data.get("shared_url")
                     logging.debug(f"Successfully created proxy: {proxy_url}")
                     return proxy_url
                 else:
-                    logging.error(f"Server {instance_addr} failed to create proxy, status: {response.status}")
+                    logging.error(
+                        f"Server {instance_addr} failed to create proxy, status: {response.status}"
+                    )
                     return None
         except Exception as e:
             logging.error(f"Failed to request proxy creation from {instance_addr}: {e}")
             return None
 
-    logging.info(f"Found API server(s), but none could reach or create a proxy for {target_url}")
+    logging.info(
+        f"Found API server(s), but none could reach or create a proxy for {target_url}"
+    )
 
 
 if __name__ == "__main__":
