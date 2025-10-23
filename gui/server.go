@@ -50,6 +50,12 @@ func servicesHandler(w http.ResponseWriter, r *http.Request) {
 
 // startMdnsServer registers the API service with mDNS and starts the API server.
 func startMdnsServer() {
+	// Find suitable network interfaces for mDNS advertising.
+	ifaces := getSuitableInterfaces()
+	if len(ifaces) == 0 {
+		log.Printf("Warning: No suitable network interface found for mDNS. Using all.")
+	}
+
 	// Register the service via mDNS
 	server, err := zeroconf.Register(
 		"VPN Share Tool API",       // service instance name
@@ -57,7 +63,7 @@ func startMdnsServer() {
 		"local.",                   // domain
 		apiPort,                    // port
 		[]string{"version=1.0"},    // TXT records
-		nil,                        // interfaces
+		ifaces,                     // interfaces
 	)
 	if err != nil {
 		log.Fatalf("Failed to register mDNS service: %v", err)
@@ -76,7 +82,7 @@ func startMdnsServer() {
 
 	log.Printf("Starting API server on port %d", apiPort)
 	if err := apiServer.ListenAndServe(); err != http.ErrServerClosed {
-		log.Printf("API server stopped with error: %v", err)
+		log.Fatalf("API server stopped with error: %v", err)
 	}
 }
 

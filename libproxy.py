@@ -3,8 +3,8 @@ import sys
 import json
 import time
 import logging
+import urllib.request
 from urllib.parse import urlparse
-from urllib.request import urlopen
 
 from zeroconf import ServiceBrowser, Zeroconf, ServiceListener
 
@@ -66,7 +66,10 @@ def discover_proxy(target_url, timeout=5):
 
     try:
         logging.debug(f"Querying API server at {api_url}")
-        with urlopen(api_url, timeout=5) as response:
+        # Create a request handler that explicitly bypasses any system proxies
+        proxy_handler = urllib.request.ProxyHandler({})
+        opener = urllib.request.build_opener(proxy_handler)
+        with opener.open(api_url, timeout=5) as response:
             if response.status != 200:
                 logging.error(f"API server returned status {response.status}")
                 return None
