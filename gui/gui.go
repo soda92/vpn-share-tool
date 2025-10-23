@@ -437,7 +437,7 @@ func startDiscoveryServer(newProxyChan chan<- *sharedProxy) {
 
 		// Respond to the client
 		if len(lanIPs) > 0 {
-			proxyURL := fmt.Sprintf("http://%s:%d", lanIPs[0], proxyToRespond.RemotePort)
+			proxyURL := fmt.Sprintf("http://%s:%d%s", lanIPs[0], proxyToRespond.RemotePort, proxyToRespond.Path)
 			responseMsg := discoveryRespPrefix + proxyURL
 			_, err = conn.WriteToUDP([]byte(responseMsg), remoteAddr)
 			if err != nil {
