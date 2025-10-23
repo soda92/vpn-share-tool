@@ -472,6 +472,20 @@ func startDiscoveryServer(newProxyChan chan<- *sharedProxy) {
 		targetURL := strings.TrimPrefix(msg, discoveryReqPrefix)
 		log.Printf("Discovery: received request for URL: %s", targetURL)
 
+		// Check if the requested URL is already a proxied URL.
+		parsedDiscoveryURL, parseErr := url.Parse(targetURL)
+		if parseErr != nil {
+			log.Printf("Discovery: could not parse target URL %s: %v", targetURL, parseErr)
+			continue
+		}
+		hostname := parsedDiscoveryURL.Hostname()
+		for _, ip := range lanIPs {
+			if hostname == ip {
+				log.Printf("Discovery: ignoring request for already proxied URL %s", targetURL)
+				continue
+			}
+		}
+
 		// Check if this instance can reach the URL
 		if !isURLReachable(targetURL) {
 			continue
@@ -482,7 +496,7 @@ func startDiscoveryServer(newProxyChan chan<- *sharedProxy) {
 		if err != nil {
 			continue
 		}
-		hostname := parsedURL.Hostname()
+		hostname = parsedURL.Hostname()
 
 		proxiesLock.RLock()
 		var existingProxy *sharedProxy
