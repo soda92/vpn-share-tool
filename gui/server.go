@@ -59,7 +59,13 @@ func startDiscoveryServer(newProxyChan chan<- *sharedProxy) {
 			}
 		}
 		if isProxiedURL {
-			log.Printf("Discovery: ignoring request for already proxied URL %s", targetURL)
+			log.Printf("Discovery: request for already proxied URL %s. Responding directly.", targetURL)
+			responseMsg := discoveryRespPrefix + targetURL
+			_, err = conn.WriteToUDP([]byte(responseMsg), remoteAddr)
+			if err != nil {
+				log.Printf("Discovery: failed to send response for already proxied URL: %v", err)
+			}
+			log.Printf("Discovery: sent response '%s' to %s", responseMsg, remoteAddr)
 			continue
 		}
 
