@@ -1,9 +1,9 @@
+import logging
 import socket
 import sys
 import json
-import time
-import logging
 import urllib.request
+from threading import Event
 from urllib.parse import urlparse
 
 from zeroconf import ServiceBrowser, Zeroconf, ServiceListener
@@ -12,8 +12,9 @@ from zeroconf import ServiceBrowser, Zeroconf, ServiceListener
 class VpnShareListener(ServiceListener):
     """A listener for the VPN Share Tool mDNS service."""
 
-    def __init__(self):
+    def __init__(self, event):
         self.services = []
+        self.found_event = event
 
     def remove_service(self, zc, type_, name):
         logging.debug(f"Service {name} removed")
@@ -26,6 +27,7 @@ class VpnShareListener(ServiceListener):
             logging.debug(f"  Address: {socket.inet_ntoa(info.addresses[0])}")
             logging.debug(f"  Port: {info.port}")
             self.services.append(info)
+            self.found_event.set()  # Signal that a service has been found
 
     def update_service(self, zc, type_, name):
         # For simplicity, we'll just treat update as a new addition
@@ -45,11 +47,14 @@ def discover_proxy(target_url, timeout=10):
     """
     # 1. Discover all available API servers via mDNS
     zeroconf = Zeroconf()
-    listener = VpnShareListener()
+    found_event = Event()
+    listener = VpnShareListener(found_event)
     browser = ServiceBrowser(zeroconf, "_vpnshare-api._tcp.local.", listener)
 
-    logging.debug(f"Browsing for _vpnshare-api._tcp.local. for {timeout} seconds...")
-    time.sleep(timeout)  # Wait for discovery
+    logging.debug(f"Browsing for _vpnshare-api._tcp.local. for up to {timeout} seconds...")
+    # Wait for the event to be set by the listener, or for the timeout to expire
+    found_event.wait(timeout)
+    logging.debug("Discovery window closed.")
 
     browser.cancel()
     zeroconf.close()
