@@ -495,11 +495,16 @@ func startDiscoveryServer(newProxyChan chan<- *sharedProxy) {
 			continue
 		}
 		hostname := parsedDiscoveryURL.Hostname()
+		isProxiedURL := false
 		for _, ip := range lanIPs {
 			if hostname == ip {
-				log.Printf("Discovery: ignoring request for already proxied URL %s", targetURL)
-				continue
+				isProxiedURL = true
+				break
 			}
+		}
+		if isProxiedURL {
+			log.Printf("Discovery: ignoring request for already proxied URL %s", targetURL)
+			continue
 		}
 
 		// Check if this instance can reach the URL
