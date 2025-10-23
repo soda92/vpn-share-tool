@@ -4,16 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"fyne.io/fyne/v2/widget"
-	"github.com/grandcat/zeroconf"
 )
 
 const (
-	apiPort = 10080
+	apiPort          = 10080
+	discoverySrvPort = "45679"
 )
 
 // servicesHandler provides the list of currently shared proxies as a JSON response.
@@ -45,6 +47,52 @@ func servicesHandler(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("Failed to encode services to JSON: %v", err)
 		http.Error(w, "Failed to encode services", http.StatusInternalServerError)
+	}
+}
+
+func registerWithDiscoveryServer() {
+	// This loop ensures we keep trying to register if the connection fails
+	for {
+		if gconfig.DiscoveryServer == "" {
+			// If no discovery server is configured, just sleep and check again later.
+			time.Sleep(1 * time.Minute)
+			continue
+		}
+
+		serverAddr := net.JoinHostPort(gconfig.DiscoveryServer, discoverySrvPort)
+		conn, err := net.Dial("tcp", serverAddr)
+		if err != nil {
+			log.Printf("Failed to connect to discovery server at %s: %v. Retrying in 1 minute.", serverAddr, err)
+			time.Sleep(1 * time.Minute)
+			continue
+		}
+
+		log.Printf("Connected to discovery server: %s", serverAddr)
+
+		// Initial registration
+		registerMsg := fmt.Sprintf("REGISTER %d\n", apiPort)
+		_, err = conn.Write([]byte(registerMsg))
+		if err != nil {
+			log.Printf("Failed to send REGISTER command: %v", err)
+			conn.Close()
+			continue
+		}
+		log.Printf("Successfully registered with discovery server.")
+
+		// Heartbeat loop
+		heartbeatTicker := time.NewTicker(1 * time.Minute)
+		defer heartbeatTicker.Stop()
+
+		for range heartbeatTicker.C {
+			heartbeatMsg := fmt.Sprintf("HEARTBEAT %d\n", apiPort)
+			_, err := conn.Write([]byte(heartbeatMsg))
+			if err != nil {
+				log.Printf("Failed to send HEARTBEAT: %v. Reconnecting...", err)
+				conn.Close()
+				break // Break inner loop to trigger reconnection
+			}
+			log.Println("Sent heartbeat to discovery server.")
+		}
 	}
 }
 
@@ -120,30 +168,8 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// startMdnsServer registers the API service with mDNS and starts the API server.
-func startMdnsServer() {
-	// Find suitable network interfaces for mDNS advertising.
-	ifaces := getSuitableInterfaces()
-	if len(ifaces) == 0 {
-		log.Printf("Warning: No suitable network interface found for mDNS. Using all.")
-	}
-
-	// Register the service via mDNS
-	server, err := zeroconf.Register(
-		"VPN Share Tool API",       // service instance name
-		"_vpnshare-api._tcp",       // service type and protocol
-		"local.",                   // domain
-		apiPort,                    // port
-		[]string{"version=1.0"},    // TXT records
-		ifaces,                     // interfaces
-	)
-	if err != nil {
-		log.Fatalf("Failed to register mDNS service: %v", err)
-	}
-	defer server.Shutdown()
-	log.Printf("mDNS service registered and advertising on port %d", apiPort)
-
-
+// startApiServer starts the HTTP server to provide the API endpoints.
+func startApiServer() {
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()
 	mux.HandleFunc("/services", servicesHandler)

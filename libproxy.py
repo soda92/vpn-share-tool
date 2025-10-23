@@ -3,64 +3,34 @@ import socket
 import sys
 import json
 import urllib.request
-from threading import Event
 from urllib.parse import urlparse
 
-from zeroconf import ServiceBrowser, Zeroconf, ServiceListener
+# Address of the central discovery server
+DISCOVERY_SERVER_HOST = "192.168.1.81"
+DISCOVERY_SERVER_PORT = 45679
 
 
-class VpnShareListener(ServiceListener):
-    """A listener for the VPN Share Tool mDNS service."""
-
-    def __init__(self, event):
-        self.services = []
-        self.found_event = event
-
-    def remove_service(self, zc, type_, name):
-        logging.debug(f"Service {name} removed")
-        self.services = [s for s in self.services if s.name != name]
-
-    def add_service(self, zc, type_, name):
-        logging.debug(f"Service {name} added")
-        info = zc.get_service_info(type_, name)
-        if info:
-            logging.debug(f"  Address: {socket.inet_ntoa(info.addresses[0])}")
-            logging.debug(f"  Port: {info.port}")
-            self.services.append(info)
-            self.found_event.set()  # Signal that a service has been found
-
-    def update_service(self, zc, type_, name):
-        # For simplicity, we'll just treat update as a new addition
-        self.add_service(zc, type_, name)
-
+def get_instance_list():
+    """Gets the list of active vpn-share-tool instances from the central server."""
+    try:
+        with socket.create_connection((DISCOVERY_SERVER_HOST, DISCOVERY_SERVER_PORT), timeout=5) as sock:
+            sock.sendall(b"LIST\n")
+            response = sock.makefile().readline()
+            instances_raw = json.loads(response)
+            # The server gives us a list of objects with an "address" field
+            return [item["address"] for item in instances_raw]
+    except Exception as e:
+        logging.error(f"Failed to get instance list from discovery server: {e}")
+        return []
 
 def discover_proxy(target_url, timeout=10):
     """
-    Discovers a proxy for a given URL by browsing for the mDNS service,
-    and requests its creation if it doesn't exist.
-
-    Args:
-        target_url: The URL to find a proxy for.
-        timeout: The time to wait for discovery in seconds.
-
-    Returns:
-        The proxy URL if found, otherwise None.
+    Discovers a proxy for a given URL by querying the central discovery server.
     """
-    # 1. Discover all available API servers via mDNS
-    zeroconf = Zeroconf()
-    found_event = Event()
-    listener = VpnShareListener(found_event)
-    browser = ServiceBrowser(zeroconf, "_vpnshare-api._tcp.local.", listener)
-
-    logging.debug(f"Browsing for _vpnshare-api._tcp.local. for up to {timeout} seconds...")
-    found_event.wait(timeout)
-    logging.debug("Discovery window closed.")
-
-    browser.cancel()
-    zeroconf.close()
-
-    if not listener.services:
-        logging.info("Discovery timed out. No VPN Share API server found.")
+    # 1. Get the list of all available API servers from the central server
+    instance_addresses = get_instance_list()
+    if not instance_addresses:
+        logging.info("No active vpn-share-tool instances found.")
         return None
 
     target_hostname = urlparse(target_url).hostname
@@ -69,11 +39,8 @@ def discover_proxy(target_url, timeout=10):
 
     # 2. Phase 1: Check all discovered servers for an EXISTING proxy
     logging.debug("Phase 1: Checking for existing proxies...")
-    for info in listener.services:
-        server_ip = socket.inet_ntoa(info.addresses[0])
-        server_port = info.port
-        api_url = f"http://{server_ip}:{server_port}/services"
-
+    for instance_addr in instance_addresses:
+        api_url = f"http://{instance_addr}/services"
         try:
             logging.debug(f"Querying API server at {api_url}")
             proxy_handler = urllib.request.ProxyHandler({})
@@ -84,7 +51,6 @@ def discover_proxy(target_url, timeout=10):
                     continue
                 services = json.loads(response.read())
 
-            # Find the matching proxy from the list for this server
             for service in services:
                 original_url_hostname = urlparse(service.get("original_url")).hostname
                 if original_url_hostname == target_hostname:
@@ -97,13 +63,10 @@ def discover_proxy(target_url, timeout=10):
 
     # 3. Phase 2: No existing proxy found. Ask a capable server to create one.
     logging.debug("Phase 2: No existing proxy found. Requesting creation...")
-    for info in listener.services:
-        server_ip = socket.inet_ntoa(info.addresses[0])
-        server_port = info.port
-
+    for instance_addr in instance_addresses:
         # First, check if this server can reach the target URL
         try:
-            can_reach_url = f"http://{server_ip}:{server_port}/can-reach?url={urllib.parse.quote(target_url)}"
+            can_reach_url = f"http://{instance_addr}/can-reach?url={urllib.parse.quote(target_url)}"
             logging.debug(f"Checking reachability at {can_reach_url}")
             proxy_handler = urllib.request.ProxyHandler({})
             opener = urllib.request.build_opener(proxy_handler)
@@ -112,16 +75,16 @@ def discover_proxy(target_url, timeout=10):
                     continue
                 reach_data = json.loads(response.read())
                 if not reach_data.get("reachable"):
-                    logging.debug(f"Server {server_ip} cannot reach {target_url}")
+                    logging.debug(f"Server {instance_addr} cannot reach {target_url}")
                     continue
         except Exception as e:
-            logging.warning(f"Could not check reachability on {server_ip}: {e}")
+            logging.warning(f"Could not check reachability on {instance_addr}: {e}")
             continue
 
         # This server can reach the URL, so ask it to create the proxy
-        logging.debug(f"Server {server_ip} can reach the URL. Requesting proxy creation...")
+        logging.debug(f"Server {instance_addr} can reach the URL. Requesting proxy creation...")
         try:
-            create_url = f"http://{server_ip}:{server_port}/proxies"
+            create_url = f"http://{instance_addr}/proxies"
             post_data = json.dumps({"url": target_url}).encode("utf-8")
             req = urllib.request.Request(create_url, data=post_data, headers={"Content-Type": "application/json"})
             
@@ -134,11 +97,11 @@ def discover_proxy(target_url, timeout=10):
                     logging.debug(f"Successfully created proxy: {proxy_url}")
                     return proxy_url
                 else:
-                    logging.error(f"Server {server_ip} failed to create proxy, status: {response.status}")
-                    return None # If one server fails to create, stop trying
+                    logging.error(f"Server {instance_addr} failed to create proxy, status: {response.status}")
+                    return None
         except Exception as e:
-            logging.error(f"Failed to request proxy creation from {server_ip}: {e}")
-            return None # If one server fails to create, stop trying
+            logging.error(f"Failed to request proxy creation from {instance_addr}: {e}")
+            return None
 
     logging.info(f"Found API server(s), but none could reach or create a proxy for {target_url}")
 

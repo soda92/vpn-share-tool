@@ -1,0 +1,125 @@
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"log"
+	"net"
+	"strings"
+	"sync"
+	"time"
+)
+
+const (
+	listenPort = "45679"
+)
+
+type Instance struct {
+	Address  string    `json:"address"`
+	LastSeen time.Time `json:"last_seen"`
+}
+
+var (
+	instances = make(map[string]Instance)
+	mutex     = &sync.Mutex{}
+)
+
+func main() {
+	log.Printf("Starting discovery server on port %s", listenPort)
+	listener, err := net.Listen("tcp", ":"+listenPort)
+	if err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+	defer listener.Close()
+
+	// Periodically clean up stale instances
+	go cleanupStaleInstances()
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Printf("Failed to accept connection: %v", err)
+			continue
+		}
+		go handleConnection(conn)
+	}
+}
+
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+	remoteAddr := conn.RemoteAddr().(*net.TCPAddr).IP.String()
+	log.Printf("Accepted connection from %s", remoteAddr)
+
+	scanner := bufio.NewScanner(conn)
+	if scanner.Scan() {
+		message := scanner.Text()
+		parts := strings.Split(message, " ")
+		command := parts[0]
+
+		mutex.Lock()
+		defer mutex.Unlock()
+
+		switch command {
+		case "REGISTER":
+			if len(parts) < 2 {
+				log.Printf("Invalid REGISTER command from %s", remoteAddr)
+				return
+			}
+			apiPort := parts[1]
+			instanceAddress := net.JoinHostPort(remoteAddr, apiPort)
+			instances[instanceAddress] = Instance{
+				Address:  instanceAddress,
+				LastSeen: time.Now(),
+			}
+			log.Printf("Registered instance: %s", instanceAddress)
+			conn.Write([]byte("OK\n"))
+
+		case "LIST":
+			var activeInstances []Instance
+			for _, instance := range instances {
+				activeInstances = append(activeInstances, instance)
+			}
+			data, err := json.Marshal(activeInstances)
+			if err != nil {
+				log.Printf("Failed to marshal instance list: %v", err)
+				return
+			}
+			conn.Write(data)
+			conn.Write([]byte("\n"))
+
+		case "HEARTBEAT":
+			if len(parts) < 2 {
+				log.Printf("Invalid HEARTBEAT command from %s", remoteAddr)
+				return
+			}
+			apiPort := parts[1]
+			instanceAddress := net.JoinHostPort(remoteAddr, apiPort)
+			if _, ok := instances[instanceAddress]; ok {
+				instances[instanceAddress] = Instance{
+					Address:  instanceAddress,
+					LastSeen: time.Now(),
+				}
+				log.Printf("Heartbeat from: %s", instanceAddress)
+				conn.Write([]byte("OK\n"))
+			}
+
+		default:
+			log.Printf("Unknown command from %s: %s", remoteAddr, command)
+		}
+	}
+}
+
+func cleanupStaleInstances() {
+	for {
+		time.Sleep(1 * time.Minute)
+		mutex.Lock()
+		log.Println("Running cleanup of stale instances...")
+		for addr, instance := range instances {
+			if time.Since(instance.LastSeen) > 5*time.Minute {
+				log.Printf("Removing stale instance: %s", addr)
+				delete(instances, addr)
+			}
+		}
+		mutex.Unlock()
+	}
+}

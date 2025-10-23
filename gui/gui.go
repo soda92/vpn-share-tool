@@ -29,8 +29,9 @@ var i18nFS embed.FS
 
 // Config holds the data to be saved to a JSON file.
 type Config struct {
-	OriginalURLs []string `json:"original_urls"`
-	AutoStart    bool     `json:"autostart,omitempty"`
+	OriginalURLs    []string `json:"original_urls"`
+	AutoStart       bool     `json:"autostart,omitempty"`
+	DiscoveryServer string   `json:"discovery_server,omitempty"`
 }
 
 const (
@@ -78,8 +79,9 @@ func Run() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
 
-	// Start the mDNS server to advertise the service
-	go startMdnsServer()
+	// Start the local API server and register with the discovery server
+	go startApiServer()
+	go registerWithDiscoveryServer()
 
 	var err error
 	lanIPs, err = getLanIPs()
