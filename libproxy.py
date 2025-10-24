@@ -27,19 +27,51 @@ def get_instance_list(timeout: int = 5):
         return []
 
 
+def is_url_reachable_locally(target_url, timeout=3):
+    """Checks if a URL is reachable from the local machine."""
+    try:
+        # Use a HEAD request for efficiency
+        req = urllib.request.Request(target_url, method="HEAD")
+        # Use a proxy handler that does nothing, to ensure we are checking direct access
+        proxy_handler = urllib.request.ProxyHandler({})
+        opener = urllib.request.build_opener(proxy_handler)
+        with opener.open(req, timeout=timeout) as response:
+            # Any status code means it's reachable.
+            logging.debug(
+                f"Local check: URL {target_url} is reachable with status {response.status}"
+            )
+            return True
+    except Exception as e:
+        logging.debug(f"Local check: URL {target_url} is not reachable: {e}")
+        return False
+
+
 def discover_proxy(target_url, timeout=10):
     """
     Discovers a proxy for a given URL by querying the central discovery server.
+    First, it checks if the URL is reachable locally.
     """
+    # 0. Check for local reachability first
+    logging.debug(f"Checking if {target_url} is reachable locally...")
+
+    # Ensure the URL has a scheme for the request library
+    schemed_target_url = target_url
+    if not urlparse(schemed_target_url).scheme:
+        schemed_target_url = f"http://{schemed_target_url}"
+
+    if is_url_reachable_locally(schemed_target_url, timeout=3):
+        logging.info(f"URL {target_url} is directly reachable. No proxy needed.")
+        return target_url  # Return the original URL
+
+    logging.debug(f"URL {target_url} not reachable locally. Starting discovery...")
+
     # 1. Get the list of all available API servers from the central server
     instance_addresses = get_instance_list(timeout=timeout)
     if not instance_addresses:
         logging.info("No active vpn-share-tool instances found.")
         return None
 
-    target_hostname = urlparse(target_url).hostname
-    if not target_hostname:
-        target_hostname = urlparse(f"http://{target_url}").hostname
+    target_hostname = urlparse(schemed_target_url).hostname
 
     # 2. Phase 1: Check all discovered servers for an EXISTING proxy
     logging.debug("Phase 1: Checking for existing proxies...")
@@ -57,14 +89,17 @@ def discover_proxy(target_url, timeout=10):
                     continue
                 services = json.loads(response.read())
 
-            for service in services:
-                original_url_hostname = urlparse(service.get("original_url")).hostname
-                if original_url_hostname == target_hostname:
-                    proxy_url = service.get("shared_url")
-                    logging.debug(
-                        f"Found existing proxy: {proxy_url} on server {api_url}"
-                    )
-                    return proxy_url
+            if services:  # Ensure services is not None
+                for service in services:
+                    original_url_hostname = urlparse(
+                        service.get("original_url")
+                    ).hostname
+                    if original_url_hostname == target_hostname:
+                        proxy_url = service.get("shared_url")
+                        logging.debug(
+                            f"Found existing proxy: {proxy_url} on server {api_url}"
+                        )
+                        return proxy_url
         except Exception as e:
             logging.warning(f"Could not check services on {api_url}: {e}")
             continue
@@ -74,9 +109,7 @@ def discover_proxy(target_url, timeout=10):
     for instance_addr in instance_addresses:
         # First, check if this server can reach the target URL
         try:
-            can_reach_url = (
-                f"http://{instance_addr}/can-reach?url={urllib.parse.quote(target_url)}"
-            )
+            can_reach_url = f"http://{instance_addr}/can-reach?url={urllib.parse.quote(schemed_target_url)}"
             logging.debug(f"Checking reachability at {can_reach_url}")
             proxy_handler = urllib.request.ProxyHandler({})
             opener = urllib.request.build_opener(proxy_handler)
@@ -99,7 +132,9 @@ def discover_proxy(target_url, timeout=10):
             create_url = f"http://{instance_addr}/proxies"
             post_data = json.dumps({"url": target_url}).encode("utf-8")
             req = urllib.request.Request(
-                create_url, data=post_data, headers={"Content-Type": "application/json"}
+                create_url,
+                data=post_data,
+                headers={"Content-Type": "application/json"},
             )
 
             proxy_handler = urllib.request.ProxyHandler({})
