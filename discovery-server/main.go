@@ -70,7 +70,11 @@ func handleConnection(conn net.Conn) {
 				LastSeen: time.Now(),
 			}
 			log.Printf("Registered instance: %s", instanceAddress)
-			conn.Write([]byte("OK\n"))
+			if _, err := conn.Write([]byte("OK\n")); err != nil {
+				log.Printf("Error writing to %s: %v", remoteAddr, err)
+				mutex.Unlock()
+				return
+			}
 
 		case "LIST":
 			var activeInstances []Instance
@@ -82,8 +86,16 @@ func handleConnection(conn net.Conn) {
 				log.Printf("Failed to marshal instance list: %v", err)
 				break
 			}
-			conn.Write(data)
-			conn.Write([]byte("\n"))
+			if _, err := conn.Write(data); err != nil {
+				log.Printf("Error writing to %s: %v", remoteAddr, err)
+				mutex.Unlock()
+				return
+			}
+			if _, err := conn.Write([]byte("\n")); err != nil {
+				log.Printf("Error writing to %s: %v", remoteAddr, err)
+				mutex.Unlock()
+				return
+			}
 
 		case "HEARTBEAT":
 			if len(parts) < 2 {
@@ -98,7 +110,11 @@ func handleConnection(conn net.Conn) {
 					LastSeen: time.Now(),
 				}
 				log.Printf("Heartbeat from: %s", instanceAddress)
-				conn.Write([]byte("OK\n"))
+				if _, err := conn.Write([]byte("OK\n")); err != nil {
+					log.Printf("Error writing to %s: %v", remoteAddr, err)
+					mutex.Unlock()
+					return
+				}
 			}
 
 		default:
