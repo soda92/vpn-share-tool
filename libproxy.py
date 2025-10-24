@@ -53,7 +53,7 @@ def is_url_reachable_locally(target_url, timeout=3):
                 f"Local check: URL {target_url} is reachable with status {response.status}"
             )
             return True
-    except Exception as e:
+    except (urllib.error.URLError, socket.timeout) as e:
         logging.debug(f"Local check: URL {target_url} is not reachable: {e}")
         return False
 
