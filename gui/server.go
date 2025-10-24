@@ -268,5 +268,7 @@ func addAndStartProxy(rawURL string, statusLabel *widget.Label) (*sharedProxy, e
 		server:      server,
 	}
 
+	go startHealthChecker(newProxy)
+
 	return newProxy, nil
 }

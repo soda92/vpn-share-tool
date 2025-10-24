@@ -56,6 +56,7 @@ var (
 	gconfig             Config
 	shareUrlAndGetProxy func(rawURL string) (*sharedProxy, error)
 	proxyAddedChan      = make(chan *sharedProxy)
+	proxyRemovedChan    = make(chan *sharedProxy)
 )
 
 // isPortAvailable checks if a TCP port is available to be listened on.
@@ -67,6 +68,50 @@ func isPortAvailable(port int) bool {
 	}
 	_ = ln.Close()
 	return true
+}
+
+// removeProxy shuts down a proxy server and removes it from the list.
+func removeProxy(p *sharedProxy) {
+	log.Printf("Removing proxy for unreachable URL: %s", p.OriginalURL)
+
+	// 1. Shutdown the HTTP server
+	if p.server != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := p.server.Shutdown(ctx); err != nil {
+			log.Printf("Error shutting down proxy server for %s: %v", p.OriginalURL, err)
+		}
+	}
+
+	// 2. Remove from the global proxies slice
+	proxiesLock.Lock()
+	newProxies := []*sharedProxy{}
+	for _, proxy := range proxies {
+		if proxy != p {
+			newProxies = append(newProxies, proxy)
+		}
+	}
+	proxies = newProxies
+	proxiesLock.Unlock()
+
+	// 3. Signal the UI to update
+	proxyRemovedChan <- p
+}
+
+// startHealthChecker runs in a goroutine to periodically check if a URL is reachable.
+func startHealthChecker(p *sharedProxy) {
+	healthCheckTicker := time.NewTicker(3 * time.Minute)
+	defer healthCheckTicker.Stop()
+
+	for range healthCheckTicker.C {
+		log.Printf("Performing health check for %s", p.OriginalURL)
+		if !isURLReachable(p.OriginalURL) {
+			log.Printf("Health check failed for %s. Tearing down proxy.", p.OriginalURL)
+			removeProxy(p)
+			return // Stop this health checker goroutine
+		}
+		log.Printf("Health check successful for %s", p.OriginalURL)
+	}
 }
 
 func Run() {
@@ -113,10 +158,28 @@ func Run() {
 		// The caller is now responsible for saving the config.
 	}
 
+	removeProxyFromUI := func(p *sharedProxy) {
+		currentList, _ := sharedListData.Get()
+		newList := []string{}
+		for _, item := range currentList {
+			// The display string is "original -> shared".
+			// If the original URL is in the string, we can assume it's the one to remove.
+			if !strings.Contains(item, p.OriginalURL) {
+				newList = append(newList, item)
+			}
+		}
+		sharedListData.Set(newList)
+	}
+
 	// Goroutine to handle UI updates from any part of the application
 	go func() {
-		for newProxy := range proxyAddedChan {
-			addProxyToUI(newProxy)
+		for {
+			select {
+			case newProxy := <-proxyAddedChan:
+				addProxyToUI(newProxy)
+			case removedProxy := <-proxyRemovedChan:
+				removeProxyFromUI(removedProxy)
+			}
 		}
 	}()
 
