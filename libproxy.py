@@ -11,11 +11,11 @@ DISCOVERY_SERVER_HOST = "192.168.1.81"
 DISCOVERY_SERVER_PORT = 45679
 
 
-def get_instance_list():
+def get_instance_list(timeout: int = 5):
     """Gets the list of active vpn-share-tool instances from the central server."""
     try:
         with socket.create_connection(
-            (DISCOVERY_SERVER_HOST, DISCOVERY_SERVER_PORT), timeout=5
+            (DISCOVERY_SERVER_HOST, DISCOVERY_SERVER_PORT), timeout=timeout
         ) as sock:
             sock.sendall(b"LIST\n")
             response = sock.makefile().readline()
@@ -32,7 +32,7 @@ def discover_proxy(target_url, timeout=10):
     Discovers a proxy for a given URL by querying the central discovery server.
     """
     # 1. Get the list of all available API servers from the central server
-    instance_addresses = get_instance_list()
+    instance_addresses = get_instance_list(timeout=timeout)
     if not instance_addresses:
         logging.info("No active vpn-share-tool instances found.")
         return None
@@ -49,7 +49,7 @@ def discover_proxy(target_url, timeout=10):
             logging.debug(f"Querying API server at {api_url}")
             proxy_handler = urllib.request.ProxyHandler({})
             opener = urllib.request.build_opener(proxy_handler)
-            with opener.open(api_url, timeout=5) as response:
+            with opener.open(api_url, timeout=timeout) as response:
                 if response.status != 200:
                     logging.warning(
                         f"API server at {api_url} returned status {response.status}"
@@ -80,7 +80,7 @@ def discover_proxy(target_url, timeout=10):
             logging.debug(f"Checking reachability at {can_reach_url}")
             proxy_handler = urllib.request.ProxyHandler({})
             opener = urllib.request.build_opener(proxy_handler)
-            with opener.open(can_reach_url, timeout=5) as response:
+            with opener.open(can_reach_url, timeout=timeout) as response:
                 if response.status != 200:
                     continue
                 reach_data = json.loads(response.read())
@@ -104,7 +104,7 @@ def discover_proxy(target_url, timeout=10):
 
             proxy_handler = urllib.request.ProxyHandler({})
             opener = urllib.request.build_opener(proxy_handler)
-            with opener.open(req, timeout=10) as response:
+            with opener.open(req, timeout=timeout) as response:
                 if response.status == 201:  # StatusCreated
                     new_proxy_data = json.loads(response.read())
                     proxy_url = new_proxy_data.get("shared_url")
