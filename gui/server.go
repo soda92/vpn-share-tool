@@ -31,7 +31,8 @@ func servicesHandler(w http.ResponseWriter, r *http.Request) {
 		SharedURL   string `json:"shared_url"`
 	}
 
-	var response []sharedURLInfo
+	// Initialize with a non-nil empty slice to ensure the JSON output is `[]` instead of `null`.
+	response := make([]sharedURLInfo, 0)
 	if len(lanIPs) > 0 {
 		// Just use the first LAN IP for the response. The client can substitute it if needed.
 		ip := lanIPs[0]
