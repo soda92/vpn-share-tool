@@ -171,7 +171,7 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 	// This ensures the client gets the externally accessible URL.
 	var sharedURL string
 	if len(lanIPs) > 0 {
-		sharedURL = fmt.Sprintf("http://%s:%d%s", lanIPs[0], newProxy.RemotePort, newProxy.Path)https://github.com/soda92/vpn-share-tool/pull/5#discussion_r2454613074
+		sharedURL = fmt.Sprintf("http://%s:%d%s", lanIPs[0], newProxy.RemotePort, newProxy.Path)
 	}
 
 	type sharedURLInfo struct {
