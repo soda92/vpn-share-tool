@@ -149,10 +149,10 @@ def discover_proxy(target_url, timeout=10):
                     logging.error(
                         f"Server {instance_addr} failed to create proxy, status: {response.status}"
                     )
-                    return None
+                    continue  # Try next instance
         except Exception as e:
             logging.error(f"Failed to request proxy creation from {instance_addr}: {e}")
-            return None
+            continue  # Try next instance
 
     logging.info(
         f"Found API server(s), but none could reach or create a proxy for {target_url}"
