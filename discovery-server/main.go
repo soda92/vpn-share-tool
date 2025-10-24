@@ -20,8 +20,10 @@ type Instance struct {
 }
 
 var (
-	instances = make(map[string]Instance)
-	mutex     = &sync.Mutex{}
+	instances       = make(map[string]Instance)
+	mutex           = &sync.Mutex{}
+	cleanupInterval = 1 * time.Minute
+	staleTimeout    = 5 * time.Minute
 )
 
 func main() {
@@ -115,6 +117,13 @@ func handleConnection(conn net.Conn) {
 					mutex.Unlock()
 					return
 				}
+			} else {
+				log.Printf("Heartbeat from unregistered instance: %s", instanceAddress)
+				if _, err := conn.Write([]byte("ERR_NOT_REGISTERED\n")); err != nil {
+					log.Printf("Error writing to %s: %v", remoteAddr, err)
+					mutex.Unlock()
+					return
+				}
 			}
 
 		default:
@@ -131,11 +140,11 @@ func handleConnection(conn net.Conn) {
 
 func cleanupStaleInstances() {
 	for {
-		time.Sleep(1 * time.Minute)
+		time.Sleep(cleanupInterval)
 		mutex.Lock()
 		log.Println("Running cleanup of stale instances...")
 		for addr, instance := range instances {
-			if time.Since(instance.LastSeen) > 5*time.Minute {
+			if time.Since(instance.LastSeen) > staleTimeout {
 				log.Printf("Removing stale instance: %s", addr)
 				delete(instances, addr)
 			}

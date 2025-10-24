@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -61,32 +62,62 @@ func registerWithDiscoveryServer() {
 			continue
 		}
 
-		log.Printf("Connected to discovery server: %s", serverAddr)
+		// Use a closure to manage the connection lifecycle.
+		// This makes resource management (like closing connections and stopping tickers) cleaner.
+		func(conn net.Conn) {
+			defer conn.Close()
+			scanner := bufio.NewScanner(conn)
 
-		// Initial registration
-		registerMsg := fmt.Sprintf("REGISTER %d\n", apiPort)
-		_, err = conn.Write([]byte(registerMsg))
-		if err != nil {
-			log.Printf("Failed to send REGISTER command: %v", err)
-			conn.Close()
-			continue
-		}
-		log.Printf("Successfully registered with discovery server.")
-
-		// Heartbeat loop
-		heartbeatTicker := time.NewTicker(1 * time.Minute)
-		defer heartbeatTicker.Stop()
-
-		for range heartbeatTicker.C {
-			heartbeatMsg := fmt.Sprintf("HEARTBEAT %d\n", apiPort)
-			_, err := conn.Write([]byte(heartbeatMsg))
-			if err != nil {
-				log.Printf("Failed to send HEARTBEAT: %v. Reconnecting...", err)
-				conn.Close()
-				break // Break inner loop to trigger reconnection
+			// 1. Initial Registration
+			registerMsg := fmt.Sprintf("REGISTER %d\n", apiPort)
+			if _, err := conn.Write([]byte(registerMsg)); err != nil {
+				log.Printf("Failed to send REGISTER command: %v", err)
+				return // Exit closure, trigger reconnect
 			}
-			log.Println("Sent heartbeat to discovery server.")
-		}
+
+			if !scanner.Scan() {
+				log.Printf("Did not receive response from server after REGISTER.")
+				return // Exit closure, trigger reconnect
+			}
+			if response := scanner.Text(); response != "OK" {
+				log.Printf("Failed to register with discovery server, response: %s.", response)
+				return // Exit closure, trigger reconnect
+			}
+			log.Printf("Successfully registered with discovery server.")
+
+			// 2. Heartbeat Loop
+			heartbeatTicker := time.NewTicker(1 * time.Minute)
+			defer heartbeatTicker.Stop()
+
+			for range heartbeatTicker.C {
+				heartbeatMsg := fmt.Sprintf("HEARTBEAT %d\n", apiPort)
+				if _, err := conn.Write([]byte(heartbeatMsg)); err != nil {
+					log.Printf("Failed to send HEARTBEAT: %v", err)
+					return // Exit closure, trigger reconnect
+				}
+				log.Println("Sent heartbeat to discovery server.")
+
+				// Wait for and process server response
+				if !scanner.Scan() {
+					log.Printf("Did not receive response from server after HEARTBEAT.")
+					return // Exit closure, trigger reconnect
+				}
+
+				response := scanner.Text()
+				switch response {
+				case "OK":
+					// All good
+				case "ERR_NOT_REGISTERED":
+					log.Printf("Heartbeat failed: instance not registered. Re-registering...")
+					return // Exit closure, trigger reconnect and re-register
+				default:
+					log.Printf("Unknown response from server after HEARTBEAT: %s", response)
+					return // Exit closure, trigger reconnect
+				}
+			}
+		}(conn)
+
+		log.Printf("Connection to discovery server lost. Retrying...")
 	}
 }
 
