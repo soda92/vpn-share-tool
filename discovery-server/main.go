@@ -83,21 +83,22 @@ func handleConnection(conn net.Conn) {
 			for _, instance := range instances {
 				activeInstances = append(activeInstances, instance)
 			}
+			mutex.Unlock() // Unlock early
+
 			data, err := json.Marshal(activeInstances)
 			if err != nil {
 				log.Printf("Failed to marshal instance list: %v", err)
-				break
+				continue // Skip to next loop iteration
 			}
 			if _, err := conn.Write(data); err != nil {
 				log.Printf("Error writing to %s: %v", remoteAddr, err)
-				mutex.Unlock()
-				return
+				return // Exit function
 			}
 			if _, err := conn.Write([]byte("\n")); err != nil {
 				log.Printf("Error writing to %s: %v", remoteAddr, err)
-				mutex.Unlock()
-				return
+				return // Exit function
 			}
+			continue // Continue to next loop iteration to avoid double-unlock
 
 		case "HEARTBEAT":
 			if len(parts) < 2 {
