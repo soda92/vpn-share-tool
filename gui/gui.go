@@ -280,15 +280,13 @@ func Run() {
 
 	// Setup system tray
 	if desk, ok := myApp.(desktop.App); ok {
-		var autostartMenuItem *fyne.MenuItem
-		autostartMenuItem = fyne.NewMenuItem(l("enableAutostartMenuItem"), func() {
-			gconfig.AutoStart = !gconfig.AutoStart
-			autostartMenuItem.Checked = gconfig.AutoStart
-			SetAutostart(gconfig.AutoStart)
-			saveConfig()
+		autostartMenuItem := fyne.NewMenuItem(l("setupAutostartMenuItem"), func() {
+			SetAutostart(true)
+			fyne.CurrentApp().SendNotification(&fyne.Notification{
+				Title:   l("autostartEnabledTitle"),
+				Content: l("autostartEnabledContent"),
+			})
 		})
-		autostartMenuItem.Checked = gconfig.AutoStart
-		SetAutostart(gconfig.AutoStart)
 
 		menu := fyne.NewMenu("VPN Share Tool",
 			fyne.NewMenuItem(l("showMenuItem"), func() {
