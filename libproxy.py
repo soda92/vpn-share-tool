@@ -19,11 +19,23 @@ def get_instance_list(timeout: int = 5):
         ) as sock:
             sock.sendall(b"LIST\n")
             response = sock.makefile().readline()
+            if not response:
+                logging.error("Did not receive a response from discovery server.")
+                return []
             instances_raw = json.loads(response)
             # The server gives us a list of objects with an "address" field
             return [item["address"] for item in instances_raw]
+    except socket.timeout:
+        logging.error(f"Timeout connecting to discovery server at {DISCOVERY_SERVER_HOST}:{DISCOVERY_SERVER_PORT}")
+        return []
+    except ConnectionRefusedError:
+        logging.error(f"Connection refused by discovery server at {DISCOVERY_SERVER_HOST}:{DISCOVERY_SERVER_PORT}")
+        return []
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to decode JSON response from discovery server: {e}")
+        return []
     except Exception as e:
-        logging.error(f"Failed to get instance list from discovery server: {e}")
+        logging.error(f"An unexpected error occurred while getting instance list: {e}")
         return []
 
 
