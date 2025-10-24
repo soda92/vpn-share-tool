@@ -5,6 +5,7 @@ import json
 import urllib.request
 from urllib.parse import urlparse
 import urllib.parse
+import urllib.error
 
 # Address of the central discovery server
 DISCOVERY_SERVER_HOST = "192.168.1.81"
@@ -142,7 +143,7 @@ def discover_proxy(target_url, timeout=10):
         )
         try:
             create_url = f"http://{instance_addr}/proxies"
-            post_data = json.dumps({"url": target_url}).encode("utf-8")
+            post_data = json.dumps({"url": schemed_target_url}).encode("utf-8")
             req = urllib.request.Request(
                 create_url,
                 data=post_data,
