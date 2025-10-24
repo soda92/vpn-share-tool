@@ -5,30 +5,53 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
+
+// getSuitableInterfaces iterates through network interfaces and returns a slice of suitable interfaces for LAN communication.
+func getSuitableInterfaces() []net.Interface {
+	var suitableInterfaces []net.Interface
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		log.Printf("Failed to get network interfaces: %v", err)
+		return nil
+	}
+
+	for _, i := range interfaces {
+		// Skip docker, down, loopback, and non-multicast interfaces
+		if strings.Contains(i.Name, "docker") || (i.Flags&net.FlagUp == 0) || (i.Flags&net.FlagLoopback != 0) || (i.Flags&net.FlagMulticast == 0) {
+			continue
+		}
+		addrs, err := i.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, address := range addrs {
+			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+				if ip := ipnet.IP.To4(); ip != nil && strings.HasPrefix(ip.String(), "192.168.") {
+					suitableInterfaces = append(suitableInterfaces, i)
+					break // Found a suitable IP on this interface, move to the next interface
+				}
+			}
+		}
+	}
+	return suitableInterfaces
+}
 
 // getLanIPs finds all suitable local private IP addresses of the machine.
 func getLanIPs() ([]string, error) {
 	var ips []string
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return nil, err
-	}
+	suitableInterfaces := getSuitableInterfaces()
 
-	for _, address := range addrs {
-		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ip := ipnet.IP.To4(); ip != nil && ip.IsPrivate() {
-				ips = append(ips, ip.String())
-			}
+	for _, i := range suitableInterfaces {
+		addrs, err := i.Addrs()
+		if err != nil {
+			continue
 		}
-	}
-
-	if len(ips) == 0 {
-		// If no private IP was found, try to find any usable IP that is not link-local.
 		for _, address := range addrs {
 			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-				if ip := ipnet.IP.To4(); ip != nil && !ip.IsLinkLocalUnicast() {
+				if ip := ipnet.IP.To4(); ip != nil && strings.HasPrefix(ip.String(), "192.168.") {
 					ips = append(ips, ip.String())
 				}
 			}

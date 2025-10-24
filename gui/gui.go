@@ -27,18 +27,8 @@ import (
 //go:embed i18n/*.json
 var i18nFS embed.FS
 
-// Config holds the data to be saved to a JSON file.
-type Config struct {
-	OriginalURLs []string `json:"original_urls"`
-	AutoStart    bool     `json:"autostart,omitempty"`
-}
-
 const (
-	configFile          = "vpn_share_config.json"
-	startPort           = 10081
-	discoveryPort       = 45678
-	discoveryReqPrefix  = "DISCOVER_REQ:"
-	discoveryRespPrefix = "DISCOVER_RESP:"
+	startPort = 10081
 )
 
 // sharedProxy holds information about a shared URL.
@@ -51,12 +41,14 @@ type sharedProxy struct {
 }
 
 var (
-	proxies        []*sharedProxy
-	proxiesLock    sync.RWMutex
-	lanIPs         []string
-	nextRemotePort = startPort
-	localizer      *i18n.Localizer
-	gconfig        Config
+	proxies             []*sharedProxy
+	proxiesLock         sync.RWMutex
+	lanIPs              []string
+	nextRemotePort      = startPort
+	localizer           *i18n.Localizer
+	shareUrlAndGetProxy func(rawURL string) (*sharedProxy, error)
+	proxyAddedChan      = make(chan *sharedProxy)
+	proxyRemovedChan    = make(chan *sharedProxy)
 )
 
 // isPortAvailable checks if a TCP port is available to be listened on.
@@ -70,6 +62,50 @@ func isPortAvailable(port int) bool {
 	return true
 }
 
+// removeProxy shuts down a proxy server and removes it from the list.
+func removeProxy(p *sharedProxy) {
+	log.Printf("Removing proxy for unreachable URL: %s", p.OriginalURL)
+
+	// 1. Shutdown the HTTP server
+	if p.server != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := p.server.Shutdown(ctx); err != nil {
+			log.Printf("Error shutting down proxy server for %s: %v", p.OriginalURL, err)
+		}
+	}
+
+	// 2. Remove from the global proxies slice
+	proxiesLock.Lock()
+	newProxies := []*sharedProxy{}
+	for _, proxy := range proxies {
+		if proxy != p {
+			newProxies = append(newProxies, proxy)
+		}
+	}
+	proxies = newProxies
+	proxiesLock.Unlock()
+
+	// 3. Signal the UI to update
+	proxyRemovedChan <- p
+}
+
+// startHealthChecker runs in a goroutine to periodically check if a URL is reachable.
+func startHealthChecker(p *sharedProxy) {
+	healthCheckTicker := time.NewTicker(3 * time.Minute)
+	defer healthCheckTicker.Stop()
+
+	for range healthCheckTicker.C {
+		log.Printf("Performing health check for %s", p.OriginalURL)
+		if !isURLReachable(p.OriginalURL) {
+			log.Printf("Health check failed for %s. Tearing down proxy.", p.OriginalURL)
+			removeProxy(p)
+			return // Stop this health checker goroutine
+		}
+		log.Printf("Health check successful for %s", p.OriginalURL)
+	}
+}
+
 func Run() {
 	startMinimized := flag.Bool("minimized", false, "start minimized with windows start")
 	flag.Parse()
@@ -79,9 +115,9 @@ func Run() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
 
-	// Channel to signal UI updates from the discovery server
-	newProxyChan := make(chan *sharedProxy)
-	go startDiscoveryServer(newProxyChan)
+	// Start the local API server and register with the discovery server
+	go startApiServer()
+	go registerWithDiscoveryServer()
 
 	var err error
 	lanIPs, err = getLanIPs()
@@ -110,13 +146,32 @@ func Run() {
 			})
 			sharedListData.Append(displayString)
 		}
-		saveConfig()
+		// NOTE: saveConfig() is removed from here to prevent saving during startup loops.
+		// The caller is now responsible for saving the config.
 	}
 
-	// Goroutine to handle UI updates from the discovery server channel
+	removeProxyFromUI := func(p *sharedProxy) {
+		currentList, _ := sharedListData.Get()
+		newList := []string{}
+		for _, item := range currentList {
+			// The display string is "original -> shared".
+			// If the original URL is in the string, we can assume it's the one to remove.
+			if !strings.Contains(item, p.OriginalURL) {
+				newList = append(newList, item)
+			}
+		}
+		sharedListData.Set(newList)
+	}
+
+	// Goroutine to handle UI updates from any part of the application
 	go func() {
-		for newProxy := range newProxyChan {
-			addProxyToUI(newProxy)
+		for {
+			select {
+			case newProxy := <-proxyAddedChan:
+				addProxyToUI(newProxy)
+			case removedProxy := <-proxyRemovedChan:
+				removeProxyFromUI(removedProxy)
+			}
 		}
 	}()
 
@@ -153,52 +208,62 @@ func Run() {
 		sharedList.Unselect(id)
 	}
 
-	// Define the core sharing logic as a function to be reused.
-	shareLogic := func(rawURL string) {
+	// shareUrlAndGetProxy contains the core logic for creating and starting a proxy.
+	// It is designed to be called from both the GUI and API handlers.
+	shareUrlAndGetProxy = func(rawURL string) (*sharedProxy, error) {
 		if rawURL == "" {
-			return
+			return nil, fmt.Errorf("URL cannot be empty")
 		}
 
 		if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 			rawURL = "http://" + rawURL
 		}
 
-		// Prevent adding duplicate proxies from the UI
+		// Prevent adding duplicate proxies
 		parsedURL, err := url.Parse(rawURL)
 		if err == nil {
 			hostname := parsedURL.Hostname()
 			proxiesLock.RLock()
-			var exists bool
 			for _, p := range proxies {
 				existingURL, err := url.Parse(p.OriginalURL)
 				if err != nil {
-					log.Printf("Skipping invalid stored URL: %s", p.OriginalURL)
-					continue
+					continue // Skip invalid stored URL
 				}
 				if existingURL.Hostname() == hostname {
-					exists = true
-					break
+					proxiesLock.RUnlock()
+					log.Printf("Proxy for %s already exists, returning existing one.", rawURL)
+					return p, nil // Return existing proxy instead of an error
 				}
 			}
 			proxiesLock.RUnlock()
-			if exists {
-				log.Printf("Proxy for %s already exists.", rawURL)
-				return // Already exists, do nothing.
-			}
 		}
 
-		newProxy, err := addAndStartProxy(rawURL, serverStatus)
+		// Pass nil for statusLabel as this is a non-GUI context
+		newProxy, err := addAndStartProxy(rawURL, nil)
 		if err != nil {
-			log.Printf(l("errorAddingProxy", map[string]interface{}{"url": rawURL, "error": err}))
-			serverStatus.SetText(l("errorAddingProxy", map[string]interface{}{"url": rawURL, "error": err}))
-			return
+			return nil, fmt.Errorf("error adding proxy for %s: %w", rawURL, err)
 		}
 
 		proxiesLock.Lock()
 		proxies = append(proxies, newProxy)
 		proxiesLock.Unlock()
 
-		addProxyToUI(newProxy)
+		// Announce the new proxy to the UI
+		proxyAddedChan <- newProxy
+
+		return newProxy, nil
+	}
+
+	// Define the core sharing logic as a function to be reused.
+	shareLogic := func(rawURL string) {
+		_, err := shareUrlAndGetProxy(rawURL)
+		if err != nil {
+			// The error might be that it already exists, which is not a critical failure for the user.
+			log.Printf("Error sharing URL: %v", err)
+			serverStatus.SetText(err.Error())
+			return
+		}
+
 		urlEntry.SetText("")
 	}
 
@@ -211,20 +276,17 @@ func Run() {
 		shareLogic(urlEntry.Text)
 	})
 
-	// Load config on startup
-	loadConfig(shareLogic, serverStatus)
+	// Config is no longer loaded on startup. The application starts with a clean state.
 
 	// Setup system tray
 	if desk, ok := myApp.(desktop.App); ok {
-		var autostartMenuItem *fyne.MenuItem
-		autostartMenuItem = fyne.NewMenuItem(l("enableAutostartMenuItem"), func() {
-			gconfig.AutoStart = !gconfig.AutoStart
-			autostartMenuItem.Checked = gconfig.AutoStart
-			SetAutostart(gconfig.AutoStart)
-			saveConfig()
+		autostartMenuItem := fyne.NewMenuItem(l("setupAutostartMenuItem"), func() {
+			SetAutostart(true)
+			fyne.CurrentApp().SendNotification(&fyne.Notification{
+				Title:   l("autostartEnabledTitle"),
+				Content: l("autostartEnabledContent"),
+			})
 		})
-		autostartMenuItem.Checked = gconfig.AutoStart
-		SetAutostart(gconfig.AutoStart)
 
 		menu := fyne.NewMenu("VPN Share Tool",
 			fyne.NewMenuItem(l("showMenuItem"), func() {

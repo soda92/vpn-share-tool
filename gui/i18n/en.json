@@ -27,5 +27,8 @@
     "errorNoServerPort": "Could not find an available port for the server.",
     "showMenuItem": "Show",
     "exitMenuItem": "Exit",
-    "enableAutostartMenuItem": "Start with system"
+    "enableAutostartMenuItem": "Start with system",
+    "setupAutostartMenuItem": "Setup Autostart",
+    "autostartEnabledTitle": "Autostart Enabled",
+    "autostartEnabledContent": "You can disable this later via your OS's Task Manager or settings."
 }

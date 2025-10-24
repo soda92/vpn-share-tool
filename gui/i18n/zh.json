@@ -27,5 +27,8 @@
     "errorNoServerPort": "未能为服务器找到可用端口。",
     "showMenuItem": "显示",
     "exitMenuItem": "退出",
-    "enableAutostartMenuItem": "开机自启"
+    "enableAutostartMenuItem": "开机自启",
+    "setupAutostartMenuItem": "设置开机自启",
+    "autostartEnabledTitle": "已设置开机自启",
+    "autostartEnabledContent": "您之后可以从操作系统的任务管理器或设置中禁用它。"
 }
