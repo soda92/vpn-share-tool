@@ -27,15 +27,8 @@ import (
 //go:embed i18n/*.json
 var i18nFS embed.FS
 
-// Config holds the data to be saved to a JSON file.
-type Config struct {
-	OriginalURLs []string `json:"original_urls"`
-	AutoStart    bool     `json:"autostart,omitempty"`
-}
-
 const (
-	configFile = "vpn_share_config.json"
-	startPort  = 10081
+	startPort = 10081
 )
 
 // sharedProxy holds information about a shared URL.
@@ -53,7 +46,6 @@ var (
 	lanIPs              []string
 	nextRemotePort      = startPort
 	localizer           *i18n.Localizer
-	gconfig             Config
 	shareUrlAndGetProxy func(rawURL string) (*sharedProxy, error)
 	proxyAddedChan      = make(chan *sharedProxy)
 	proxyRemovedChan    = make(chan *sharedProxy)
@@ -273,7 +265,6 @@ func Run() {
 		}
 
 		urlEntry.SetText("")
-		saveConfig() // Save config after a successful manual share
 	}
 
 	// Bug fix 2: Handle 'Enter' key in the URL entry field.
@@ -285,8 +276,7 @@ func Run() {
 		shareLogic(urlEntry.Text)
 	})
 
-	// Load config on startup
-	loadConfig(shareLogic, serverStatus)
+	// Config is no longer loaded on startup. The application starts with a clean state.
 
 	// Setup system tray
 	if desk, ok := myApp.(desktop.App); ok {
