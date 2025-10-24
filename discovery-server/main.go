@@ -51,19 +51,17 @@ func handleConnection(conn net.Conn) {
 	log.Printf("Accepted connection from %s", remoteAddr)
 
 	scanner := bufio.NewScanner(conn)
-	if scanner.Scan() {
+	for scanner.Scan() {
 		message := scanner.Text()
 		parts := strings.Split(message, " ")
 		command := parts[0]
 
 		mutex.Lock()
-		defer mutex.Unlock()
-
 		switch command {
 		case "REGISTER":
 			if len(parts) < 2 {
 				log.Printf("Invalid REGISTER command from %s", remoteAddr)
-				return
+				break
 			}
 			apiPort := parts[1]
 			instanceAddress := net.JoinHostPort(remoteAddr, apiPort)
@@ -82,7 +80,7 @@ func handleConnection(conn net.Conn) {
 			data, err := json.Marshal(activeInstances)
 			if err != nil {
 				log.Printf("Failed to marshal instance list: %v", err)
-				return
+				break
 			}
 			conn.Write(data)
 			conn.Write([]byte("\n"))
@@ -90,7 +88,7 @@ func handleConnection(conn net.Conn) {
 		case "HEARTBEAT":
 			if len(parts) < 2 {
 				log.Printf("Invalid HEARTBEAT command from %s", remoteAddr)
-				return
+				break
 			}
 			apiPort := parts[1]
 			instanceAddress := net.JoinHostPort(remoteAddr, apiPort)
@@ -106,7 +104,13 @@ func handleConnection(conn net.Conn) {
 		default:
 			log.Printf("Unknown command from %s: %s", remoteAddr, command)
 		}
+		mutex.Unlock()
 	}
+
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error reading from connection from %s: %v", remoteAddr, err)
+	}
+	log.Printf("Connection from %s closed", remoteAddr)
 }
 
 func cleanupStaleInstances() {
