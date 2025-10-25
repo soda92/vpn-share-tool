@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -65,7 +64,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _startPolling() async {
     final receivePort = ReceivePort();
-    _pollingIsolate = await Isolate.spawn(_bridge.pollEvents, receivePort.sendPort);
+    final rootIsolateToken = ServicesBinding.rootIsolateToken;
+
+    if (rootIsolateToken == null) {
+      print("RootIsolateToken is null. Cannot spawn background isolate.");
+      return;
+    }
+
+    _pollingIsolate = await Isolate.spawn(_bridge.pollEvents, [receivePort.sendPort, rootIsolateToken]);
 
     receivePort.listen((data) {
       final event = data as Map<String, dynamic>;
