@@ -26,10 +26,20 @@ class GoBridgeAndroid implements GoBridge {
   }
 
   @override
+  void startForegroundService() {
+    _methodChannel.invokeMethod('startForegroundService');
+  }
+
+  @override
+  void stopForegroundService() {
+    _methodChannel.invokeMethod('stopForegroundService');
+  }
+
+  @override
   void start() {
-    _methodChannel.invokeMethod('start');
-    // Register the Dart callback with Go
-    _methodChannel.invokeMethod('setEventCallback');
+    // The actual Go backend start and event callback setting is now handled by the foreground service.
+    // We just need to start the foreground service.
+    startForegroundService();
   }
 
   @override

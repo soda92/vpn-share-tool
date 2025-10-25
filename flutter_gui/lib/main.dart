@@ -53,11 +53,12 @@ class _MyHomePageState extends State<MyHomePage> {
       _bridge = GoBridgeAndroid();
     }
     _startListeningEvents(); // Listen to stream for both platforms
-    _bridge.start();
+    // _bridge.start(); // Removed: Service will be started explicitly
   }
 
   @override
   void dispose() {
+    _urlController.dispose();
     super.dispose();
   }
 
@@ -73,6 +74,10 @@ class _MyHomePageState extends State<MyHomePage> {
               _proxies.add(event['proxy']);
             } else if (event['type'] == 'removed') {
               _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
+            } else if (event['type'] == 'error') {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error from Go: ${event['message']}')),
+              );
             }
           });
         }
@@ -88,6 +93,10 @@ class _MyHomePageState extends State<MyHomePage> {
               _proxies.add(event['proxy']);
             } else if (event['type'] == 'removed') {
               _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
+            } else if (event['type'] == 'error') {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error from Go: ${event['message']}')),
+              );
             }
           });
         }
@@ -133,6 +142,28 @@ class _MyHomePageState extends State<MyHomePage> {
                 ElevatedButton(
                   onPressed: _shareUrl,
                   child: const Text('Share'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: () {
+                    if (_bridge is GoBridgeAndroid) {
+                      (_bridge as GoBridgeAndroid).startForegroundService();
+                    }
+                  },
+                  child: const Text('Start Service'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (_bridge is GoBridgeAndroid) {
+                      (_bridge as GoBridgeAndroid).stopForegroundService();
+                    }
+                  },
+                  child: const Text('Stop Service'),
                 ),
               ],
             ),
