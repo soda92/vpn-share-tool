@@ -36,10 +36,8 @@ class MainActivity: FlutterActivity() {
                     val dartCallback = object : mobile.EventCallback {
                         override fun onEvent(eventJSON: String?) {
                             if (eventJSON != null) {
-                                // Send the event back to Dart
-                                flutterEngine.dartExecutor.binaryMessenger.send(
-                                    CHANNEL, java.nio.ByteBuffer.wrap(eventJSON.toByteArray(Charsets.UTF_8))
-                                )
+                                android.util.Log.d("MainActivity", "Received event from Go: $eventJSON")
+                                MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).invokeMethod("onEvent", eventJSON)
                             }
                         }
                     }
