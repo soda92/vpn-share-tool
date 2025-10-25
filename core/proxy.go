@@ -58,19 +58,19 @@ func removeProxy(p *SharedProxy) {
 		}
 	}
 
-	// 2. Remove from the global proxies slice
-	proxiesLock.Lock()
+	// 2. Remove from the global Proxies slice
+	ProxiesLock.Lock()
 	newProxies := []*SharedProxy{}
-	for _, proxy := range proxies {
+	for _, proxy := range Proxies {
 		if proxy != p {
 			newProxies = append(newProxies, proxy)
 		}
 	}
-	proxies = newProxies
-	proxiesLock.Unlock()
+	Proxies = newProxies
+	ProxiesLock.Unlock()
 
 	// 3. Signal the UI to update
-	proxyRemovedChan <- p
+	ProxyRemovedChan <- p
 }
 
 // startHealthChecker runs in a goroutine to periodically check if a URL is reachable.
@@ -96,7 +96,7 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Transport = &cachingTransport{
+	proxy.Transport = &CachingTransport{
 		Transport: http.DefaultTransport,
 	}
 
@@ -106,17 +106,17 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 		req.Host = target.Host
 	}
 
-	proxiesLock.Lock()
+	ProxiesLock.Lock()
 	var remotePort int
 	for {
-		port := nextRemotePort
-		nextRemotePort++
+		port := NextRemotePort
+		NextRemotePort++
 		if isPortAvailable(port) {
 			remotePort = port
 			break
 		}
 	}
-	proxiesLock.Unlock()
+	ProxiesLock.Unlock()
 
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", remotePort),
@@ -153,7 +153,7 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 		rawURL = "http://" + rawURL
 	}
 
-	// Prevent adding duplicate proxies
+	// Prevent adding duplicate Proxies
 	parsedURL, err := url.Parse(rawURL)
 	if err == nil {
 		hostname := parsedURL.Hostname()
