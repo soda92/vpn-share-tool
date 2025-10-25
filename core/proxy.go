@@ -153,6 +153,9 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 		rawURL = "http://" + rawURL
 	}
 
+	// Replace localhost with 127.0.0.1 for Android compatibility
+	rawURL = strings.ReplaceAll(rawURL, "localhost", "127.0.0.1")
+
 	// Prevent adding duplicate Proxies
 	parsedURL, err := url.Parse(rawURL)
 	if err == nil {
