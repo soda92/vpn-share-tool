@@ -10,11 +10,13 @@ import 'package:vpn_share_tool/go_bridge_interface.dart';
 typedef _StartFunc = Void Function();
 typedef _ShareURLFunc = Void Function(Pointer<Utf8>);
 typedef _SetEventCallbackFunc = Void Function(Pointer<NativeFunction<EventCallbackC>>);
+typedef _GetIPFunc = Pointer<Utf8> Function();
 
 // Dart function signatures
 typedef _Start = void Function();
 typedef _ShareURL = void Function(Pointer<Utf8>);
 typedef _SetEventCallback = void Function(Pointer<NativeFunction<EventCallbackC>>);
+typedef _GetIP = Pointer<Utf8> Function();
 
 // Callback type for Go to call Dart
 typedef EventCallbackC = Void Function(Pointer<Utf8>);
@@ -34,6 +36,7 @@ class GoBridgeLinux implements GoBridge {
   static final _Start _start = _lib.lookup<NativeFunction<_StartFunc>>('Start').asFunction<_Start>();
   static final _ShareURL _shareURL = _lib.lookup<NativeFunction<_ShareURLFunc>>('ShareURL').asFunction<_ShareURL>();
   static final _SetEventCallback _setEventCallback = _lib.lookup<NativeFunction<_SetEventCallbackFunc>>('SetEventCallback').asFunction<_SetEventCallback>();
+  static final _GetIP _getIP = _lib.lookup<NativeFunction<_GetIPFunc>>('GetIP').asFunction<_GetIP>();
 
   final _eventStreamController = StreamController<Map<String, dynamic>>.broadcast();
 
@@ -57,6 +60,14 @@ class GoBridgeLinux implements GoBridge {
     final urlC = url.toNativeUtf8();
     _shareURL(urlC);
     malloc.free(urlC);
+  }
+
+  @override
+  Future<String?> getIP() async {
+    final ipC = _getIP();
+    final ip = ipC.toDartString();
+    malloc.free(ipC); // Free the Go-allocated string
+    return ip.isEmpty ? null : ip;
   }
 
   // This method is no longer used for polling, but we keep it to satisfy the interface.

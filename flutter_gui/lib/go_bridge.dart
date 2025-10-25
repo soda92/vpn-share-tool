@@ -54,5 +54,10 @@ class GoBridgeAndroid implements GoBridge {
     // No-op, events are pushed via stream
   }
 
+  @override
+  Future<String?> getIP() async {
+    return await _methodChannel.invokeMethod('getIP');
+  }
+
   Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;
 }

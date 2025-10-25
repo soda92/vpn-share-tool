@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.flutter_gui"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 34
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

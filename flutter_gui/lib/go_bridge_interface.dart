@@ -4,4 +4,5 @@ abstract class GoBridge {
   void pollEvents(dynamic sendPort);
   void startForegroundService();
   void stopForegroundService();
+  Future<String?> getIP();
 }

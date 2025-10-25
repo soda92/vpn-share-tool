@@ -1,9 +1,10 @@
+package com.example.flutter_gui
+
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.Service
-import android.content.Context
 import android.app.PendingIntent
+import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -24,13 +25,11 @@ class VpnShareService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d("VpnShareService", "Service onCreate")
+        Log.d("VpnShareService", "Calling createNotificationChannel...")
         createNotificationChannel()
         val notification = createNotification()
+        Log.d("VpnShareService", "Calling startForeground with NOTIFICATION_ID: $NOTIFICATION_ID")
         startForeground(NOTIFICATION_ID, notification)
-
-        // Initialize Go backend here
-        Log.d("VpnShareService", "Starting Go Mobile backend...")
-        Mobile.start()
 
         // Set event callback for Go Mobile
         val dartCallback = object : mobile.EventCallback {
@@ -50,6 +49,10 @@ class VpnShareService : Service() {
             }
         }
         Mobile.setEventCallback(dartCallback)
+
+        // Initialize Go backend here
+        Log.d("VpnShareService", "Starting Go Mobile backend...")
+        Mobile.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -76,6 +79,7 @@ class VpnShareService : Service() {
     }
 
     private fun createNotificationChannel() {
+        Log.d("VpnShareService", "createNotificationChannel called.")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val serviceChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
@@ -84,6 +88,9 @@ class VpnShareService : Service() {
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
+            Log.d("VpnShareService", "Notification channel created.")
+        } else {
+            Log.d("VpnShareService", "Notification channel not created (SDK < O).")
         }
     }
 

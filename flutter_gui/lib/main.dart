@@ -53,9 +53,7 @@ class _MyHomePageState extends State<MyHomePage> {
       _bridge = GoBridgeAndroid();
     }
     _startListeningEvents(); // Listen to stream for both platforms
-    if (Platform.isAndroid) {
-      (_bridge as GoBridgeAndroid).startForegroundService();
-    }
+    // Removed auto-start for debugging
   }
 
   @override
@@ -151,6 +149,14 @@ class _MyHomePageState extends State<MyHomePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
+                ElevatedButton(
+                  onPressed: () {
+                    if (_bridge is GoBridgeAndroid) {
+                      (_bridge as GoBridgeAndroid).startForegroundService();
+                    }
+                  },
+                  child: const Text('Start Service'),
+                ),
                 ElevatedButton(
                   onPressed: () {
                     if (_bridge is GoBridgeAndroid) {
