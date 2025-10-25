@@ -6,11 +6,7 @@ import (
 	"time"
 )
 
-// SendHeartbeat sends a heartbeat to the discovery server.
-func SendHeartbeat() {
-	// Implement heartbeat logic here. For now, just log.
-	log.Println("Sent heartbeat to discovery server.")
-}
+
 
 func IsURLReachable(targetURL string) bool {
 	client := http.Client{

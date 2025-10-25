@@ -2,10 +2,11 @@ package mobile
 
 import (
 	"encoding/json"
-	"github.com/soda92/vpn-share-tool/core"
+	"fmt"
 	"log"
 	"sync"
-	"time"
+
+	"github.com/soda92/vpn-share-tool/core"
 )
 
 // EventCallback is the type for the Dart callback function.
@@ -76,12 +77,19 @@ func init() {
 
     // Start a goroutine for heartbeats and API server
     go func() {
-        core.StartApiServer()
-        ticker := time.NewTicker(30 * time.Second)
-        defer ticker.Stop()
-
-        for range ticker.C {
-            core.SendHeartbeat()
+        if err := core.StartApiServer(); err != nil {
+            log.Printf("Failed to start API server: %v", err)
+            eventCallbackMu.Lock()
+            if eventCallback != nil {
+                event := struct {
+                    Type    string `json:"type"`
+                    Message string `json:"message"`
+                }{"error", fmt.Sprintf("Failed to start API server: %v", err)}
+                data, _ := json.Marshal(event)
+                eventCallback.OnEvent(string(data))
+            }
+            eventCallbackMu.Unlock()
+            return
         }
     }()
 }
