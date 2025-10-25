@@ -5,7 +5,7 @@ import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-// Conditional imports for platform-specific bridge
+import 'package:flutter_gui/go_bridge_interface.dart';
 import 'package:flutter_gui/go_bridge.dart' if (dart.library.ffi) 'package:flutter_gui/go_bridge_ffi.dart';
 
 void main() {
@@ -40,17 +40,14 @@ class _MyHomePageState extends State<MyHomePage> {
   final List<Map<String, dynamic>> _proxies = [];
   final _urlController = TextEditingController();
   Isolate? _pollingIsolate;
+  late final GoBridge _bridge;
 
   @override
   void initState() {
     super.initState();
+    _bridge = getGoBridge(); // Get the platform-specific implementation
     _startPolling();
-    // Use the correct start method based on the platform
-    if (Platform.isLinux) {
-      GoBridgeFFI.start();
-    } else {
-      GoBridge.start();
-    }
+    _bridge.start();
   }
 
   @override
@@ -61,18 +58,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _startPolling() async {
     final receivePort = ReceivePort();
-    
-    // Use the correct polling method based on the platform
-    if (Platform.isLinux) {
-      _pollingIsolate = await Isolate.spawn(GoBridgeFFI.pollEvents, receivePort.sendPort);
-    } else {
-       final sendPort = receivePort.sendPort;
-      _pollingIsolate = await Isolate.spawn((port) async {
-        // On Android, we need to initialize the plugin registrant
-        DartPluginRegistrant.ensureInitialized();
-        GoBridge.pollEvents(port);
-      }, sendPort);
-    }
+    _pollingIsolate = await Isolate.spawn(_bridge.pollEvents, receivePort.sendPort);
 
     receivePort.listen((data) {
       final event = data as Map<String, dynamic>;
@@ -93,12 +79,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _shareUrl() {
     if (_urlController.text.isNotEmpty) {
-      // Use the correct share method based on the platform
-      if (Platform.isLinux) {
-        GoBridgeFFI.shareUrl(_urlController.text);
-      } else {
-        GoBridge.shareUrl(_urlController.text);
-      }
+      _bridge.shareUrl(_urlController.text);
       _urlController.clear();
       FocusScope.of(context).unfocus();
     }
@@ -106,9 +87,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final platform = Platform.isLinux ? "Linux (FFI)" : "Android";
     return Scaffold(
       appBar: AppBar(
-        title: const Text('VPN Share Tool (Linux FFI)'),
+        title: Text('VPN Share Tool ($platform)'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
