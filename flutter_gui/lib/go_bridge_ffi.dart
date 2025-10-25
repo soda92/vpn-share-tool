@@ -3,7 +3,6 @@ import 'dart:isolate';
 import 'dart:convert';
 import 'dart:async';
 import 'package:ffi/ffi.dart';
-import 'package:flutter/services.dart';
 import 'package:vpn_share_tool/go_bridge_interface.dart';
 
 // FFI function signatures
@@ -95,6 +94,11 @@ class GoBridgeLinux implements GoBridge {
   @override
   Future<bool> hasNotificationPermission() async {
     return Future.value(true);
+  }
+
+  @override
+  Future<bool> isForegroundServiceRunning() async {
+    return Future.value(false);
   }
 
   Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;

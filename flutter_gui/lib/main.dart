@@ -42,6 +42,9 @@ class _MyHomePageState extends State<MyHomePage> {
   final _urlController = TextEditingController();
   late final GoBridge _bridge;
 
+  bool _isForegroundServiceActive = false;
+  bool _hasNotificationPermission = false;
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +57,28 @@ class _MyHomePageState extends State<MyHomePage> {
     }
     _startListeningEvents(); // Listen to stream for both platforms
     _bridge.startGoBackend(); // Start the core Go backend immediately
+    _initializeServiceState();
+  }
+
+  Future<void> _initializeServiceState() async {
+    if (Platform.isAndroid) {
+      await _checkServiceStatus();
+    }
+  }
+
+  Future<void> _checkServiceStatus() async {
+    if (Platform.isAndroid) {
+      final androidBridge = _bridge as GoBridgeAndroid;
+      _hasNotificationPermission = await androidBridge.hasNotificationPermission();
+      _isForegroundServiceActive = await androidBridge.isForegroundServiceRunning();
+
+      if (_hasNotificationPermission && !_isForegroundServiceActive) {
+        // Start silently if permission is already granted and not running
+        androidBridge.startForegroundService();
+        _isForegroundServiceActive = true; // Optimistically assume it starts successfully
+      }
+      setState(() {}); // Update UI based on initial state
+    }
   }
 
   @override
@@ -147,23 +172,23 @@ class _MyHomePageState extends State<MyHomePage> {
               ],
             ),
             const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton(
-                  onPressed: () {
-                    if (Platform.isAndroid) {
+            if (Platform.isAndroid && !_isForegroundServiceActive) // Only show on Android if not active
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    onPressed: () async {
+                      // This will trigger permission request if not granted and then start service
                       (_bridge as GoBridgeAndroid).startForegroundService();
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Background service not available on this platform.')),
-                      );
-                    }
-                  },
-                  child: const Text('Enable Background Service'),
-                ),
-              ],
-            ),
+                      // Optimistically update UI, actual state will be reflected by events later
+                      setState(() {
+                        _isForegroundServiceActive = true;
+                      });
+                    },
+                    child: const Text('Enable Background Service'),
+                  ),
+                ],
+              ),
             const SizedBox(height: 20),
             Text('Shared URLs', style: Theme.of(context).textTheme.titleLarge),
             const Divider(),

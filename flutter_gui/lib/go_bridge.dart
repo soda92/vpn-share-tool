@@ -69,5 +69,10 @@ class GoBridgeAndroid implements GoBridge {
     return await _methodChannel.invokeMethod('hasNotificationPermission') ?? false;
   }
 
+  @override
+  Future<bool> isForegroundServiceRunning() async {
+    return await _methodChannel.invokeMethod('isForegroundServiceRunning') ?? false;
+  }
+
   Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;
 }

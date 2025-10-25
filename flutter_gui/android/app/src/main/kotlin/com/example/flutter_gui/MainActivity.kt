@@ -12,6 +12,8 @@ import androidx.core.content.ContextCompat // Import ContextCompat
 import android.os.Build
 import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
+import android.app.ActivityManager
+import android.content.Context
 
 class MainActivity: FlutterActivity() {
     private val METHOD_CHANNEL = "vpn_share_tool/go_bridge"
@@ -115,6 +117,17 @@ class MainActivity: FlutterActivity() {
                     } else {
                         result.success(true) // Permission not needed below Android 13
                     }
+                }
+                "isForegroundServiceRunning" -> {
+                    val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                    @Suppress("DEPRECATION")
+                    for (service in manager.getRunningServices(Integer.MAX_VALUE)) {
+                        if (VpnShareService::class.java.name == service.service.className) {
+                            result.success(true)
+                            return@setMethodCallHandler
+                        }
+                    }
+                    result.success(false)
                 }
                 else -> {
                     result.notImplemented()
