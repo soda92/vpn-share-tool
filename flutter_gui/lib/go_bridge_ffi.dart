@@ -66,5 +66,15 @@ class GoBridgeLinux implements GoBridge {
     // No-op, events are pushed via stream
   }
 
+  @override
+  void startForegroundService() {
+    // No-op for Linux, as foreground service is an Android-specific concept.
+  }
+
+  @override
+  void stopForegroundService() {
+    // No-op for Linux, as foreground service is an Android-specific concept.
+  }
+
   Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;
 }

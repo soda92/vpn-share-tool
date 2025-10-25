@@ -11,6 +11,7 @@ import android.os.Looper
 import android.util.Log
 import mobile.Mobile
 import mobile.EventCallback
+import com.example.flutter_gui.MainActivity
 
 class VpnShareService : Service() {
 
