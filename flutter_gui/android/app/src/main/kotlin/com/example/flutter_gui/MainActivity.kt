@@ -48,13 +48,17 @@ class MainActivity: FlutterActivity() {
                     android.util.Log.d("MainActivity", "Received startForegroundService call from Dart.")
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // Android 13+
                         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            android.util.Log.d("MainActivity", "POST_NOTIFICATIONS permission not granted. Requesting...")
                             ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST_CODE)
-                            // We will try to start the service anyway, but it might fail without permission
+                            // Do NOT start service here. It will be started in onRequestPermissionsResult if granted.
+                        } else {
+                            android.util.Log.d("MainActivity", "POST_NOTIFICATIONS permission already granted. Starting service.")
+                            startVpnShareService()
                         }
+                    } else { // Below Android 13, permission is not needed at runtime
+                        android.util.Log.d("MainActivity", "Android version < 13. Starting service without POST_NOTIFICATIONS check.")
+                        startVpnShareService()
                     }
-                    val serviceIntent = Intent(this, VpnShareService::class.java)
-                    ContextCompat.startForegroundService(this, serviceIntent) // Use ContextCompat
-                    android.util.Log.d("MainActivity", "Sent intent to start VpnShareService using ContextCompat.")
                     result.success(null)
                 }
                 "stopForegroundService" -> {
@@ -84,13 +88,21 @@ class MainActivity: FlutterActivity() {
         }
     }
 
+    private fun startVpnShareService() {
+        val serviceIntent = Intent(this, VpnShareService::class.java)
+        ContextCompat.startForegroundService(this, serviceIntent) // Use ContextCompat
+        android.util.Log.d("MainActivity", "Sent intent to start VpnShareService using ContextCompat.")
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                android.util.Log.d("MainActivity", "POST_NOTIFICATIONS permission granted.")
+                android.util.Log.d("MainActivity", "POST_NOTIFICATIONS permission granted. Starting service.")
+                startVpnShareService()
             } else {
-                android.util.Log.d("MainActivity", "POST_NOTIFICATIONS permission denied.")
+                android.util.Log.d("MainActivity", "POST_NOTIFICATIONS permission denied. Service not started.")
+                // Optionally, inform Flutter that permission was denied
             }
         }
     }
