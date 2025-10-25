@@ -35,6 +35,3 @@ class GoBridgeAndroid implements GoBridge {
     }
   }
 }
-
-// Factory to get the correct implementation
-GoBridge getGoBridge() => GoBridgeAndroid();

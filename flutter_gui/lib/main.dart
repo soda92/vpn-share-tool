@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:flutter_gui/go_bridge_interface.dart';
-import 'package:flutter_gui/go_bridge.dart' if (dart.library.ffi) 'package:flutter_gui/go_bridge_ffi.dart';
+import 'package:flutter_gui/go_bridge.dart'; // Import Android bridge
+import 'package:flutter_gui/go_bridge_ffi.dart'; // Import Linux FFI bridge
 
 void main() {
   runApp(const MyApp());
@@ -45,7 +46,13 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    _bridge = getGoBridge(); // Get the platform-specific implementation
+    if (Platform.isLinux) {
+      print("Instantiating Linux FFI GoBridge");
+      _bridge = GoBridgeLinux();
+    } else {
+      print("Instantiating Android GoBridge");
+      _bridge = GoBridgeAndroid();
+    }
     _startPolling();
     _bridge.start();
   }

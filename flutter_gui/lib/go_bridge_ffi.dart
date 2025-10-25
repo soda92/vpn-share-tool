@@ -42,6 +42,3 @@ class GoBridgeLinux implements GoBridge {
     }
   }
 }
-
-// Factory to get the correct implementation
-GoBridge getGoBridge() => GoBridgeLinux();
