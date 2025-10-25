@@ -17,3 +17,5 @@ fyne_metadata_init.go
 fyne_cross
 
 discovery-server/discovery-server
+
+flutter_gui/linux/libcore*
