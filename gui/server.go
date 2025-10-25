@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"time"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -55,7 +56,7 @@ func servicesHandler(w http.ResponseWriter, r *http.Request) {
 func registerWithDiscoveryServer() {
 	// This loop ensures we keep trying to register if the connection fails
 	for {
-		serverAddr := net.JoinHostPort("192.168.1.81", discoverySrvPort)
+		serverAddr := net.JoinHostPort(SERVER_IP, discoverySrvPort)
 		conn, err := net.Dial("tcp", serverAddr)
 		if err != nil {
 			log.Printf("Failed to connect to discovery server at %s: %v. Retrying in 1 minute.", serverAddr, err)
@@ -209,7 +210,6 @@ func startApiServer() {
 	}
 }
 
-
 func addAndStartProxy(rawURL string, statusLabel *widget.Label) (*sharedProxy, error) {
 	target, err := url.Parse(rawURL)
 	if err != nil {
@@ -246,13 +246,17 @@ func addAndStartProxy(rawURL string, statusLabel *widget.Label) (*sharedProxy, e
 
 	go func() {
 		if statusLabel != nil {
-			statusLabel.SetText(l("serverRunning"))
+			fyne.Do(func() {
+				statusLabel.SetText(l("serverRunning"))
+			})
 		}
 		log.Printf("Starting proxy for %s on port %d", rawURL, remotePort)
 		if err := server.ListenAndServe(); err != http.ErrServerClosed {
 			log.Printf("Proxy for %s on port %d stopped: %v", rawURL, remotePort, err)
 			if statusLabel != nil {
-				statusLabel.SetText(l("serverStopped"))
+				fyne.Do(func() {
+					statusLabel.SetText(l("serverStopped"))
+				})
 			}
 		}
 		log.Printf("Proxy for %s on port %d stopped gracefully.", rawURL, remotePort)

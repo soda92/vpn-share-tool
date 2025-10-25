@@ -135,32 +135,34 @@ func Run() {
 
 	sharedListData := binding.NewStringList()
 
-	// Function to add a proxy to the UI list and save config.
-	// This is thread-safe due to Fyne's data binding capabilities.
 	addProxyToUI := func(newProxy *sharedProxy) {
-		for _, ip := range lanIPs {
-			sharedURL := fmt.Sprintf("http://%s:%d%s", ip, newProxy.RemotePort, newProxy.Path)
-			displayString := l("sharedUrlFormat", map[string]interface{}{
-				"originalUrl": newProxy.OriginalURL,
-				"sharedUrl":   sharedURL,
-			})
-			sharedListData.Append(displayString)
-		}
+		fyne.Do(func() {
+			for _, ip := range lanIPs {
+				sharedURL := fmt.Sprintf("http://%s:%d%s", ip, newProxy.RemotePort, newProxy.Path)
+				displayString := l("sharedUrlFormat", map[string]interface{}{
+					"originalUrl": newProxy.OriginalURL,
+					"sharedUrl":   sharedURL,
+				})
+				sharedListData.Append(displayString)
+			}
+		})
 		// NOTE: saveConfig() is removed from here to prevent saving during startup loops.
 		// The caller is now responsible for saving the config.
 	}
 
 	removeProxyFromUI := func(p *sharedProxy) {
-		currentList, _ := sharedListData.Get()
-		newList := []string{}
-		for _, item := range currentList {
-			// The display string is "original -> shared".
-			// If the original URL is in the string, we can assume it's the one to remove.
-			if !strings.Contains(item, p.OriginalURL) {
-				newList = append(newList, item)
+		fyne.Do(func() {
+			currentList, _ := sharedListData.Get()
+			newList := []string{}
+			for _, item := range currentList {
+				// The display string is "original -> shared".
+				// If the original URL is in the string, we can assume it's the one to remove.
+				if !strings.Contains(item, p.OriginalURL) {
+					newList = append(newList, item)
+				}
 			}
-		}
-		sharedListData.Set(newList)
+			sharedListData.Set(newList)
+		})
 	}
 
 	// Goroutine to handle UI updates from any part of the application
@@ -175,8 +177,7 @@ func Run() {
 		}
 	}()
 
-	var sharedList *widget.List
-	sharedList = widget.NewListWithData(
+	sharedList := widget.NewListWithData(
 		sharedListData,
 		func() fyne.CanvasObject {
 			return widget.NewLabel("template")

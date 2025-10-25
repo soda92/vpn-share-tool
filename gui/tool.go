@@ -19,6 +19,7 @@ func getSuitableInterfaces() []net.Interface {
 	}
 
 	for _, i := range interfaces {
+		log.Printf("Interface: %s, Flags: %s", i.Name, i.Flags.String())
 		// Skip docker, down, loopback, and non-multicast interfaces
 		if strings.Contains(i.Name, "docker") || (i.Flags&net.FlagUp == 0) || (i.Flags&net.FlagLoopback != 0) || (i.Flags&net.FlagMulticast == 0) {
 			continue
