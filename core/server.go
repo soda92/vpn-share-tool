@@ -83,6 +83,7 @@ func registerWithDiscoveryServer() {
 			if len(parts) == 2 && parts[0] == "OK" {
 				MyIP = parts[1]
 				log.Printf("Successfully registered with discovery server. My IP is %s", MyIP)
+				IPReadyChan <- MyIP // Signal that the IP is ready
 			} else {
 				log.Printf("Failed to register with discovery server, response: %s.", response)
 				return // Exit closure, trigger reconnect

@@ -17,21 +17,21 @@ const (
 	startPort = 10081
 )
 
-// SharedProxy holds information about a shared URL.
 type SharedProxy struct {
-	OriginalURL string
-	RemotePort  int
-	Path        string
-	Handler     *httputil.ReverseProxy
-	Server      *http.Server
+	OriginalURL string `json:"original_url"`
+	RemotePort  int    `json:"remote_port"`
+	Path        string `json:"path"`
+	Handler     *httputil.ReverseProxy `json:"-"`
+	Server      *http.Server `json:"-"`
 }
 
 var (
-	Proxies         []*SharedProxy
-	ProxiesLock     sync.RWMutex
-	NextRemotePort  = startPort
-	ProxyAddedChan  = make(chan *SharedProxy)
+	Proxies          []*SharedProxy
+	ProxiesLock      sync.RWMutex
+	NextRemotePort   = startPort
+	ProxyAddedChan   = make(chan *SharedProxy)
 	ProxyRemovedChan = make(chan *SharedProxy)
+	IPReadyChan      = make(chan string, 1)
 )
 
 // isPortAvailable checks if a TCP port is available to be listened on.
@@ -206,4 +206,10 @@ func Shutdown() {
 		}
 	}
 	wg.Wait()
+}
+
+func GetProxies() []*SharedProxy {
+	ProxiesLock.RLock()
+	defer ProxiesLock.RUnlock()
+	return Proxies
 }

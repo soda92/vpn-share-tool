@@ -42,10 +42,15 @@ func Run() {
 	// Start the local API server and register with the discovery server
 	go core.StartApiServer()
 
-
-
 	// Server section
 	serverStatus := widget.NewLabel(l("startingServer"))
+
+	go func() {
+		ip := <-core.IPReadyChan
+		fyne.Do(func() {
+			serverStatus.SetText(fmt.Sprintf("Server running on: %s", ip))
+		})
+	}()
 
 	// Client/Proxy section
 	urlEntry := widget.NewEntry()
