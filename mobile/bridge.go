@@ -10,7 +10,7 @@ import (
 
 // EventCallback is the type for the Dart callback function.
 type EventCallback interface {
-	onEvent(eventJSON string)
+	OnEvent(eventJSON string)
 }
 
 var (
@@ -38,7 +38,7 @@ func init() {
 					Proxy interface{} `json:"proxy"`
 				}{"added", p}
 				data, _ := json.Marshal(event)
-				eventCallback.onEvent(string(data))
+				eventCallback.OnEvent(string(data))
 			}
 			eventCallbackMu.Unlock()
 		}
@@ -53,7 +53,7 @@ func init() {
 					Proxy interface{} `json:"proxy"`
 				}{"removed", p}
 				data, _ := json.Marshal(event)
-				eventCallback.onEvent(string(data))
+				eventCallback.OnEvent(string(data))
 			}
 			eventCallbackMu.Unlock()
 		}
@@ -68,7 +68,7 @@ func init() {
 					IP   string `json:"ip"`
 				}{"ip_ready", ip}
 				data, _ := json.Marshal(event)
-				eventCallback.onEvent(string(data))
+				eventCallback.OnEvent(string(data))
 			}
 			eventCallbackMu.Unlock()
 		}

@@ -38,7 +38,7 @@ class MainActivity: FlutterActivity() {
                             if (eventJSON != null) {
                                 // Send the event back to Dart
                                 flutterEngine.dartExecutor.binaryMessenger.send(
-                                    CHANNEL, eventJSON.toByteArray(Charsets.UTF_8)
+                                    CHANNEL, java.nio.ByteBuffer.wrap(eventJSON.toByteArray(Charsets.UTF_8))
                                 )
                             }
                         }
