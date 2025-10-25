@@ -5,4 +5,5 @@ abstract class GoBridge {
   void startForegroundService();
   void stopForegroundService();
   Future<String?> getIP();
+  void startGoBackend();
 }

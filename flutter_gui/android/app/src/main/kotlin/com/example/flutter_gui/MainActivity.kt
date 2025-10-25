@@ -44,6 +44,32 @@ class MainActivity: FlutterActivity() {
         methodChannel.setMethodCallHandler {
             call, result ->
             when (call.method) {
+                "startGoBackend" -> {
+                    android.util.Log.d("MainActivity", "Received startGoBackend call from Dart.")
+                    // Set event callback for Go Mobile
+                    val dartCallback = object : mobile.EventCallback {
+                        override fun onEvent(eventJSON: String?) {
+                            if (eventJSON != null) {
+                                android.util.Log.d("MainActivity", "Received event from Go: $eventJSON")
+                                if (eventSink == null) {
+                                    android.util.Log.e("MainActivity", "eventSink is null when trying to send event!")
+                                } else {
+                                    android.util.Log.d("MainActivity", "Sending event to Dart via EventChannel.")
+                                    // Ensure event is sent on the main thread
+                                    Handler(Looper.getMainLooper()).post {
+                                        eventSink?.success(eventJSON)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    mobile.Mobile.setEventCallback(dartCallback)
+
+                    // Initialize Go backend here
+                    android.util.Log.d("MainActivity", "Starting Go Mobile backend...")
+                    mobile.Mobile.start()
+                    result.success(null)
+                }
                 "startForegroundService" -> {
                     android.util.Log.d("MainActivity", "Received startForegroundService call from Dart.")
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // Android 13+
@@ -52,11 +78,11 @@ class MainActivity: FlutterActivity() {
                             ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST_CODE)
                             // Do NOT start service here. It will be started in onRequestPermissionsResult if granted.
                         } else {
-                            android.util.Log.d("MainActivity", "POST_NOTIFICATIONS permission already granted. Starting service.")
+                            android.util.Log.d("MainActivity", "POST_NOTIFICATIONS permission already granted. Starting foreground service.")
                             startVpnShareService()
                         }
                     } else { // Below Android 13, permission is not needed at runtime
-                        android.util.Log.d("MainActivity", "Android version < 13. Starting service without POST_NOTIFICATIONS check.")
+                        android.util.Log.d("MainActivity", "Android version < 13. Starting foreground service without POST_NOTIFICATIONS check.")
                         startVpnShareService()
                     }
                     result.success(null)

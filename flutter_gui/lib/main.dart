@@ -53,7 +53,7 @@ class _MyHomePageState extends State<MyHomePage> {
       _bridge = GoBridgeAndroid();
     }
     _startListeningEvents(); // Listen to stream for both platforms
-    // Removed auto-start for debugging
+    _bridge.startGoBackend(); // Start the core Go backend immediately
   }
 
   @override
@@ -93,7 +93,8 @@ class _MyHomePageState extends State<MyHomePage> {
               _proxies.add(event['proxy']);
             } else if (event['type'] == 'removed') {
               _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
-            } else if (event['type'] == 'error') {
+            }
+            else if (event['type'] == 'error') {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Error from Go: ${event['message']}')),
               );
@@ -151,19 +152,23 @@ class _MyHomePageState extends State<MyHomePage> {
               children: [
                 ElevatedButton(
                   onPressed: () {
-                    if (_bridge is GoBridgeAndroid) {
+                    if (Platform.isAndroid) {
                       (_bridge as GoBridgeAndroid).startForegroundService();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Background service not available on this platform.')),
+                      );
                     }
                   },
-                  child: const Text('Start Service'),
+                  child: const Text('Start Background Service'),
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    if (_bridge is GoBridgeAndroid) {
+                    if (Platform.isAndroid) {
                       (_bridge as GoBridgeAndroid).stopForegroundService();
                     }
                   },
-                  child: const Text('Stop Service'),
+                  child: const Text('Stop Background Service'),
                 ),
               ],
             ),

@@ -59,5 +59,10 @@ class GoBridgeAndroid implements GoBridge {
     return await _methodChannel.invokeMethod('getIP');
   }
 
+  @override
+  void startGoBackend() {
+    _methodChannel.invokeMethod('startGoBackend');
+  }
+
   Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;
 }

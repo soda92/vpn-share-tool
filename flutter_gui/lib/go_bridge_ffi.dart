@@ -87,5 +87,10 @@ class GoBridgeLinux implements GoBridge {
     // No-op for Linux, as foreground service is an Android-specific concept.
   }
 
+  @override
+  void startGoBackend() {
+    start();
+  }
+
   Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;
 }

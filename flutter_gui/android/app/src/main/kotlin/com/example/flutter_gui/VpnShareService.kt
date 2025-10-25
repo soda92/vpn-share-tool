@@ -31,28 +31,9 @@ class VpnShareService : Service() {
         Log.d("VpnShareService", "Calling startForeground with NOTIFICATION_ID: $NOTIFICATION_ID")
         startForeground(NOTIFICATION_ID, notification)
 
-        // Set event callback for Go Mobile
-        val dartCallback = object : mobile.EventCallback {
-            override fun onEvent(eventJSON: String?) {
-                if (eventJSON != null) {
-                    Log.d("VpnShareService", "Received event from Go: $eventJSON")
-                    if (MainActivity.eventSink == null) {
-                        Log.e("VpnShareService", "MainActivity.eventSink is null when trying to send event!")
-                    } else {
-                        Log.d("VpnShareService", "Sending event to Dart via EventChannel.")
-                        // Ensure event is sent on the main thread
-                        Handler(Looper.getMainLooper()).post {
-                            MainActivity.eventSink?.success(eventJSON)
-                        }
-                    }
-                }
-            }
-        }
-        Mobile.setEventCallback(dartCallback)
+        // The Go backend is now started independently.
+        // This service only manages the foreground state and notification.
 
-        // Initialize Go backend here
-        Log.d("VpnShareService", "Starting Go Mobile backend...")
-        Mobile.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
