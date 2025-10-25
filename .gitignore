@@ -1,6 +1,8 @@
 /vpn-share-tool
 *.exe
 
+*.apk
+
 /fyne-cross
 libproxy/libproxy
 web-cache-proxy
