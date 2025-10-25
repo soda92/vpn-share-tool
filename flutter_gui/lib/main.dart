@@ -41,6 +41,7 @@ class _MyHomePageState extends State<MyHomePage> {
   final List<Map<String, dynamic>> _proxies = [];
   final _urlController = TextEditingController();
   late final GoBridge _bridge;
+  int _apiPort = 0; // Store the found API port
 
   bool _isForegroundServiceActive = false;
   bool _hasNotificationPermission = false;
@@ -48,6 +49,11 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
+    _initializeGoBackend();
+    _initializeServiceState();
+  }
+
+  Future<void> _initializeGoBackend() async {
     if (Platform.isLinux) {
       print("Instantiating Linux FFI GoBridge");
       _bridge = GoBridgeLinux();
@@ -55,9 +61,25 @@ class _MyHomePageState extends State<MyHomePage> {
       print("Instantiating Android GoBridge");
       _bridge = GoBridgeAndroid();
     }
+
+    _apiPort = await _findAvailablePort(20000); // Start searching from 20000
+    print("Found available port: $_apiPort");
+
     _startListeningEvents(); // Listen to stream for both platforms
-    _bridge.startGoBackend(); // Start the core Go backend immediately
-    _initializeServiceState();
+    _bridge.startGoBackendWithPort(_apiPort); // Start the core Go backend with the found port
+  }
+
+  Future<int> _findAvailablePort(int startPort) async {
+    for (int port = startPort; port < startPort + 100; port++) {
+      try {
+        final socket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
+        await socket.close();
+        return port;
+      } catch (e) {
+        // Port is not available, try next one
+      }
+    }
+    throw Exception("No available port found in range $startPort-${startPort + 99}");
   }
 
   Future<void> _initializeServiceState() async {

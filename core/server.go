@@ -21,18 +21,7 @@ const (
 	SERVER_IP        = "192.168.0.81"
 )
 
-// findAvailablePort checks for an available TCP port starting from a given port.
-func findAvailablePort(startPort int) (int, error) {
-	for port := startPort; port < startPort + 100; port++ { // Try up to 100 ports
-		address := fmt.Sprintf(":%d", port)
-		ln, err := net.Listen("tcp", address)
-		if err == nil {
-			_ = ln.Close()
-			return port, nil
-		}
-	}
-	return 0, fmt.Errorf("no available port found in range %d-%d", startPort, startPort+99)
-}
+
 
 // servicesHandler provides the list of currently shared proxies as a JSON response.
 func servicesHandler(w http.ResponseWriter, r *http.Request) {
@@ -206,12 +195,7 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // StartApiServer starts the HTTP server to provide the API endpoints.
-func StartApiServer() error {
-	// Find an available port for the API server
-	apiPort, err := findAvailablePort(10080) // Start searching from 10080
-	if err != nil {
-		return fmt.Errorf("failed to find available API port: %w", err)
-	}
+func StartApiServer(apiPort int) error {
 
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()

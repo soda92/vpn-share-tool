@@ -1,7 +1,7 @@
 package main
 
-import "C"
 import (
+	"C"
 	"encoding/json"
 	"github.com/soda92/vpn-share-tool/core"
 	"log"
@@ -72,22 +72,25 @@ func init() {
 		}
 	}()
 
-    // Start a goroutine for heartbeats and API server
-    go func() {
-        core.StartApiServer()
-        ticker := time.NewTicker(30 * time.Second)
-        defer ticker.Stop()
 
-        for range ticker.C {
-            core.SendHeartbeat()
-        }
-    }()
 }
 
 //export Start
-func Start() {
+func Start(apiPort int) {
 	// The API server is now started in init() and heartbeats are sent automatically
 	// This function is still needed for gomobile bind to generate a Start() function
+	go func() {
+		if err := core.StartApiServer(apiPort); err != nil {
+			log.Printf("Failed to start API server: %v", err)
+			return
+		}
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			core.SendHeartbeat()
+		}
+	}()
 }
 
 //export ShareURL

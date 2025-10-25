@@ -74,30 +74,31 @@ func init() {
 			eventCallbackMu.Unlock()
 		}
 	}()
+}
 
-    // Start a goroutine for heartbeats and API server
-    go func() {
-        if err := core.StartApiServer(); err != nil {
-            log.Printf("Failed to start API server: %v", err)
-            eventCallbackMu.Lock()
-            if eventCallback != nil {
-                event := struct {
-                    Type    string `json:"type"`
-                    Message string `json:"message"`
-                }{"error", fmt.Sprintf("Failed to start API server: %v", err)}
-                data, _ := json.Marshal(event)
-                eventCallback.OnEvent(string(data))
-            }
-            eventCallbackMu.Unlock()
-            return
-        }
-    }()
+// StartApiServerWithPort starts the API server on the given port.
+func StartApiServerWithPort(apiPort int) {
+	go func() {
+		if err := core.StartApiServer(apiPort); err != nil {
+			log.Printf("Failed to start API server: %v", err)
+			eventCallbackMu.Lock()
+			if eventCallback != nil {
+				event := struct {
+					Type    string `json:"type"`
+					Message string `json:"message"`
+				}{"error", fmt.Sprintf("Failed to start API server: %v", err)}
+				data, _ := json.Marshal(event)
+				eventCallback.OnEvent(string(data))
+			}
+			eventCallbackMu.Unlock()
+			return
+		}
+	}()
 }
 
 // Start initializes the core services.
-func Start() {
-	// The API server is now started in init() and heartbeats are sent automatically
-	// This function is still needed for gomobile bind to generate a Start() function
+func Start(apiPort int) {
+	StartApiServerWithPort(apiPort)
 }
 
 // ShareURL shares a URL.

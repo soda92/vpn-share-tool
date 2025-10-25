@@ -20,15 +20,9 @@ import (
 //go:embed i18n/*.json
 var i18nFS embed.FS
 
-
-
 const (
 	startPort = 10081
 )
-
-
-
-
 
 func Run() {
 	startMinimized := flag.Bool("minimized", false, "start minimized with windows start")
@@ -39,8 +33,18 @@ func Run() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
 
+	// Find an available port for the API server
+	apiPort, err := findAvailablePort(startPort)
+	if err != nil {
+		log.Fatalf("Failed to find available API port: %v", err)
+	}
+
 	// Start the local API server and register with the discovery server
-	go core.StartApiServer()
+	go func() {
+		if err := core.StartApiServer(apiPort); err != nil {
+			log.Fatalf("API server stopped with error: %v", err)
+		}
+	}()
 
 	// Server section
 	serverStatus := widget.NewLabel(l("startingServer"))
