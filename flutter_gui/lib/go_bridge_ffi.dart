@@ -92,5 +92,10 @@ class GoBridgeLinux implements GoBridge {
     start();
   }
 
+  @override
+  Future<bool> hasNotificationPermission() async {
+    return Future.value(true);
+  }
+
   Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;
 }

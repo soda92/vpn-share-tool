@@ -89,7 +89,9 @@ class MainActivity: FlutterActivity() {
                 }
                 "stopForegroundService" -> {
                     android.util.Log.d("MainActivity", "Received stopForegroundService call from Dart.")
-                    val serviceIntent = Intent(this, VpnShareService::class.java)
+                    val serviceIntent = Intent(this, VpnShareService::class.java).apply {
+                        action = VpnShareService.ACTION_EXIT_APP
+                    }
                     stopService(serviceIntent)
                     android.util.Log.d("MainActivity", "Sent intent to stop VpnShareService.")
                     result.success(null)
@@ -106,6 +108,13 @@ class MainActivity: FlutterActivity() {
                 }
                 "getIP" -> {
                     result.success(mobile.Mobile.getIP())
+                }
+                "hasNotificationPermission" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        result.success(ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+                    } else {
+                        result.success(true) // Permission not needed below Android 13
+                    }
                 }
                 else -> {
                     result.notImplemented()

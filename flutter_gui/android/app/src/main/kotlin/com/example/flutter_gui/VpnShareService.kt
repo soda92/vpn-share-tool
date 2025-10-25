@@ -16,11 +16,15 @@ import mobile.EventCallback
 import com.example.flutter_gui.MainActivity
 import com.example.flutter_gui.R // Import your app's R class
 
+import android.os.Process
+
 class VpnShareService : Service() {
 
     private val NOTIFICATION_CHANNEL_ID = "VpnShareServiceChannel"
     private val NOTIFICATION_ID = 101
-    private val ACTION_STOP_SERVICE = "STOP_SERVICE"
+    companion object {
+        const val ACTION_EXIT_APP = "EXIT_APP"
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -38,9 +42,10 @@ class VpnShareService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("VpnShareService", "Service onStartCommand")
-        if (intent?.action == ACTION_STOP_SERVICE) {
-            Log.d("VpnShareService", "Received stop service intent. Stopping self.")
+        if (intent?.action == ACTION_EXIT_APP) {
+            Log.d("VpnShareService", "Received exit app intent. Stopping self and exiting app.")
             stopSelf()
+            Process.killProcess(Process.myPid()) // Exit the entire app process
             return START_NOT_STICKY
         }
         // If the system kills the service, it will restart it.
@@ -76,13 +81,13 @@ class VpnShareService : Service() {
     }
 
     private fun createNotification(): Notification {
-        val stopSelfIntent = Intent(this, VpnShareService::class.java).apply {
-            action = ACTION_STOP_SERVICE
+        val exitAppIntent = Intent(this, VpnShareService::class.java).apply {
+            action = ACTION_EXIT_APP
         }
-        val pendingStopSelfIntent: PendingIntent = PendingIntent.getService(
+        val pendingExitAppIntent: PendingIntent = PendingIntent.getService(
             this,
             0,
-            stopSelfIntent,
+            exitAppIntent,
             PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -90,7 +95,7 @@ class VpnShareService : Service() {
             .setContentTitle("VPN Share Tool")
             .setContentText("Sharing VPN connection in background...")
             .setSmallIcon(R.mipmap.ic_launcher) // Use app's launcher icon
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Service", pendingStopSelfIntent) // Add a stop button
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Exit", pendingExitAppIntent) // Add an exit button
             .build()
     }
 }

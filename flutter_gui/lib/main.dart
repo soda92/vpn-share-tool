@@ -160,15 +160,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       );
                     }
                   },
-                  child: const Text('Start Background Service'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (Platform.isAndroid) {
-                      (_bridge as GoBridgeAndroid).stopForegroundService();
-                    }
-                  },
-                  child: const Text('Stop Background Service'),
+                  child: const Text('Enable Background Service'),
                 ),
               ],
             ),
