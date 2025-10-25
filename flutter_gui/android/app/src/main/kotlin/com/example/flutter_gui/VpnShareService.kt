@@ -3,6 +3,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
+import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -12,11 +13,13 @@ import android.util.Log
 import mobile.Mobile
 import mobile.EventCallback
 import com.example.flutter_gui.MainActivity
+import com.example.flutter_gui.R // Import your app's R class
 
 class VpnShareService : Service() {
 
     private val NOTIFICATION_CHANNEL_ID = "VpnShareServiceChannel"
     private val NOTIFICATION_ID = 101
+    private val ACTION_STOP_SERVICE = "STOP_SERVICE"
 
     override fun onCreate() {
         super.onCreate()
@@ -51,6 +54,11 @@ class VpnShareService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("VpnShareService", "Service onStartCommand")
+        if (intent?.action == ACTION_STOP_SERVICE) {
+            Log.d("VpnShareService", "Received stop service intent. Stopping self.")
+            stopSelf()
+            return START_NOT_STICKY
+        }
         // If the system kills the service, it will restart it.
         return START_STICKY
     }
@@ -72,7 +80,7 @@ class VpnShareService : Service() {
             val serviceChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 "VPN Share Service Channel",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
@@ -80,10 +88,21 @@ class VpnShareService : Service() {
     }
 
     private fun createNotification(): Notification {
+        val stopSelfIntent = Intent(this, VpnShareService::class.java).apply {
+            action = ACTION_STOP_SERVICE
+        }
+        val pendingStopSelfIntent: PendingIntent = PendingIntent.getService(
+            this,
+            0,
+            stopSelfIntent,
+            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         return Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("VPN Share Tool")
             .setContentText("Sharing VPN connection in background...")
-            .setSmallIcon(android.R.drawable.ic_dialog_info) // Replace with your app icon
+            .setSmallIcon(R.mipmap.ic_launcher) // Use app's launcher icon
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Service", pendingStopSelfIntent) // Add a stop button
             .build()
     }
 }
