@@ -1,4 +1,4 @@
-package gui
+package core
 
 import (
 	"bufio"
@@ -7,36 +7,44 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
+	"strings"
 	"time"
-
-	"fyne.io/fyne/v2/widget"
 )
+
+type sharedURLInfo struct {
+	OriginalURL string `json:"original_url"`
+	SharedURL   string `json:"shared_url"`
+}
 
 const (
-	apiPort          = 10080
 	discoverySrvPort = "45679"
+	SERVER_IP        = "192.168.0.81"
 )
+
+// findAvailablePort checks for an available TCP port starting from a given port.
+func findAvailablePort(startPort int) (int, error) {
+	for port := startPort; port < startPort + 100; port++ { // Try up to 100 ports
+		address := fmt.Sprintf(":%d", port)
+		ln, err := net.Listen("tcp", address)
+		if err == nil {
+			_ = ln.Close()
+			return port, nil
+		}
+	}
+	return 0, fmt.Errorf("no available port found in range %d-%d", startPort, startPort+99)
+}
 
 // servicesHandler provides the list of currently shared proxies as a JSON response.
 func servicesHandler(w http.ResponseWriter, r *http.Request) {
-	proxiesLock.RLock()
-	defer proxiesLock.RUnlock()
-
-	// We need to construct the response with accessible URLs.
-	// Since this handler will be called from another machine, we use the LAN IPs.
-	type sharedURLInfo struct {
-		OriginalURL string `json:"original_url"`
-		SharedURL   string `json:"shared_url"`
-	}
+	ProxiesLock.RLock()
+	defer ProxiesLock.RUnlock()
 
 	// Initialize with a non-nil empty slice to ensure the JSON output is `[]` instead of `null`.
 	response := make([]sharedURLInfo, 0)
-	if len(lanIPs) > 0 {
+	if MyIP != "" {
 		// Just use the first LAN IP for the response. The client can substitute it if needed.
-		ip := lanIPs[0]
-		for _, p := range proxies {
+		ip := MyIP
+		for _, p := range Proxies {
 			sharedURL := fmt.Sprintf("http://%s:%d%s", ip, p.RemotePort, p.Path)
 			response = append(response, sharedURLInfo{
 				OriginalURL: p.OriginalURL,
@@ -52,10 +60,12 @@ func servicesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func registerWithDiscoveryServer() {
+var MyIP string
+
+func registerWithDiscoveryServer(apiPort int) {
 	// This loop ensures we keep trying to register if the connection fails
 	for {
-		serverAddr := net.JoinHostPort("192.168.1.81", discoverySrvPort)
+		serverAddr := net.JoinHostPort(SERVER_IP, discoverySrvPort)
 		conn, err := net.Dial("tcp", serverAddr)
 		if err != nil {
 			log.Printf("Failed to connect to discovery server at %s: %v. Retrying in 1 minute.", serverAddr, err)
@@ -80,11 +90,16 @@ func registerWithDiscoveryServer() {
 				log.Printf("Did not receive response from server after REGISTER.")
 				return // Exit closure, trigger reconnect
 			}
-			if response := scanner.Text(); response != "OK" {
+			response := scanner.Text()
+			parts := strings.Split(response, " ")
+			if len(parts) == 2 && parts[0] == "OK" {
+				MyIP = parts[1]
+				log.Printf("Successfully registered with discovery server. My IP is %s", MyIP)
+				IPReadyChan <- MyIP // Signal that the IP is ready
+			} else {
 				log.Printf("Failed to register with discovery server, response: %s.", response)
 				return // Exit closure, trigger reconnect
 			}
-			log.Printf("Successfully registered with discovery server.")
 
 			// 2. Heartbeat Loop
 			heartbeatTicker := time.NewTicker(1 * time.Minute)
@@ -129,7 +144,7 @@ func canReachHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reachable := isURLReachable(targetURL)
+	reachable := IsURLReachable(targetURL)
 
 	response := struct {
 		Reachable bool `json:"reachable"`
@@ -161,8 +176,7 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// This function will be created in gui.go
-	newProxy, err := shareUrlAndGetProxy(req.URL)
+	newProxy, err := ShareUrlAndGetProxy(req.URL)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create proxy: %v", err), http.StatusInternalServerError)
 		return
@@ -171,8 +185,8 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 	// Construct the response containing the full proxy details
 	// This ensures the client gets the externally accessible URL.
 	var sharedURL string
-	if len(lanIPs) > 0 {
-		sharedURL = fmt.Sprintf("http://%s:%d%s", lanIPs[0], newProxy.RemotePort, newProxy.Path)
+	if MyIP != "" {
+		sharedURL = fmt.Sprintf("http://%s:%d%s", MyIP, newProxy.RemotePort, newProxy.Path)
 	}
 
 	type sharedURLInfo struct {
@@ -191,8 +205,14 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// startApiServer starts the HTTP server to provide the API endpoints.
-func startApiServer() {
+// StartApiServer starts the HTTP server to provide the API endpoints.
+func StartApiServer() error {
+	// Find an available port for the API server
+	apiPort, err := findAvailablePort(10080) // Start searching from 10080
+	if err != nil {
+		return fmt.Errorf("failed to find available API port: %w", err)
+	}
+
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()
 	mux.HandleFunc("/services", servicesHandler)
@@ -204,69 +224,9 @@ func startApiServer() {
 	}
 
 	log.Printf("Starting API server on port %d", apiPort)
+	go registerWithDiscoveryServer(apiPort)
 	if err := apiServer.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatalf("API server stopped with error: %v", err)
+		return fmt.Errorf("API server stopped with error: %w", err)
 	}
-}
-
-
-func addAndStartProxy(rawURL string, statusLabel *widget.Label) (*sharedProxy, error) {
-	target, err := url.Parse(rawURL)
-	if err != nil {
-		return nil, fmt.Errorf(l("invalidUrl", map[string]interface{}{"error": err}))
-	}
-
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Transport = &cachingTransport{
-		Transport: http.DefaultTransport,
-	}
-
-	proxy.Director = func(req *http.Request) {
-		req.URL.Scheme = target.Scheme
-		req.URL.Host = target.Host
-		req.Host = target.Host
-	}
-
-	proxiesLock.Lock()
-	var remotePort int
-	for {
-		port := nextRemotePort
-		nextRemotePort++
-		if isPortAvailable(port) {
-			remotePort = port
-			break
-		}
-	}
-	proxiesLock.Unlock()
-
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", remotePort),
-		Handler: proxy,
-	}
-
-	go func() {
-		if statusLabel != nil {
-			statusLabel.SetText(l("serverRunning"))
-		}
-		log.Printf("Starting proxy for %s on port %d", rawURL, remotePort)
-		if err := server.ListenAndServe(); err != http.ErrServerClosed {
-			log.Printf("Proxy for %s on port %d stopped: %v", rawURL, remotePort, err)
-			if statusLabel != nil {
-				statusLabel.SetText(l("serverStopped"))
-			}
-		}
-		log.Printf("Proxy for %s on port %d stopped gracefully.", rawURL, remotePort)
-	}()
-
-	newProxy := &sharedProxy{
-		OriginalURL: rawURL,
-		RemotePort:  remotePort,
-		Path:        target.Path,
-		handler:     proxy,
-		server:      server,
-	}
-
-	go startHealthChecker(newProxy)
-
-	return newProxy, nil
+	return nil
 }

@@ -1,6 +1,10 @@
 /vpn-share-tool
 *.exe
 
+*.apk
+*.jar
+*.aar
+
 /fyne-cross
 libproxy/libproxy
 web-cache-proxy
@@ -13,3 +17,5 @@ fyne_metadata_init.go
 fyne_cross
 
 discovery-server/discovery-server
+
+flutter_gui/linux/libcore*

@@ -1,4 +1,4 @@
-package gui
+package core
 
 import (
 	"bytes"
@@ -15,14 +15,14 @@ type cacheEntry struct {
 	Body   []byte
 }
 
-// cachingTransport is an http.RoundTripper that caches responses for static assets.
-type cachingTransport struct {
+// CachingTransport is an http.RoundTripper that caches responses for static assets.
+type CachingTransport struct {
 	Transport http.RoundTripper
 	Cache     sync.Map // Using sync.Map for concurrent access
 }
 
 // RoundTrip implements the http.RoundTripper interface.
-func (t *cachingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// We only cache GET requests.
 	if req.Method != http.MethodGet {
 		return t.Transport.RoundTrip(req)

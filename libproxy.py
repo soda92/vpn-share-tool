@@ -8,7 +8,7 @@ import urllib.parse
 import urllib.error
 
 # Address of the central discovery server
-DISCOVERY_SERVER_HOST = "192.168.1.81"
+DISCOVERY_SERVER_HOST = "192.168.0.81"
 DISCOVERY_SERVER_PORT = 45679
 
 

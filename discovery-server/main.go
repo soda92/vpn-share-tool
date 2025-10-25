@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -72,7 +73,8 @@ func handleConnection(conn net.Conn) {
 				LastSeen: time.Now(),
 			}
 			log.Printf("Registered instance: %s", instanceAddress)
-			if _, err := conn.Write([]byte("OK\n")); err != nil {
+			response := fmt.Sprintf("OK %s\n", remoteAddr)
+			if _, err := conn.Write([]byte(response)); err != nil {
 				log.Printf("Error writing to %s: %v", remoteAddr, err)
 				mutex.Unlock()
 				return
