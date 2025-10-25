@@ -257,15 +257,21 @@ func Run() {
 
 	// Define the core sharing logic as a function to be reused.
 	shareLogic := func(rawURL string) {
-		_, err := shareUrlAndGetProxy(rawURL)
-		if err != nil {
-			// The error might be that it already exists, which is not a critical failure for the user.
-			log.Printf("Error sharing URL: %v", err)
-			serverStatus.SetText(err.Error())
-			return
-		}
+		go func() {
+			_, err := shareUrlAndGetProxy(rawURL)
+			if err != nil {
+				// The error might be that it already exists, which is not a critical failure for the user.
+				log.Printf("Error sharing URL: %v", err)
+				fyne.Do(func() {
+					serverStatus.SetText(err.Error())
+				})
+				return
+			}
 
-		urlEntry.SetText("")
+			fyne.Do(func() {
+				urlEntry.SetText("")
+			})
+		}()
 	}
 
 	// Bug fix 2: Handle 'Enter' key in the URL entry field.
@@ -313,7 +319,9 @@ func Run() {
 		widget.NewLabel(l("sharedUrlsLabel")),
 	)
 
-	myWindow.SetContent(container.NewBorder(topContent, nil, nil, nil, sharedList))
+	fyne.Do(func() {
+		myWindow.SetContent(container.NewBorder(topContent, nil, nil, nil, sharedList))
+	})
 	// Intercept close to hide window instead of quitting
 	myWindow.SetCloseIntercept(func() {
 		myWindow.Hide()
