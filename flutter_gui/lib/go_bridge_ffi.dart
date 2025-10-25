@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_gui/go_bridge_interface.dart';
+import 'package:vpn_share_tool/go_bridge_interface.dart';
 
 // FFI function signatures
 typedef _StartFunc = Void Function();
