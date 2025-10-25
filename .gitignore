@@ -2,6 +2,8 @@
 *.exe
 
 *.apk
+*.jar
+*.aar
 
 /fyne-cross
 libproxy/libproxy
