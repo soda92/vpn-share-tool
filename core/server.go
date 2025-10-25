@@ -7,8 +7,14 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
+
+type sharedURLInfo struct {
+	OriginalURL string `json:"original_url"`
+	SharedURL   string `json:"shared_url"`
+}
 
 const (
 	apiPort          = 10080
@@ -21,23 +27,11 @@ func servicesHandler(w http.ResponseWriter, r *http.Request) {
 	ProxiesLock.RLock()
 	defer ProxiesLock.RUnlock()
 
-	lanIPs, err := GetLanIPs()
-	if err != nil {
-		log.Printf("Could not get LAN IPs for services handler: %v", err)
-	}
-
-	// We need to construct the response with accessible URLs.
-	// Since this handler will be called from another machine, we use the LAN IPs.
-	type sharedURLInfo struct {
-		OriginalURL string `json:"original_url"`
-		SharedURL   string `json:"shared_url"`
-	}
-
 	// Initialize with a non-nil empty slice to ensure the JSON output is `[]` instead of `null`.
 	response := make([]sharedURLInfo, 0)
-	if len(lanIPs) > 0 {
+	if MyIP != "" {
 		// Just use the first LAN IP for the response. The client can substitute it if needed.
-		ip := lanIPs[0]
+		ip := MyIP
 		for _, p := range Proxies {
 			sharedURL := fmt.Sprintf("http://%s:%d%s", ip, p.RemotePort, p.Path)
 			response = append(response, sharedURLInfo{
@@ -53,6 +47,8 @@ func servicesHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode services", http.StatusInternalServerError)
 	}
 }
+
+var MyIP string
 
 func registerWithDiscoveryServer() {
 	// This loop ensures we keep trying to register if the connection fails
@@ -82,11 +78,15 @@ func registerWithDiscoveryServer() {
 				log.Printf("Did not receive response from server after REGISTER.")
 				return // Exit closure, trigger reconnect
 			}
-			if response := scanner.Text(); response != "OK" {
+			response := scanner.Text()
+			parts := strings.Split(response, " ")
+			if len(parts) == 2 && parts[0] == "OK" {
+				MyIP = parts[1]
+				log.Printf("Successfully registered with discovery server. My IP is %s", MyIP)
+			} else {
 				log.Printf("Failed to register with discovery server, response: %s.", response)
 				return // Exit closure, trigger reconnect
 			}
-			log.Printf("Successfully registered with discovery server.")
 
 			// 2. Heartbeat Loop
 			heartbeatTicker := time.NewTicker(1 * time.Minute)
@@ -169,16 +169,11 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lanIPs, err := GetLanIPs()
-	if err != nil {
-		log.Printf("Could not get LAN IPs for add proxy handler: %v", err)
-	}
-
 	// Construct the response containing the full proxy details
 	// This ensures the client gets the externally accessible URL.
 	var sharedURL string
-	if len(lanIPs) > 0 {
-		sharedURL = fmt.Sprintf("http://%s:%d%s", lanIPs[0], newProxy.RemotePort, newProxy.Path)
+	if MyIP != "" {
+		sharedURL = fmt.Sprintf("http://%s:%d%s", MyIP, newProxy.RemotePort, newProxy.Path)
 	}
 
 	type sharedURLInfo struct {

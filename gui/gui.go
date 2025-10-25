@@ -20,7 +20,7 @@ import (
 //go:embed i18n/*.json
 var i18nFS embed.FS
 
-var lanIPs []string
+
 
 const (
 	startPort = 10081
@@ -42,12 +42,7 @@ func Run() {
 	// Start the local API server and register with the discovery server
 	go core.StartApiServer()
 
-	var err error
-	lanIPs, err = core.GetLanIPs()
-	if err != nil {
-		log.Printf(l("couldNotDetermineLanIp", map[string]interface{}{"ip": "N/A", "error": err}))
-		lanIPs = []string{}
-	}
+
 
 	// Server section
 	serverStatus := widget.NewLabel(l("startingServer"))
@@ -60,8 +55,8 @@ func Run() {
 
 	addProxyToUI := func(newProxy *core.SharedProxy) {
 		fyne.Do(func() {
-			for _, ip := range lanIPs {
-				sharedURL := fmt.Sprintf("http://%s:%d%s", ip, newProxy.RemotePort, newProxy.Path)
+			if core.MyIP != "" {
+				sharedURL := fmt.Sprintf("http://%s:%d%s", core.MyIP, newProxy.RemotePort, newProxy.Path)
 				displayString := l("sharedUrlFormat", map[string]interface{}{
 					"originalUrl": newProxy.OriginalURL,
 					"sharedUrl":   sharedURL,
