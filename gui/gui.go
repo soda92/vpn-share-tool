@@ -1,18 +1,11 @@
 package gui
 
 import (
-	"context"
 	"embed"
 	"flag"
 	"fmt"
 	"log"
-	"net"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"strings"
-	"sync"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -21,13 +14,13 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/nicksnyder/go-i18n/v2/i18n"
-
 	"github.com/soda92/vpn-share-tool/core"
 )
 
 //go:embed i18n/*.json
 var i18nFS embed.FS
+
+var lanIPs []string
 
 const (
 	startPort = 10081
@@ -35,60 +28,7 @@ const (
 
 
 
-// isPortAvailable checks if a TCP port is available to be listened on.
-func isPortAvailable(port int) bool {
-	address := fmt.Sprintf(":%d", port)
-	ln, err := net.Listen("tcp", address)
-	if err != nil {
-		return false
-	}
-	_ = ln.Close()
-	return true
-}
 
-// removeProxy shuts down a proxy server and removes it from the list.
-func removeProxy(p *sharedProxy) {
-	log.Printf("Removing proxy for unreachable URL: %s", p.OriginalURL)
-
-	// 1. Shutdown the HTTP server
-	if p.server != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if err := p.server.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down proxy server for %s: %v", p.OriginalURL, err)
-		}
-	}
-
-	// 2. Remove from the global proxies slice
-	proxiesLock.Lock()
-	newProxies := []*sharedProxy{}
-	for _, proxy := range proxies {
-		if proxy != p {
-			newProxies = append(newProxies, proxy)
-		}
-	}
-	proxies = newProxies
-	proxiesLock.Unlock()
-
-	// 3. Signal the UI to update
-	proxyRemovedChan <- p
-}
-
-// startHealthChecker runs in a goroutine to periodically check if a URL is reachable.
-func startHealthChecker(p *sharedProxy) {
-	healthCheckTicker := time.NewTicker(3 * time.Minute)
-	defer healthCheckTicker.Stop()
-
-	for range healthCheckTicker.C {
-		log.Printf("Performing health check for %s", p.OriginalURL)
-		if !isURLReachable(p.OriginalURL) {
-			log.Printf("Health check failed for %s. Tearing down proxy.", p.OriginalURL)
-			removeProxy(p)
-			return // Stop this health checker goroutine
-		}
-		log.Printf("Health check successful for %s", p.OriginalURL)
-	}
-}
 
 func Run() {
 	startMinimized := flag.Bool("minimized", false, "start minimized with windows start")

@@ -10,6 +10,8 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 )
 
+var localizer *i18n.Localizer
+
 func initI18n() {
 	bundle := i18n.NewBundle(language.English)
 	bundle.RegisterUnmarshalFunc("json", json.Unmarshal)
