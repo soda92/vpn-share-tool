@@ -1,4 +1,4 @@
-package gui
+package core
 
 import (
 	"bufio"
@@ -7,23 +7,24 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"time"
-
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/widget"
 )
 
 const (
 	apiPort          = 10080
 	discoverySrvPort = "45679"
+	SERVER_IP        = "192.168.0.81"
 )
 
 // servicesHandler provides the list of currently shared proxies as a JSON response.
 func servicesHandler(w http.ResponseWriter, r *http.Request) {
-	proxiesLock.RLock()
-	defer proxiesLock.RUnlock()
+	ProxiesLock.RLock()
+	defer ProxiesLock.RUnlock()
+
+	lanIPs, err := GetLanIPs()
+	if err != nil {
+		log.Printf("Could not get LAN IPs for services handler: %v", err)
+	}
 
 	// We need to construct the response with accessible URLs.
 	// Since this handler will be called from another machine, we use the LAN IPs.
@@ -37,7 +38,7 @@ func servicesHandler(w http.ResponseWriter, r *http.Request) {
 	if len(lanIPs) > 0 {
 		// Just use the first LAN IP for the response. The client can substitute it if needed.
 		ip := lanIPs[0]
-		for _, p := range proxies {
+		for _, p := range Proxies {
 			sharedURL := fmt.Sprintf("http://%s:%d%s", ip, p.RemotePort, p.Path)
 			response = append(response, sharedURLInfo{
 				OriginalURL: p.OriginalURL,
@@ -130,7 +131,7 @@ func canReachHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reachable := isURLReachable(targetURL)
+	reachable := IsURLReachable(targetURL)
 
 	response := struct {
 		Reachable bool `json:"reachable"`
@@ -162,11 +163,15 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// This function will be created in gui.go
-	newProxy, err := shareUrlAndGetProxy(req.URL)
+	newProxy, err := ShareUrlAndGetProxy(req.URL)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create proxy: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	lanIPs, err := GetLanIPs()
+	if err != nil {
+		log.Printf("Could not get LAN IPs for add proxy handler: %v", err)
 	}
 
 	// Construct the response containing the full proxy details
@@ -192,8 +197,8 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// startApiServer starts the HTTP server to provide the API endpoints.
-func startApiServer() {
+// StartApiServer starts the HTTP server to provide the API endpoints.
+func StartApiServer() {
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()
 	mux.HandleFunc("/services", servicesHandler)
@@ -205,72 +210,8 @@ func startApiServer() {
 	}
 
 	log.Printf("Starting API server on port %d", apiPort)
+	go registerWithDiscoveryServer()
 	if err := apiServer.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("API server stopped with error: %v", err)
 	}
-}
-
-func addAndStartProxy(rawURL string, statusLabel *widget.Label) (*sharedProxy, error) {
-	target, err := url.Parse(rawURL)
-	if err != nil {
-		return nil, fmt.Errorf(l("invalidUrl", map[string]interface{}{"error": err}))
-	}
-
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Transport = &cachingTransport{
-		Transport: http.DefaultTransport,
-	}
-
-	proxy.Director = func(req *http.Request) {
-		req.URL.Scheme = target.Scheme
-		req.URL.Host = target.Host
-		req.Host = target.Host
-	}
-
-	proxiesLock.Lock()
-	var remotePort int
-	for {
-		port := nextRemotePort
-		nextRemotePort++
-		if isPortAvailable(port) {
-			remotePort = port
-			break
-		}
-	}
-	proxiesLock.Unlock()
-
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", remotePort),
-		Handler: proxy,
-	}
-
-	go func() {
-		if statusLabel != nil {
-			fyne.Do(func() {
-				statusLabel.SetText(l("serverRunning"))
-			})
-		}
-		log.Printf("Starting proxy for %s on port %d", rawURL, remotePort)
-		if err := server.ListenAndServe(); err != http.ErrServerClosed {
-			log.Printf("Proxy for %s on port %d stopped: %v", rawURL, remotePort, err)
-			if statusLabel != nil {
-				fyne.Do(func() {
-					statusLabel.SetText(l("serverStopped"))
-				})
-			}
-		}
-		log.Printf("Proxy for %s on port %d stopped gracefully.", rawURL, remotePort)
-	}()
-
-	newProxy := &sharedProxy{
-		OriginalURL: rawURL,
-		RemotePort:  remotePort,
-		Path:        target.Path,
-		handler:     proxy,
-		server:      server,
-	}
-
-	go startHealthChecker(newProxy)
-
-	return newProxy, nil
 }

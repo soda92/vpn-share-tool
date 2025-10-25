@@ -22,6 +22,8 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
+
+	"github.com/soda92/vpn-share-tool/core"
 )
 
 //go:embed i18n/*.json
@@ -31,25 +33,7 @@ const (
 	startPort = 10081
 )
 
-// sharedProxy holds information about a shared URL.
-type sharedProxy struct {
-	OriginalURL string
-	RemotePort  int
-	Path        string
-	handler     *httputil.ReverseProxy
-	server      *http.Server
-}
 
-var (
-	proxies             []*sharedProxy
-	proxiesLock         sync.RWMutex
-	lanIPs              []string
-	nextRemotePort      = startPort
-	localizer           *i18n.Localizer
-	shareUrlAndGetProxy func(rawURL string) (*sharedProxy, error)
-	proxyAddedChan      = make(chan *sharedProxy)
-	proxyRemovedChan    = make(chan *sharedProxy)
-)
 
 // isPortAvailable checks if a TCP port is available to be listened on.
 func isPortAvailable(port int) bool {
@@ -116,11 +100,10 @@ func Run() {
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
 
 	// Start the local API server and register with the discovery server
-	go startApiServer()
-	go registerWithDiscoveryServer()
+	go core.StartApiServer()
 
 	var err error
-	lanIPs, err = getLanIPs()
+	lanIPs, err = core.GetLanIPs()
 	if err != nil {
 		log.Printf(l("couldNotDetermineLanIp", map[string]interface{}{"ip": "N/A", "error": err}))
 		lanIPs = []string{}
@@ -135,7 +118,7 @@ func Run() {
 
 	sharedListData := binding.NewStringList()
 
-	addProxyToUI := func(newProxy *sharedProxy) {
+	addProxyToUI := func(newProxy *core.SharedProxy) {
 		fyne.Do(func() {
 			for _, ip := range lanIPs {
 				sharedURL := fmt.Sprintf("http://%s:%d%s", ip, newProxy.RemotePort, newProxy.Path)
@@ -150,7 +133,7 @@ func Run() {
 		// The caller is now responsible for saving the config.
 	}
 
-	removeProxyFromUI := func(p *sharedProxy) {
+	removeProxyFromUI := func(p *core.SharedProxy) {
 		fyne.Do(func() {
 			currentList, _ := sharedListData.Get()
 			newList := []string{}
@@ -169,9 +152,9 @@ func Run() {
 	go func() {
 		for {
 			select {
-			case newProxy := <-proxyAddedChan:
+			case newProxy := <-core.ProxyAddedChan:
 				addProxyToUI(newProxy)
-			case removedProxy := <-proxyRemovedChan:
+			case removedProxy := <-core.ProxyRemovedChan:
 				removeProxyFromUI(removedProxy)
 			}
 		}
@@ -209,56 +192,11 @@ func Run() {
 		sharedList.Unselect(id)
 	}
 
-	// shareUrlAndGetProxy contains the core logic for creating and starting a proxy.
-	// It is designed to be called from both the GUI and API handlers.
-	shareUrlAndGetProxy = func(rawURL string) (*sharedProxy, error) {
-		if rawURL == "" {
-			return nil, fmt.Errorf("URL cannot be empty")
-		}
 
-		if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
-			rawURL = "http://" + rawURL
-		}
 
-		// Prevent adding duplicate proxies
-		parsedURL, err := url.Parse(rawURL)
-		if err == nil {
-			hostname := parsedURL.Hostname()
-			proxiesLock.RLock()
-			for _, p := range proxies {
-				existingURL, err := url.Parse(p.OriginalURL)
-				if err != nil {
-					continue // Skip invalid stored URL
-				}
-				if existingURL.Hostname() == hostname {
-					proxiesLock.RUnlock()
-					log.Printf("Proxy for %s already exists, returning existing one.", rawURL)
-					return p, nil // Return existing proxy instead of an error
-				}
-			}
-			proxiesLock.RUnlock()
-		}
-
-		// Pass nil for statusLabel as this is a non-GUI context
-		newProxy, err := addAndStartProxy(rawURL, nil)
-		if err != nil {
-			return nil, fmt.Errorf("error adding proxy for %s: %w", rawURL, err)
-		}
-
-		proxiesLock.Lock()
-		proxies = append(proxies, newProxy)
-		proxiesLock.Unlock()
-
-		// Announce the new proxy to the UI
-		proxyAddedChan <- newProxy
-
-		return newProxy, nil
-	}
-
-	// Define the core sharing logic as a function to be reused.
 	shareLogic := func(rawURL string) {
 		go func() {
-			_, err := shareUrlAndGetProxy(rawURL)
+			_, err := core.ShareUrlAndGetProxy(rawURL)
 			if err != nil {
 				// The error might be that it already exists, which is not a critical failure for the user.
 				log.Printf("Error sharing URL: %v", err)
@@ -327,25 +265,7 @@ func Run() {
 		myWindow.Hide()
 	})
 	myWindow.SetOnClosed(func() {
-		// Clean up all running proxy servers on exit
-		proxiesLock.Lock()
-		defer proxiesLock.Unlock()
-		var wg sync.WaitGroup
-		for _, p := range proxies {
-			if p.server != nil {
-				wg.Add(1)
-				go func(s *http.Server) {
-					defer wg.Done()
-					// Give server 5 seconds to shutdown gracefully
-					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-					defer cancel()
-					if err := s.Shutdown(ctx); err != nil {
-						log.Printf("Error shutting down proxy server: %v", err)
-					}
-				}(p.server)
-			}
-		}
-		wg.Wait()
+		core.Shutdown()
 	})
 
 	myWindow.Resize(fyne.NewSize(600, 400))
