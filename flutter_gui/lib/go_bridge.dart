@@ -6,28 +6,35 @@ import 'package:flutter/services.dart';
 import 'package:flutter_gui/go_bridge_interface.dart';
 
 class GoBridgeAndroid implements GoBridge {
-  final _channel = const MethodChannel('vpn_share_tool/go_bridge');
+  final _methodChannel = const MethodChannel('vpn_share_tool/go_bridge');
+  final _eventChannel = const EventChannel('vpn_share_tool/go_bridge_events');
   final _eventStreamController = StreamController<Map<String, dynamic>>.broadcast();
 
   GoBridgeAndroid() {
     // Set up method call handler to receive events from Go
-    _channel.setMethodCallHandler((call) async {
-      if (call.method == 'onEvent') {
-        _eventStreamController.add(jsonDecode(call.arguments as String));
-      }
+    _methodChannel.setMethodCallHandler((call) async {
+      print('Dart MethodChannel received: ${call.method}');
+      // No longer handling 'onEvent' here, it comes from EventChannel
+      return null;
+    });
+
+    // Listen to the EventChannel for events from Kotlin
+    _eventChannel.receiveBroadcastStream().listen((event) {
+      print('Dart EventChannel received: $event');
+      _eventStreamController.add(jsonDecode(event as String));
     });
   }
 
   @override
   void start() {
-    _channel.invokeMethod('start');
+    _methodChannel.invokeMethod('start');
     // Register the Dart callback with Go
-    _channel.invokeMethod('setEventCallback');
+    _methodChannel.invokeMethod('setEventCallback');
   }
 
   @override
   void shareUrl(String url) {
-    _channel.invokeMethod('shareUrl', {'url': url});
+    _methodChannel.invokeMethod('shareUrl', {'url': url});
   }
 
   // This method is no longer used for polling, but we keep it to satisfy the interface.
