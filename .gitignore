@@ -9,6 +9,9 @@
 libproxy/libproxy
 web-cache-proxy
 vpn_share_config.json
+/dist
+
+*_log_*
 
 docs.fyne.io
 

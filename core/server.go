@@ -23,13 +23,18 @@ const (
 
 // findAvailablePort checks for an available TCP port starting from a given port.
 func findAvailablePort(startPort int) (int, error) {
+	var lastErr error // Declare a variable to store the last error
 	for port := startPort; port < startPort + 100; port++ { // Try up to 100 ports
-		address := fmt.Sprintf(":%d", port)
+		address := fmt.Sprintf("0.0.0.0:%d", port)
 		ln, err := net.Listen("tcp", address)
 		if err == nil {
 			_ = ln.Close()
 			return port, nil
 		}
+		lastErr = err // Store the last error
+	}
+	if lastErr != nil {
+		return 0, fmt.Errorf("no available port found in range %d-%d. Last error: %v", startPort, startPort+99, lastErr)
 	}
 	return 0, fmt.Errorf("no available port found in range %d-%d", startPort, startPort+99)
 }
@@ -208,7 +213,7 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 // StartApiServer starts the HTTP server to provide the API endpoints.
 func StartApiServer() error {
 	// Find an available port for the API server
-	apiPort, err := findAvailablePort(10080) // Start searching from 10080
+	apiPort, err := findAvailablePort(20000) // Start searching from 20000
 	if err != nil {
 		return fmt.Errorf("failed to find available API port: %w", err)
 	}
@@ -219,7 +224,7 @@ func StartApiServer() error {
 	mux.HandleFunc("/proxies", addProxyHandler)
 	mux.HandleFunc("/can-reach", canReachHandler)
 	apiServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", apiPort),
+		Addr:    fmt.Sprintf("127.0.0.1:%d", apiPort),
 		Handler: mux,
 	}
 

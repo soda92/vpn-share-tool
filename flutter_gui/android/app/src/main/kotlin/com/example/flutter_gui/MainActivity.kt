@@ -67,10 +67,15 @@ class MainActivity: FlutterActivity() {
                     }
                     mobile.Mobile.setEventCallback(dartCallback)
 
-                    // Initialize Go backend here
+                    // Call Go backend's Start() function and return its error string
                     android.util.Log.d("MainActivity", "Starting Go Mobile backend...")
-                    mobile.Mobile.start()
-                    result.success(null)
+                    val error = mobile.Mobile.start() // Call the Go Start() function
+                    if (error != null && error.isNotEmpty()) {
+                        android.util.Log.e("MainActivity", "Go backend failed to start: $error")
+                        result.success(error) // Return the error string to Dart
+                    } else {
+                        result.success(null) // No error, return null
+                    }
                 }
                 "startForegroundService" -> {
                     android.util.Log.d("MainActivity", "Received startForegroundService call from Dart.")
@@ -114,7 +119,8 @@ class MainActivity: FlutterActivity() {
                 "hasNotificationPermission" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         result.success(ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
-                    } else {
+                    }
+                    else {
                         result.success(true) // Permission not needed below Android 13
                     }
                 }

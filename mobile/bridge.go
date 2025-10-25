@@ -75,29 +75,28 @@ func init() {
 		}
 	}()
 
-    // Start a goroutine for heartbeats and API server
-    go func() {
-        if err := core.StartApiServer(); err != nil {
-            log.Printf("Failed to start API server: %v", err)
-            eventCallbackMu.Lock()
-            if eventCallback != nil {
-                event := struct {
-                    Type    string `json:"type"`
-                    Message string `json:"message"`
-                }{"error", fmt.Sprintf("Failed to start API server: %v", err)}
-                data, _ := json.Marshal(event)
-                eventCallback.OnEvent(string(data))
-            }
-            eventCallbackMu.Unlock()
-            return
-        }
-    }()
+    // The API server will now be started by the explicit Start() call from Dart.
+    // Remove the automatic start in init() to avoid race conditions or double starts.
+    // The error handling will be done in the Start() function.
 }
 
-// Start initializes the core services.
-func Start() {
-	// The API server is now started in init() and heartbeats are sent automatically
-	// This function is still needed for gomobile bind to generate a Start() function
+// Start initializes the core services and returns an error string if API server fails to start.
+func Start() string { // Change return type to string
+	if err := core.StartApiServer(); err != nil {
+		log.Printf("Failed to start API server: %v", err) // Log the error
+		eventCallbackMu.Lock()
+		if eventCallback != nil {
+			event := struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			}{"error", fmt.Sprintf("Failed to start API server: %v", err)}
+			data, _ := json.Marshal(event)
+			eventCallback.OnEvent(string(data))
+		}
+		eventCallbackMu.Unlock()
+		return err.Error() // Return the error string
+	}
+	return "" // Return empty string on success
 }
 
 // ShareURL shares a URL.

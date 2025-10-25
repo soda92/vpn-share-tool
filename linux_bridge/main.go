@@ -6,7 +6,6 @@ import (
 	"github.com/soda92/vpn-share-tool/core"
 	"log"
 	"sync"
-	"time"
 )
 
 // EventCallback is the type for the Dart callback function.
@@ -72,16 +71,6 @@ func init() {
 		}
 	}()
 
-    // Start a goroutine for heartbeats and API server
-    go func() {
-        core.StartApiServer()
-        ticker := time.NewTicker(30 * time.Second)
-        defer ticker.Stop()
-
-        for range ticker.C {
-            core.SendHeartbeat()
-        }
-    }()
 }
 
 //export Start
