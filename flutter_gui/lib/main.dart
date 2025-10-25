@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -39,7 +40,6 @@ class _MyHomePageState extends State<MyHomePage> {
   String _ipAddress = 'Loading...';
   final List<Map<String, dynamic>> _proxies = [];
   final _urlController = TextEditingController();
-  Isolate? _pollingIsolate;
   late final GoBridge _bridge;
 
   @override
@@ -52,42 +52,47 @@ class _MyHomePageState extends State<MyHomePage> {
       print("Instantiating Android GoBridge");
       _bridge = GoBridgeAndroid();
     }
-    _startPolling();
+    _startListeningEvents(); // Listen to stream for both platforms
     _bridge.start();
   }
 
   @override
   void dispose() {
-    _pollingIsolate?.kill(priority: Isolate.immediate);
     super.dispose();
   }
 
-  void _startPolling() async {
-    final receivePort = ReceivePort();
-    final rootIsolateToken = ServicesBinding.rootIsolateToken;
-
-    if (rootIsolateToken == null) {
-      print("RootIsolateToken is null. Cannot spawn background isolate.");
-      return;
+  void _startListeningEvents() {
+    if (Platform.isLinux) {
+      (_bridge as GoBridgeLinux).eventStream.listen((event) {
+        if (mounted) {
+          setState(() {
+            if (event['type'] == 'ip_ready') {
+              _ipAddress = event['ip'];
+            } else if (event['type'] == 'added') {
+              _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
+              _proxies.add(event['proxy']);
+            } else if (event['type'] == 'removed') {
+              _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
+            }
+          });
+        }
+      });
+    } else {
+      (_bridge as GoBridgeAndroid).eventStream.listen((event) {
+        if (mounted) {
+          setState(() {
+            if (event['type'] == 'ip_ready') {
+              _ipAddress = event['ip'];
+            } else if (event['type'] == 'added') {
+              _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
+              _proxies.add(event['proxy']);
+            } else if (event['type'] == 'removed') {
+              _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
+            }
+          });
+        }
+      });
     }
-
-    _pollingIsolate = await Isolate.spawn(_bridge.pollEvents, [receivePort.sendPort, rootIsolateToken]);
-
-    receivePort.listen((data) {
-      final event = data as Map<String, dynamic>;
-      if (mounted) {
-        setState(() {
-          if (event['type'] == 'ip_ready') {
-            _ipAddress = event['ip'];
-          } else if (event['type'] == 'added') {
-            _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
-            _proxies.add(event['proxy']);
-          } else if (event['type'] == 'removed') {
-            _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
-          }
-        });
-      }
-    });
   }
 
   void _shareUrl() {

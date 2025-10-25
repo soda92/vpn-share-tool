@@ -4,6 +4,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import mobile.Mobile
+import mobile.EventCallback
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "vpn_share_tool/go_bridge"
@@ -30,8 +31,20 @@ class MainActivity: FlutterActivity() {
                 "getIP" -> {
                     result.success(Mobile.getIP())
                 }
-                "pollEvents" -> {
-                    result.success(Mobile.pollEvents())
+                "setEventCallback" -> {
+                    // This is the Dart callback that Go will call
+                    val dartCallback = object : mobile.EventCallback {
+                        override fun onEvent(eventJSON: String?) {
+                            if (eventJSON != null) {
+                                // Send the event back to Dart
+                                flutterEngine.dartExecutor.binaryMessenger.send(
+                                    CHANNEL, eventJSON.toByteArray(Charsets.UTF_8)
+                                )
+                            }
+                        }
+                    }
+                    Mobile.setEventCallback(dartCallback)
+                    result.success(null)
                 }
                 else -> {
                     result.notImplemented()
