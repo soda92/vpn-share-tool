@@ -1,11 +1,10 @@
 abstract class GoBridge {
-  void start();
   void shareUrl(String url);
   void pollEvents(dynamic sendPort);
   void startForegroundService();
   void stopForegroundService();
   Future<String?> getIP();
-  void startGoBackend();
+  void startGoBackendWithPort(int port);
   Future<bool> hasNotificationPermission();
   Future<bool> isForegroundServiceRunning();
 }

@@ -10,12 +10,13 @@ typedef _StartFunc = Void Function();
 typedef _ShareURLFunc = Void Function(Pointer<Utf8>);
 typedef _SetEventCallbackFunc = Void Function(Pointer<NativeFunction<EventCallbackC>>);
 typedef _GetIPFunc = Pointer<Utf8> Function();
+typedef _StartApiServerWithPortFunc = Void Function(Int32 port);
 
 // Dart function signatures
-typedef _Start = void Function();
 typedef _ShareURL = void Function(Pointer<Utf8>);
 typedef _SetEventCallback = void Function(Pointer<NativeFunction<EventCallbackC>>);
 typedef _GetIP = Pointer<Utf8> Function();
+typedef _StartApiServerWithPort = void Function(int port);
 
 // Callback type for Go to call Dart
 typedef EventCallbackC = Void Function(Pointer<Utf8>);
@@ -31,11 +32,10 @@ late SendPort _eventPort;
 
 class GoBridgeLinux implements GoBridge {
   static final DynamicLibrary _lib = DynamicLibrary.open('libcore.so');
-
-  static final _Start _start = _lib.lookup<NativeFunction<_StartFunc>>('Start').asFunction<_Start>();
   static final _ShareURL _shareURL = _lib.lookup<NativeFunction<_ShareURLFunc>>('ShareURL').asFunction<_ShareURL>();
   static final _SetEventCallback _setEventCallback = _lib.lookup<NativeFunction<_SetEventCallbackFunc>>('SetEventCallback').asFunction<_SetEventCallback>();
   static final _GetIP _getIP = _lib.lookup<NativeFunction<_GetIPFunc>>('GetIP').asFunction<_GetIP>();
+  static final _StartApiServerWithPort _startApiServerWithPort = _lib.lookup<NativeFunction<_StartApiServerWithPortFunc>>('StartApiServerWithPort').asFunction<_StartApiServerWithPort>();
 
   final _eventStreamController = StreamController<Map<String, dynamic>>.broadcast();
 
@@ -51,8 +51,6 @@ class GoBridgeLinux implements GoBridge {
     _setEventCallback(Pointer.fromFunction<EventCallbackC>(_eventCallback));
   }
 
-  @override
-  void start() => _start();
 
   @override
   void shareUrl(String url) {
@@ -87,8 +85,8 @@ class GoBridgeLinux implements GoBridge {
   }
 
   @override
-  void startGoBackend() {
-    start();
+  void startGoBackendWithPort(int port) {
+    _startApiServerWithPort(port);
   }
 
   @override

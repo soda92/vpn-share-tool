@@ -4,6 +4,11 @@
 *.apk
 *.jar
 *.aar
+/dist
+
+*_log_*
+
+*.salive
 
 /fyne-cross
 libproxy/libproxy

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui';
 
 import 'package:flutter/services.dart';
 import 'package:vpn_share_tool/go_bridge_interface.dart';
@@ -36,11 +35,10 @@ class GoBridgeAndroid implements GoBridge {
   }
 
   @override
-  void start() {
-    // The actual Go backend start and event callback setting is now handled by the foreground service.
-    // We just need to start the foreground service.
-    startForegroundService();
+  void startGoBackendWithPort(int port) {
+    _methodChannel.invokeMethod('startGoBackendWithPort', {'port': port});
   }
+
 
   @override
   void shareUrl(String url) {
@@ -57,11 +55,6 @@ class GoBridgeAndroid implements GoBridge {
   @override
   Future<String?> getIP() async {
     return await _methodChannel.invokeMethod('getIP');
-  }
-
-  @override
-  void startGoBackend() {
-    _methodChannel.invokeMethod('startGoBackend');
   }
 
   @override
