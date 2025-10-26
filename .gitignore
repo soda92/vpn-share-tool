@@ -8,6 +8,8 @@
 
 *_log_*
 
+*.salive
+
 /fyne-cross
 libproxy/libproxy
 web-cache-proxy

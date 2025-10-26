@@ -46,32 +46,7 @@ class MainActivity: FlutterActivity() {
         methodChannel.setMethodCallHandler {
             call, result ->
             when (call.method) {
-                "startGoBackend" -> {
-                    android.util.Log.d("MainActivity", "Received startGoBackend call from Dart.")
-                    // Set event callback for Go Mobile
-                    val dartCallback = object : mobile.EventCallback {
-                        override fun onEvent(eventJSON: String?) {
-                            if (eventJSON != null) {
-                                android.util.Log.d("MainActivity", "Received event from Go: $eventJSON")
-                                if (eventSink == null) {
-                                    android.util.Log.e("MainActivity", "eventSink is null when trying to send event!")
-                                } else {
-                                    android.util.Log.d("MainActivity", "Sending event to Dart via EventChannel.")
-                                    // Ensure event is sent on the main thread
-                                    Handler(Looper.getMainLooper()).post {
-                                        eventSink?.success(eventJSON)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    mobile.Mobile.setEventCallback(dartCallback)
 
-                    // Initialize Go backend here
-                    android.util.Log.d("MainActivity", "Starting Go Mobile backend...")
-                    mobile.Mobile.start()
-                    result.success(null)
-                }
                 "startForegroundService" -> {
                     android.util.Log.d("MainActivity", "Received startForegroundService call from Dart.")
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // Android 13+
@@ -110,6 +85,34 @@ class MainActivity: FlutterActivity() {
                 }
                 "getIP" -> {
                     result.success(mobile.Mobile.getIP())
+                }
+                "startGoBackendWithPort" -> {
+                    val port = call.argument<Int>("port")
+                    if (port != null) {
+                        android.util.Log.d("MainActivity", "Received startGoBackendWithPort call from Dart with port: $port")
+                        // Set event callback for Go Mobile
+                        val dartCallback = object : mobile.EventCallback {
+                            override fun onEvent(eventJSON: String?) {
+                                if (eventJSON != null) {
+                                    android.util.Log.d("MainActivity", "Received event from Go: $eventJSON")
+                                    if (eventSink == null) {
+                                        android.util.Log.e("MainActivity", "eventSink is null when trying to send event!")
+                                    } else {
+                                        android.util.Log.d("MainActivity", "Sending event to Dart via EventChannel.")
+                                        // Ensure event is sent on the main thread
+                                        Handler(Looper.getMainLooper()).post {
+                                            eventSink?.success(eventJSON)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        mobile.Mobile.setEventCallback(dartCallback)
+                        mobile.Mobile.startGoBackendWithPort(port.toLong())
+                        result.success(null)
+                    } else {
+                        result.error("INVALID_ARGUMENT", "Port argument is missing or not an integer", null)
+                    }
                 }
                 "hasNotificationPermission" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
