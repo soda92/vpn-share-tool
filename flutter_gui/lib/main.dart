@@ -20,10 +20,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'VPN Share Tool',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
       home: const MyHomePage(),
     );
   }
@@ -66,7 +63,9 @@ class _MyHomePageState extends State<MyHomePage> {
     print("Found available port: $_apiPort");
 
     _startListeningEvents(); // Listen to stream for both platforms
-    _bridge.startGoBackendWithPort(_apiPort); // Start the core Go backend with the found port
+    _bridge.startGoBackendWithPort(
+      _apiPort,
+    ); // Start the core Go backend with the found portX
   }
 
   Future<int> _findAvailablePort(int startPort) async {
@@ -79,7 +78,9 @@ class _MyHomePageState extends State<MyHomePage> {
         // Port is not available, try next one
       }
     }
-    throw Exception("No available port found in range $startPort-${startPort + 99}");
+    throw Exception(
+      "No available port found in range $startPort-${startPort + 99}",
+    );
   }
 
   Future<void> _initializeServiceState() async {
@@ -91,13 +92,16 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _checkServiceStatus() async {
     if (Platform.isAndroid) {
       final androidBridge = _bridge as GoBridgeAndroid;
-      _hasNotificationPermission = await androidBridge.hasNotificationPermission();
-      _isForegroundServiceActive = await androidBridge.isForegroundServiceRunning();
+      _hasNotificationPermission = await androidBridge
+          .hasNotificationPermission();
+      _isForegroundServiceActive = await androidBridge
+          .isForegroundServiceRunning();
 
       if (_hasNotificationPermission && !_isForegroundServiceActive) {
         // Start silently if permission is already granted and not running
         androidBridge.startForegroundService();
-        _isForegroundServiceActive = true; // Optimistically assume it starts successfully
+        _isForegroundServiceActive =
+            true; // Optimistically assume it starts successfully
       }
       setState(() {}); // Update UI based on initial state
     }
@@ -117,10 +121,14 @@ class _MyHomePageState extends State<MyHomePage> {
             if (event['type'] == 'ip_ready') {
               _ipAddress = event['ip'];
             } else if (event['type'] == 'added') {
-              _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
+              _proxies.removeWhere(
+                (p) => p['original_url'] == event['proxy']['original_url'],
+              );
               _proxies.add(event['proxy']);
             } else if (event['type'] == 'removed') {
-              _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
+              _proxies.removeWhere(
+                (p) => p['original_url'] == event['proxy']['original_url'],
+              );
             } else if (event['type'] == 'error') {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Error from Go: ${event['message']}')),
@@ -136,12 +144,15 @@ class _MyHomePageState extends State<MyHomePage> {
             if (event['type'] == 'ip_ready') {
               _ipAddress = event['ip'];
             } else if (event['type'] == 'added') {
-              _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
+              _proxies.removeWhere(
+                (p) => p['original_url'] == event['proxy']['original_url'],
+              );
               _proxies.add(event['proxy']);
             } else if (event['type'] == 'removed') {
-              _proxies.removeWhere((p) => p['original_url'] == event['proxy']['original_url']);
-            }
-            else if (event['type'] == 'error') {
+              _proxies.removeWhere(
+                (p) => p['original_url'] == event['proxy']['original_url'],
+              );
+            } else if (event['type'] == 'error') {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Error from Go: ${event['message']}')),
               );
@@ -164,15 +175,16 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     final platform = Platform.isLinux ? "Linux (FFI)" : "Android";
     return Scaffold(
-      appBar: AppBar(
-        title: Text('VPN Share Tool ($platform)'),
-      ),
+      appBar: AppBar(title: Text('VPN Share Tool ($platform)')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text('Your IP Address is: $_ipAddress', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Your IP Address is: $_ipAddress',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 20),
             Row(
               children: [
@@ -194,7 +206,8 @@ class _MyHomePageState extends State<MyHomePage> {
               ],
             ),
             const SizedBox(height: 20),
-            if (Platform.isAndroid && !_isForegroundServiceActive) // Only show on Android if not active
+            if (Platform.isAndroid &&
+                !_isForegroundServiceActive) // Only show on Android if not active
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -219,7 +232,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 itemCount: _proxies.length,
                 itemBuilder: (context, index) {
                   final proxy = _proxies[index];
-                  final sharedUrl = 'http://$_ipAddress:${proxy['remote_port']}${proxy['path']}';
+                  final sharedUrl =
+                      'http://$_ipAddress:${proxy['remote_port']}${proxy['path']}';
                   return Card(
                     child: ListTile(
                       title: Text(proxy['original_url'] ?? 'Invalid URL'),
@@ -229,7 +243,9 @@ class _MyHomePageState extends State<MyHomePage> {
                         onPressed: () {
                           Clipboard.setData(ClipboardData(text: sharedUrl));
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Copied to clipboard')),
+                            const SnackBar(
+                              content: Text('Copied to clipboard'),
+                            ),
                           );
                         },
                       ),

@@ -13,7 +13,6 @@ typedef _GetIPFunc = Pointer<Utf8> Function();
 typedef _StartApiServerWithPortFunc = Void Function(Int32 port);
 
 // Dart function signatures
-typedef _Start = void Function();
 typedef _ShareURL = void Function(Pointer<Utf8>);
 typedef _SetEventCallback = void Function(Pointer<NativeFunction<EventCallbackC>>);
 typedef _GetIP = Pointer<Utf8> Function();
@@ -33,8 +32,6 @@ late SendPort _eventPort;
 
 class GoBridgeLinux implements GoBridge {
   static final DynamicLibrary _lib = DynamicLibrary.open('libcore.so');
-
-  static final _Start _start = _lib.lookup<NativeFunction<_StartFunc>>('Start').asFunction<_Start>();
   static final _ShareURL _shareURL = _lib.lookup<NativeFunction<_ShareURLFunc>>('ShareURL').asFunction<_ShareURL>();
   static final _SetEventCallback _setEventCallback = _lib.lookup<NativeFunction<_SetEventCallbackFunc>>('SetEventCallback').asFunction<_SetEventCallback>();
   static final _GetIP _getIP = _lib.lookup<NativeFunction<_GetIPFunc>>('GetIP').asFunction<_GetIP>();

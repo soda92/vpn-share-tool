@@ -96,9 +96,9 @@ func StartApiServerWithPort(apiPort int) {
 	}()
 }
 
-// Start initializes the core services.
-func Start(apiPort int) {
-	StartApiServerWithPort(apiPort)
+// initializes the core services
+func StartGoBackendWithPort(port int) {
+	StartApiServerWithPort(port)
 }
 
 // ShareURL shares a URL.

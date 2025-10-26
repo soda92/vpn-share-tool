@@ -6,7 +6,6 @@ import (
 	"github.com/soda92/vpn-share-tool/core"
 	"log"
 	"sync"
-	"time"
 )
 
 // EventCallback is the type for the Dart callback function.
@@ -72,25 +71,14 @@ func init() {
 		}
 	}()
 
-
 }
 
-//export Start
-func Start(apiPort int) {
-	// The API server is now started in init() and heartbeats are sent automatically
-	// This function is still needed for gomobile bind to generate a Start() function
-	go func() {
-		if err := core.StartApiServer(apiPort); err != nil {
-			log.Printf("Failed to start API server: %v", err)
-			return
-		}
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			core.SendHeartbeat()
-		}
-	}()
+//export StartApiServerWithPort
+func StartApiServerWithPort(port int) {
+	if err := core.StartApiServer(port); err != nil {
+		log.Printf("Failed to start API server: %v", err)
+		return
+	}
 }
 
 //export ShareURL
