@@ -3,10 +3,12 @@ package main
 import (
 	"C"
 	"encoding/json"
-	"github.com/soda92/vpn-share-tool/core"
 	"log"
 	"sync"
+
+	"github.com/soda92/vpn-share-tool/core"
 )
+import "fmt"
 
 // EventCallback is the type for the Dart callback function.
 type EventCallback func(eventJSON string)
@@ -75,10 +77,21 @@ func init() {
 
 //export StartApiServerWithPort
 func StartApiServerWithPort(port int) {
-	if err := core.StartApiServer(port); err != nil {
-		log.Printf("Failed to start API server: %v", err)
-		return
-	}
+	go func() {
+		if err := core.StartApiServer(port); err != nil {
+			log.Printf("Failed to start API server: %v", err)
+			eventCallbackMu.Lock()
+			if eventCallback != nil {
+				event := struct {
+					Type    string `json:"type"`
+					Message string `json:"message"`
+				}{"error", fmt.Sprintf("Failed to start API server: %v", err)}
+				data, _ := json.Marshal(event)
+				eventCallback(string(data))
+			}
+			eventCallbackMu.Unlock()
+		}
+	}()
 }
 
 //export ShareURL

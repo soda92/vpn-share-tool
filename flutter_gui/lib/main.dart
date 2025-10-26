@@ -59,7 +59,7 @@ class _MyHomePageState extends State<MyHomePage> {
       _bridge = GoBridgeAndroid();
     }
 
-    _apiPort = await _findAvailablePort(20000); // Start searching from 20000
+    _apiPort = await _findAvailablePort(); // 不再需要起始端口参数
     print("Found available port: $_apiPort");
 
     _startListeningEvents(); // Listen to stream for both platforms
@@ -68,19 +68,16 @@ class _MyHomePageState extends State<MyHomePage> {
     ); // Start the core Go backend with the found portX
   }
 
-  Future<int> _findAvailablePort(int startPort) async {
-    for (int port = startPort; port < startPort + 100; port++) {
-      try {
-        final socket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
-        await socket.close();
-        return port;
-      } catch (e) {
-        // Port is not available, try next one
-      }
+  Future<int> _findAvailablePort() async {
+    try {
+      // 绑定到端口 0，让操作系统选择一个可用的临时端口。
+      final socket = await ServerSocket.bind(InternetAddress.anyIPv4, 0);
+      final port = socket.port;
+      await socket.close();
+      return port;
+    } catch (e) {
+      throw Exception("无法找到可用端口: $e");
     }
-    throw Exception(
-      "No available port found in range $startPort-${startPort + 99}",
-    );
   }
 
   Future<void> _initializeServiceState() async {
