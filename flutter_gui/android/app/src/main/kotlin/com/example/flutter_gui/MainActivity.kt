@@ -1,25 +1,27 @@
 package com.example.flutter_gui
 
+import android.app.ActivityManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
-import android.content.Intent
-import androidx.core.content.ContextCompat // Import ContextCompat
-
-import android.os.Build
-import android.content.pm.PackageManager
-import androidx.core.app.ActivityCompat
-import android.app.ActivityManager
-import android.content.Context
+import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
     private val METHOD_CHANNEL = "vpn_share_tool/go_bridge"
     private val EVENT_CHANNEL = "vpn_share_tool/go_bridge_events"
     private lateinit var methodChannel: MethodChannel
     private lateinit var eventChannel: EventChannel
+    private var finishReceiver: BroadcastReceiver? = null
 
     companion object {
         var eventSink: EventChannel.EventSink? = null
@@ -30,6 +32,8 @@ class MainActivity: FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
         eventChannel = EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
+
+        setupFinishReceiver()
 
         eventChannel.setStreamHandler(object : EventChannel.StreamHandler {
             override fun onListen(arguments: Any?, sink: EventChannel.EventSink) {
@@ -69,8 +73,8 @@ class MainActivity: FlutterActivity() {
                     val serviceIntent = Intent(this, VpnShareService::class.java).apply {
                         action = VpnShareService.ACTION_EXIT_APP
                     }
-                    stopService(serviceIntent)
-                    android.util.Log.d("MainActivity", "Sent intent to stop VpnShareService.")
+                    startService(serviceIntent) // Use startService to trigger onStartCommand in the service
+                    android.util.Log.d("MainActivity", "Sent intent to VpnShareService to trigger exit.")
                     result.success(null)
                 }
                 "shareUrl" -> {
@@ -136,6 +140,30 @@ class MainActivity: FlutterActivity() {
                     result.notImplemented()
                 }
             }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        finishReceiver?.let {
+            unregisterReceiver(it)
+            finishReceiver = null
+        }
+    }
+
+    private fun setupFinishReceiver() {
+        finishReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == VpnShareService.ACTION_FINISH_MAIN_ACTIVITY) {
+                    finish()
+                }
+            }
+        }
+        val intentFilter = IntentFilter(VpnShareService.ACTION_FINISH_MAIN_ACTIVITY)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(finishReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(finishReceiver, intentFilter)
         }
     }
 
