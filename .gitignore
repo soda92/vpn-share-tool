@@ -4,6 +4,7 @@
 *.apk
 *.jar
 *.aar
+*.txt
 /dist
 
 *_log_*
