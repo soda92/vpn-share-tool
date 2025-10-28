@@ -8,15 +8,8 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
-import mobile.Mobile
-import mobile.EventCallback
-import com.example.flutter_gui.MainActivity
-import com.example.flutter_gui.R // Import your app's R class
-
-import android.os.Process
+import com.example.flutter_gui.R // Import your app'''s R class
 
 class VpnShareService : Service() {
 
@@ -24,28 +17,28 @@ class VpnShareService : Service() {
     private val NOTIFICATION_ID = 101
     companion object {
         const val ACTION_EXIT_APP = "EXIT_APP"
+        const val ACTION_FINISH_MAIN_ACTIVITY = "com.example.flutter_gui.FINISH_MAIN_ACTIVITY"
     }
 
     override fun onCreate() {
         super.onCreate()
         Log.d("VpnShareService", "Service onCreate")
-        Log.d("VpnShareService", "Calling createNotificationChannel...")
         createNotificationChannel()
         val notification = createNotification()
-        Log.d("VpnShareService", "Calling startForeground with NOTIFICATION_ID: $NOTIFICATION_ID")
         startForeground(NOTIFICATION_ID, notification)
-
-        // The Go backend is now started independently.
-        // This service only manages the foreground state and notification.
-
+        Log.d("VpnShareService", "Foreground service started.")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("VpnShareService", "Service onStartCommand")
+        Log.d("VpnShareService", "Service onStartCommand with action: ${intent?.action}")
         if (intent?.action == ACTION_EXIT_APP) {
-            Log.d("VpnShareService", "Received exit app intent. Stopping self and exiting app.")
+            Log.d("VpnShareService", "Received exit app intent. Telling MainActivity to finish and stopping service.")
+
+            // Broadcast intent to tell MainActivity to finish
+            val finishIntent = Intent(ACTION_FINISH_MAIN_ACTIVITY)
+            sendBroadcast(finishIntent)
+
             stopSelf()
-            Process.killProcess(Process.myPid()) // Exit the entire app process
             return START_NOT_STICKY
         }
         // If the system kills the service, it will restart it.
@@ -55,8 +48,6 @@ class VpnShareService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d("VpnShareService", "Service onDestroy")
-        // Stop Go backend if necessary
-        // Mobile.shutdown() // Assuming a shutdown method exists
         stopForeground(true)
     }
 
@@ -65,7 +56,6 @@ class VpnShareService : Service() {
     }
 
     private fun createNotificationChannel() {
-        Log.d("VpnShareService", "createNotificationChannel called.")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val serviceChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
@@ -75,12 +65,20 @@ class VpnShareService : Service() {
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
             Log.d("VpnShareService", "Notification channel created.")
-        } else {
-            Log.d("VpnShareService", "Notification channel not created (SDK < O).")
         }
     }
 
     private fun createNotification(): Notification {
+        // Intent to open the app when notification is tapped
+        val notificationIntent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            notificationIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Intent for the Exit button
         val exitAppIntent = Intent(this, VpnShareService::class.java).apply {
             action = ACTION_EXIT_APP
         }
@@ -94,8 +92,9 @@ class VpnShareService : Service() {
         return Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("VPN Share Tool")
             .setContentText("Sharing VPN connection in background...")
-            .setSmallIcon(R.mipmap.ic_launcher) // Use app's launcher icon
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Exit", pendingExitAppIntent) // Add an exit button
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentIntent(pendingIntent) // Open app on tap
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Exit", pendingExitAppIntent)
             .build()
     }
 }

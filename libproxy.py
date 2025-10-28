@@ -8,36 +8,40 @@ import urllib.parse
 import urllib.error
 
 # Address of the central discovery server
-DISCOVERY_SERVER_HOST = "192.168.0.81"
+DISCOVERY_SERVER_HOSTS = ["192.168.0.81", "192.168.1.81"]
 DISCOVERY_SERVER_PORT = 45679
 
 
 def get_instance_list(timeout: int = 5):
     """Gets the list of active vpn-share-tool instances from the central server."""
-    try:
-        with socket.create_connection(
-            (DISCOVERY_SERVER_HOST, DISCOVERY_SERVER_PORT), timeout=timeout
-        ) as sock:
-            sock.sendall(b"LIST\n")
-            response = sock.makefile().readline()
-            if not response:
-                logging.error("Did not receive a response from discovery server.")
-                return []
-            instances_raw = json.loads(response)
-            # The server gives us a list of objects with an "address" field
-            return [item["address"] for item in instances_raw]
-    except socket.timeout:
-        logging.error(f"Timeout connecting to discovery server at {DISCOVERY_SERVER_HOST}:{DISCOVERY_SERVER_PORT}")
-        return []
-    except ConnectionRefusedError:
-        logging.error(f"Connection refused by discovery server at {DISCOVERY_SERVER_HOST}:{DISCOVERY_SERVER_PORT}")
-        return []
-    except json.JSONDecodeError as e:
-        logging.error(f"Failed to decode JSON response from discovery server: {e}")
-        return []
-    except Exception as e:
-        logging.error(f"An unexpected error occurred while getting instance list: {e}")
-        return []
+    for host in DISCOVERY_SERVER_HOSTS:
+        try:
+            with socket.create_connection(
+                (host, DISCOVERY_SERVER_PORT), timeout=timeout
+            ) as sock:
+                sock.sendall(b"LIST\n")
+                response = sock.makefile().readline()
+                if not response:
+                    logging.error(f"Did not receive a response from discovery server at {host}")
+                    continue
+                instances_raw = json.loads(response)
+                # The server gives us a list of objects with an "address" field
+                return [item["address"] for item in instances_raw]
+        except socket.timeout:
+            logging.error(f"Timeout connecting to discovery server at {host}:{DISCOVERY_SERVER_PORT}")
+            continue
+        except ConnectionRefusedError:
+            logging.error(f"Connection refused by discovery server at {host}:{DISCOVERY_SERVER_PORT}")
+            continue
+        except json.JSONDecodeError as e:
+            logging.error(f"Failed to decode JSON response from discovery server at {host}: {e}")
+            continue
+        except Exception as e:
+            logging.error(f"An unexpected error occurred while getting instance list from {host}: {e}")
+            continue
+    
+    logging.error("Failed to connect to any discovery server.")
+    return []
 
 
 def is_url_reachable_locally(target_url, timeout=3):
