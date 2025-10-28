@@ -18,10 +18,11 @@ type sharedURLInfo struct {
 
 const (
 	discoverySrvPort = "45679"
-	SERVER_IP        = "192.168.0.81"
 )
 
-
+var (
+	SERVER_IPs = []string{"192.168.0.81", "192.168.1.81"}
+)
 
 // servicesHandler provides the list of currently shared proxies as a JSON response.
 func servicesHandler(w http.ResponseWriter, r *http.Request) {
@@ -54,10 +55,21 @@ var MyIP string
 func registerWithDiscoveryServer(apiPort int) {
 	// This loop ensures we keep trying to register if the connection fails
 	for {
-		serverAddr := net.JoinHostPort(SERVER_IP, discoverySrvPort)
-		conn, err := net.Dial("tcp", serverAddr)
+		var conn net.Conn
+		var err error
+		var serverAddr string
+		for _, ip := range SERVER_IPs {
+			serverAddr = net.JoinHostPort(ip, discoverySrvPort)
+			conn, err = net.DialTimeout("tcp", serverAddr, 5*time.Second)
+			if err == nil {
+				log.Printf("Connected to discovery server at %s", serverAddr)
+				break
+			}
+			log.Printf("Failed to connect to discovery server at %s: %v", serverAddr, err)
+		}
+
 		if err != nil {
-			log.Printf("Failed to connect to discovery server at %s: %v. Retrying in 1 minute.", serverAddr, err)
+			log.Printf("Failed to connect to any discovery server. Retrying in 1 minute.")
 			time.Sleep(1 * time.Minute)
 			continue
 		}
