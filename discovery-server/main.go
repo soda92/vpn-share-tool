@@ -127,15 +127,16 @@ func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Error checking reachability on %s: %v", instance.Address, err)
 			continue
 		}
-		defer resp.Body.Close()
 
 		var canReachResp struct {
 			Reachable bool `json:"reachable"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&canReachResp); err != nil {
 			log.Printf("Error decoding reachability response from %s: %v", instance.Address, err)
+			resp.Body.Close()
 			continue
 		}
+		resp.Body.Close()
 
 		if canReachResp.Reachable {
 			// This instance can reach the URL, so create the proxy here
@@ -146,7 +147,6 @@ func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 				log.Printf("Error creating proxy on %s: %v", instance.Address, err)
 				continue
 			}
-			defer resp.Body.Close()
 
 			if resp.StatusCode == http.StatusCreated {
 				var proxyResp struct {
@@ -155,11 +155,15 @@ func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 				}
 				if err := json.NewDecoder(resp.Body).Decode(&proxyResp); err != nil {
 					log.Printf("Error decoding proxy response from %s: %v", instance.Address, err)
+					resp.Body.Close()
 					continue
 				}
+				resp.Body.Close()
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(proxyResp)
 				return
+			} else {
+				resp.Body.Close()
 			}
 		}
 	}
