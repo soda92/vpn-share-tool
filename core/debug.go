@@ -11,12 +11,23 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 //go:embed frontend/dist
 var debugFrontend embed.FS
 
 const maxCapturedRequests = 1000
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // Allow all connections
+	},
+}
+
+var wsClients = make(map[*websocket.Conn]bool)
+var wsMutex = &sync.Mutex{}
 
 // CapturedRequest holds details of an intercepted HTTP request and its response.
 type CapturedRequest struct {
@@ -66,8 +77,35 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 	// Add debug API endpoints
 	mux.HandleFunc("/debug/requests", handleDebugRequests)
 	mux.HandleFunc("/debug/clear", handleClearRequests)
+	mux.HandleFunc("/debug/ws", handleDebugWS)
 
 	log.Println("Debug UI registered at /debug/")
+}
+
+func handleDebugWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("Failed to upgrade to websocket: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	wsMutex.Lock()
+	wsClients[conn] = true
+	wsMutex.Unlock()
+
+	// Keep the connection open
+	for {
+		_, _, err := conn.ReadMessage()
+		if err != nil {
+			log.Printf("WebSocket read error: %v", err)
+			break
+		}
+	}
+
+	wsMutex.Lock()
+	delete(wsClients, conn)
+	wsMutex.Unlock()
 }
 
 // CaptureRequest captures the request and response for debugging.
@@ -82,17 +120,28 @@ func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []
 	}
 
 	cr := &CapturedRequest{
-		ID:              nextRequestID,
-		Timestamp:       time.Now(),
-		Method:          req.Method,
-		URL:             req.URL.String(),
+		ID:           nextRequestID,
+		Timestamp:    time.Now(),
+		Method:       req.Method,
+		URL:          req.URL.String(),
 		RequestHeaders:  req.Header,
-		RequestBody:     string(reqBody),
-		ResponseStatus:  resp.StatusCode,
+		RequestBody:  string(reqBody),
+		ResponseStatus: resp.StatusCode,
 		ResponseHeaders: resp.Header,
-		ResponseBody:    string(respBody),
+		ResponseBody: string(respBody),
 	}
 	capturedRequests = append(capturedRequests, cr)
+
+	// Broadcast the new request to all WebSocket clients
+	wsMutex.Lock()
+	defer wsMutex.Unlock()
+	for client := range wsClients {
+		if err := client.WriteJSON(cr); err != nil {
+			log.Printf("Error writing to websocket client: %v", err)
+			client.Close()
+			delete(wsClients, client)
+		}
+	}
 }
 
 func handleDebugRequests(w http.ResponseWriter, r *http.Request) {

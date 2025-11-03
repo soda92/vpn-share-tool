@@ -215,8 +215,25 @@ const compareWithSelected = () => {
 
 onMounted(() => {
   fetchRequests();
-  setInterval(fetchRequests, 2000);
   document.title = "Debug View";
+
+  const ws = new WebSocket(`ws://${window.location.host}/debug/ws`);
+
+  ws.onmessage = (event) => {
+    const newRequest: CapturedRequest = JSON.parse(event.data);
+    requests.value.unshift(newRequest); // Add new request to the beginning
+    if (requests.value.length > 1000) {
+      requests.value.pop(); // Keep only the latest 1000 requests
+    }
+  };
+
+  ws.onclose = () => {
+    console.log('WebSocket connection closed');
+  };
+
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
+  };
 });
 </script>
 
