@@ -43,9 +43,10 @@ type CapturedRequest struct {
 }
 
 var (
-	capturedRequests     []*CapturedRequest
+	capturedRequests     [maxCapturedRequests]*CapturedRequest
 	capturedRequestsLock sync.RWMutex
 	nextRequestID        int64
+	captureHead          int
 )
 
 // RegisterDebugRoutes registers the debug UI and API routes.
@@ -114,10 +115,6 @@ func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []
 	defer capturedRequestsLock.Unlock()
 
 	nextRequestID++
-	if len(capturedRequests) >= maxCapturedRequests {
-		// Remove the oldest request if the limit is reached
-		capturedRequests = capturedRequests[1:]
-	}
 
 	cr := &CapturedRequest{
 		ID:           nextRequestID,
@@ -130,7 +127,9 @@ func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []
 		ResponseHeaders: resp.Header,
 		ResponseBody: string(respBody),
 	}
-	capturedRequests = append(capturedRequests, cr)
+
+	capturedRequests[captureHead] = cr
+	captureHead = (captureHead + 1) % maxCapturedRequests
 
 	// Broadcast the new request to all WebSocket clients
 	wsMutex.Lock()
@@ -159,7 +158,7 @@ func handleDebugRequests(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, req := range capturedRequests {
-			if req.ID == id {
+			if req != nil && req.ID == id {
 				w.Header().Set("Content-Type", "application/json")
 				if err := json.NewEncoder(w).Encode(req); err != nil {
 					log.Printf("Failed to encode captured request to JSON: %v", err)
@@ -173,9 +172,17 @@ func handleDebugRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If no ID, return all requests
+	// If no ID, return all requests in newest-first order
+	orderedRequests := make([]*CapturedRequest, 0, maxCapturedRequests)
+	for i := 0; i < maxCapturedRequests; i++ {
+		idx := (captureHead - 1 - i + maxCapturedRequests) % maxCapturedRequests
+		if capturedRequests[idx] != nil {
+			orderedRequests = append(orderedRequests, capturedRequests[idx])
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(capturedRequests); err != nil {
+	if err := json.NewEncoder(w).Encode(orderedRequests); err != nil {
 		log.Printf("Failed to encode captured requests to JSON: %v", err)
 		http.Error(w, "Failed to encode captured requests", http.StatusInternalServerError)
 	}
@@ -190,7 +197,10 @@ func handleClearRequests(w http.ResponseWriter, r *http.Request) {
 	capturedRequestsLock.Lock()
 	defer capturedRequestsLock.Unlock()
 
-	capturedRequests = []*CapturedRequest{}
+	for i := range capturedRequests {
+		capturedRequests[i] = nil
+	}
+	captureHead = 0
 	nextRequestID = 0
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("History cleared"))
