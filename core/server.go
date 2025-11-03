@@ -214,6 +214,9 @@ func StartApiServer(apiPort int) error {
 	mux.HandleFunc("/services", servicesHandler)
 	mux.HandleFunc("/proxies", addProxyHandler)
 	mux.HandleFunc("/can-reach", canReachHandler)
+
+	RegisterDebugRoutes(mux)
+
 	apiServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", apiPort),
 		Handler: mux,

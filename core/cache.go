@@ -23,65 +23,75 @@ type CachingTransport struct {
 
 // RoundTrip implements the http.RoundTripper interface.
 func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// We only cache GET requests.
-	if req.Method != http.MethodGet {
-		return t.Transport.RoundTrip(req)
+	// Read the request body for capturing
+	var reqBody []byte
+	if req.Body != nil {
+		var err error
+		reqBody, err = io.ReadAll(req.Body)
+		if err != nil {
+			log.Printf("Error reading request body: %v", err)
+			return nil, err
+		}
+		req.Body = io.NopCloser(bytes.NewBuffer(reqBody)) // Restore body for the actual request
 	}
 
-	// Don't cache AJAX requests.
-	if req.Header.Get("X-Requested-With") == "XMLHttpRequest" {
-		return t.Transport.RoundTrip(req)
-	}
-
-	// Check if the file extension is cacheable.
+	// We only cache GET requests for static assets.
 	ext := filepath.Ext(req.URL.Path)
 	isCacheable := false
-	switch ext {
-	case ".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".ico":
-		isCacheable = true
-	}
-
-	if !isCacheable {
-		return t.Transport.RoundTrip(req)
-	}
-
-	// If the item is in the cache, return it.
-	if entry, ok := t.Cache.Load(req.URL.String()); ok {
-		log.Printf("Cache HIT for: %s", req.URL.String())
-		cached := entry.(cacheEntry)
-		// Create a new response from the cached data.
-		resp := &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     cached.Header,
-			Body:       io.NopCloser(bytes.NewReader(cached.Body)),
-			Request:    req,
+	if req.Method == http.MethodGet {
+		switch ext {
+		case ".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".ico":
+			isCacheable = true
 		}
-		return resp, nil
 	}
 
-	log.Printf("Cache MISS for: %s", req.URL.String())
-	// If not in the cache, make the request.
+	// If cacheable, check the cache first.
+	if isCacheable {
+		if entry, ok := t.Cache.Load(req.URL.String()); ok {
+			log.Printf("Cache HIT for: %s", req.URL.String())
+			cached := entry.(cacheEntry)
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     cached.Header,
+				Body:       io.NopCloser(bytes.NewReader(cached.Body)),
+				Request:    req,
+			}
+			// Capture the cached response
+			CaptureRequest(req, resp, reqBody, cached.Body)
+			return resp, nil
+		}
+		log.Printf("Cache MISS for: %s", req.URL.String())
+	}
+
+	// If not cacheable or not in cache, make the request.
 	resp, err := t.Transport.RoundTrip(req)
 	if err != nil {
 		return nil, err
 	}
 
-	// Read the response body.
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	// Read the response body for capturing and caching
+	var respBody []byte
+	if resp.Body != nil {
+		var err error
+		respBody, err = io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("Error reading response body: %v", err)
+			return nil, err
+		}
+		resp.Body = io.NopCloser(bytes.NewBuffer(respBody)) // Restore body for the client
 	}
-	resp.Body.Close() // We've read it, so close it.
 
-	// Create a new body for the original response.
-	resp.Body = io.NopCloser(bytes.NewReader(body))
+	// Capture the request and response
+	CaptureRequest(req, resp, reqBody, respBody)
 
-	// Cache the response.
-	entry := cacheEntry{
-		Header: resp.Header,
-		Body:   body,
+	// If cacheable, store the response in the cache.
+	if isCacheable && resp.StatusCode == http.StatusOK {
+		entry := cacheEntry{
+			Header: resp.Header,
+			Body:   respBody,
+		}
+		t.Cache.Store(req.URL.String(), entry)
 	}
-	t.Cache.Store(req.URL.String(), entry)
 
 	return resp, nil
 }
