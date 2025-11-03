@@ -9,7 +9,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-for="(item, index) in filteredDecodedData" :key="index">
+        <tr v-for="item in filteredDecodedData" :key="item.id">
           <td>{{ item.key }}</td>
           <td>{{ item.value }}</td>
         </tr>
@@ -34,8 +34,10 @@ const decodedData = computed(() => {
   try {
     const searchParams = new URLSearchParams(props.encodedData);
     const data = [];
+    let index = 0;
     for (const [key, value] of searchParams.entries()) {
-      data.push({ key, value });
+      data.push({ id: `${key}-${index}`, key, value });
+      index++;
     }
     return data;
   } catch (error) {
