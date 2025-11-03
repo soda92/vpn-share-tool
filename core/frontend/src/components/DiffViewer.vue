@@ -23,13 +23,13 @@
 import { computed } from 'vue';
 
 const props = defineProps<{
-  data1: Record<string, any>;
-  data2: Record<string, any>;
+  data1: Record<string, unknown>;
+  data2: Record<string, unknown>;
 }>();
 
 const diff = computed(() => {
   const allKeys = new Set([...Object.keys(props.data1), ...Object.keys(props.data2)]);
-  const result: { key: string; value1: any; value2: any; type: string }[] = [];
+  const result: { key: string; value1: unknown; value2: unknown; type: string }[] = [];
 
   for (const key of allKeys) {
     const value1 = props.data1[key];
