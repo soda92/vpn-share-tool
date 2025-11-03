@@ -68,7 +68,8 @@
           <pre>{{ selectedRequest.response_headers }}</pre>
 
           <h3>Response Body</h3>
-          <pre>{{ selectedRequest.response_body }}</pre>
+          <pre v-if="isJsonResponse">{{ formattedResponseBody }}</pre>
+          <pre v-else>{{ selectedRequest.response_body }}</pre>
         </div>
         <div v-else class="no-selection">
           Select a request to see details.
@@ -118,6 +119,25 @@ const isWwwFormUrlEncoded = computed(() => {
   if (!selectedRequest.value) return false;
   const contentType = selectedRequest.value.request_headers['Content-Type']?.[0] || '';
   return contentType.includes('application/x-www-form-urlencoded');
+});
+
+const isJsonResponse = computed(() => {
+  if (!selectedRequest.value) return false;
+  const contentType = selectedRequest.value.response_headers['Content-Type']?.[0] || '';
+  return contentType.includes('application/json');
+});
+
+const formattedResponseBody = computed(() => {
+  if (selectedRequest.value && isJsonResponse.value) {
+    try {
+      const jsonObj = JSON.parse(selectedRequest.value.response_body);
+      return JSON.stringify(jsonObj, null, 2);
+    } catch {
+      // Not a valid JSON, return as is
+      return selectedRequest.value.response_body;
+    }
+  }
+  return selectedRequest.value?.response_body;
 });
 
 const fetchRequests = async () => {
