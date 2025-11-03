@@ -46,10 +46,9 @@ const req2Collapsed = ref(false);
 
 const fetchRequest = async (id: number): Promise<CapturedRequest | null> => {
   try {
-    const response = await fetch(`/debug/requests`);
+    const response = await fetch(`/debug/requests/${id}`);
     if (response.ok) {
-      const requests = await response.json();
-      return requests.find((r: CapturedRequest) => r.id === id) || null;
+      return await response.json();
     } else {
       console.error(`Failed to fetch request ${id}`);
       return null;
@@ -104,6 +103,8 @@ onMounted(async () => {
   if (req2Id) {
     req2.value = await fetchRequest(req2Id);
   }
+
+  document.title = `Compare Requests ${req1Id} vs ${req2Id}`;
 });
 </script>
 

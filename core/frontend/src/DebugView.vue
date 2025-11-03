@@ -216,6 +216,7 @@ const compareWithSelected = () => {
 onMounted(() => {
   fetchRequests();
   setInterval(fetchRequests, 2000);
+  document.title = "Debug View";
 });
 </script>
 

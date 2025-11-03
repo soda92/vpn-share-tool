@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -50,7 +51,9 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 		if !strings.Contains(r.URL.Path, ".") {
 			index, err := debugFS.Open("index.html")
 			if err != nil {
-				log.Fatal(err)
+				log.Printf("Failed to open index.html from embedded fs: %v", err)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
 			}
 			w.Header().Set("Content-Type", "text/html")
 			io.Copy(w, index)
@@ -96,6 +99,32 @@ func handleDebugRequests(w http.ResponseWriter, r *http.Request) {
 	capturedRequestsLock.RLock()
 	defer capturedRequestsLock.RUnlock()
 
+	// Check if an ID is present in the URL path, e.g., /debug/requests/123
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) > 3 && parts[3] != "" {
+		idStr := parts[3]
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid request ID", http.StatusBadRequest)
+			return
+		}
+
+		for _, req := range capturedRequests {
+			if req.ID == id {
+				w.Header().Set("Content-Type", "application/json")
+				if err := json.NewEncoder(w).Encode(req); err != nil {
+					log.Printf("Failed to encode captured request to JSON: %v", err)
+					http.Error(w, "Failed to encode captured request", http.StatusInternalServerError)
+				}
+				return
+			}
+		}
+
+		http.NotFound(w, r)
+		return
+	}
+
+	// If no ID, return all requests
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(capturedRequests); err != nil {
 		log.Printf("Failed to encode captured requests to JSON: %v", err)
