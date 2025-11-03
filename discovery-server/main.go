@@ -2,17 +2,25 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 )
 
+//go:embed index.html
+var indexPage []byte
+
 const (
-	listenPort = "45679"
+	listenPort     = "45679"
+	httpListenPort = "8080"
 )
 
 type Instance struct {
@@ -28,10 +36,18 @@ var (
 )
 
 func main() {
-	log.Printf("Starting discovery server on port %s", listenPort)
+	// Start TCP server for vpn-share-tool instances
+	go startTCPServer()
+
+	// Start HTTP server for the web UI
+	startHTTPServer()
+}
+
+func startTCPServer() {
+	log.Printf("Starting discovery TCP server on port %s", listenPort)
 	listener, err := net.Listen("tcp", ":"+listenPort)
 	if err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		log.Fatalf("Failed to start TCP server: %v", err)
 	}
 	defer listener.Close()
 
@@ -46,6 +62,99 @@ func main() {
 		}
 		go handleConnection(conn)
 	}
+}
+
+func startHTTPServer() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handleIndex)
+	mux.HandleFunc("/create-proxy", handleCreateProxy)
+	log.Printf("Starting discovery HTTP server on port %s", httpListenPort)
+	if err := http.ListenAndServe(":"+httpListenPort, mux); err != nil {
+		log.Fatalf("Failed to start HTTP server: %v", err)
+	}
+}
+
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(indexPage)
+}
+
+func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		URL string `json:"url"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.URL == "" {
+		http.Error(w, "URL is required", http.StatusBadRequest)
+		return
+	}
+
+	mutex.Lock()
+	activeInstances := make([]Instance, 0, len(instances))
+	for _, instance := range instances {
+		activeInstances = append(activeInstances, instance)
+	}
+	mutex.Unlock()
+
+	for _, instance := range activeInstances {
+		// Check if the instance can reach the URL
+		canReachURL := fmt.Sprintf("http://%s/can-reach?url=%s", instance.Address, url.QueryEscape(req.URL))
+		resp, err := http.Get(canReachURL)
+		if err != nil {
+			log.Printf("Error checking reachability on %s: %v", instance.Address, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		var canReachResp struct {
+			Reachable bool `json:"reachable"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&canReachResp); err != nil {
+			log.Printf("Error decoding reachability response from %s: %v", instance.Address, err)
+			continue
+		}
+
+		if canReachResp.Reachable {
+			// This instance can reach the URL, so create the proxy here
+			createProxyURL := fmt.Sprintf("http://%s/proxies", instance.Address)
+			proxyReqBody, _ := json.Marshal(map[string]string{"url": req.URL})
+			resp, err := http.Post(createProxyURL, "application/json", bytes.NewBuffer(proxyReqBody))
+			if err != nil {
+				log.Printf("Error creating proxy on %s: %v", instance.Address, err)
+				continue
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode == http.StatusCreated {
+				var proxyResp struct {
+					OriginalURL string `json:"original_url"`
+					SharedURL   string `json:"shared_url"`
+				}
+				if err := json.NewDecoder(resp.Body).Decode(&proxyResp); err != nil {
+					log.Printf("Error decoding proxy response from %s: %v", instance.Address, err)
+					continue
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(proxyResp)
+				return
+			}
+		}
+	}
+
+	// If no instance can reach the URL
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	json.NewEncoder(w).Encode(map[string]string{"error": "No available instance can reach the target URL."})
 }
 
 func handleConnection(conn net.Conn) {
