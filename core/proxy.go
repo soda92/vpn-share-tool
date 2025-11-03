@@ -18,11 +18,11 @@ const (
 )
 
 type SharedProxy struct {
-	OriginalURL string `json:"original_url"`
-	RemotePort  int    `json:"remote_port"`
-	Path        string `json:"path"`
+	OriginalURL string                 `json:"original_url"`
+	RemotePort  int                    `json:"remote_port"`
+	Path        string                 `json:"path"`
 	Handler     *httputil.ReverseProxy `json:"-"`
-	Server      *http.Server `json:"-"`
+	Server      *http.Server           `json:"-"`
 }
 
 var (

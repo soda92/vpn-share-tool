@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-
-
 func IsURLReachable(targetURL string) bool {
 	client := http.Client{
 		Timeout: 3 * time.Second,

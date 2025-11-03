@@ -3,8 +3,8 @@ package core
 import (
 	"embed"
 	"encoding/json"
-	"io/fs"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"strconv"
@@ -20,15 +20,15 @@ const maxCapturedRequests = 1000
 
 // CapturedRequest holds details of an intercepted HTTP request and its response.
 type CapturedRequest struct {
-	ID           int64             `json:"id"`
-	Timestamp    time.Time         `json:"timestamp"`
-	Method       string            `json:"method"`
-	URL          string            `json:"url"`
-	RequestHeaders  http.Header       `json:"request_headers"`
-	RequestBody  string            `json:"request_body"`
-	ResponseStatus int               `json:"response_status"`
-	ResponseHeaders http.Header       `json:"response_headers"`
-	ResponseBody string            `json:"response_body"`
+	ID              int64       `json:"id"`
+	Timestamp       time.Time   `json:"timestamp"`
+	Method          string      `json:"method"`
+	URL             string      `json:"url"`
+	RequestHeaders  http.Header `json:"request_headers"`
+	RequestBody     string      `json:"request_body"`
+	ResponseStatus  int         `json:"response_status"`
+	ResponseHeaders http.Header `json:"response_headers"`
+	ResponseBody    string      `json:"response_body"`
 }
 
 var (
@@ -82,15 +82,15 @@ func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []
 	}
 
 	cr := &CapturedRequest{
-		ID:           nextRequestID,
-		Timestamp:    time.Now(),
-		Method:       req.Method,
-		URL:          req.URL.String(),
+		ID:              nextRequestID,
+		Timestamp:       time.Now(),
+		Method:          req.Method,
+		URL:             req.URL.String(),
 		RequestHeaders:  req.Header,
-		RequestBody:  string(reqBody),
-		ResponseStatus: resp.StatusCode,
+		RequestBody:     string(reqBody),
+		ResponseStatus:  resp.StatusCode,
 		ResponseHeaders: resp.Header,
-		ResponseBody: string(respBody),
+		ResponseBody:    string(respBody),
 	}
 	capturedRequests = append(capturedRequests, cr)
 }
