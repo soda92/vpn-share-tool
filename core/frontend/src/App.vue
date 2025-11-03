@@ -1,24 +1,25 @@
-<!--
-- Copyright (c) 2024-present, pull-vert-contributors.
--
-- This source code is licensed under the MIT license found in the
-- LICENSE file in the root directory of this source tree.
--->
-
 <template>
   <div id="app">
     <div class="main-layout">
       <div class="request-list-pane">
         <div class="request-list-header">
           <h2>Requests</h2>
-          <button @click="clearHistory">Clear</button>
+          <div class="filter-controls">
+            <input type="text" v-model="searchQuery" placeholder="Search URL..." />
+            <select v-model="methodFilter">
+              <option value="ALL">All</option>
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+            </select>
+            <button @click="clearHistory">Clear</button>
+          </div>
         </div>
-        <div v-if="requests.length === 0" class="no-requests">
-          No requests captured yet.
+        <div v-if="filteredRequests.length === 0" class="no-requests">
+          No requests match the filter.
         </div>
         <ul v-else class="request-list">
           <li
-            v-for="request in requests"
+            v-for="request in filteredRequests"
             :key="request.id"
             @click="selectRequest(request)"
             :class="{ selected: selectedRequest && selectedRequest.id === request.id }"
@@ -46,7 +47,11 @@
           <pre>{{ selectedRequest.request_headers }}</pre>
 
           <h3>Request Body</h3>
-          <pre>{{ selectedRequest.request_body }}</pre>
+          <UrlDecoder
+            v-if="isWwwFormUrlEncoded"
+            :encodedData="selectedRequest.request_body"
+          />
+          <pre v-else>{{ selectedRequest.request_body }}</pre>
 
           <h3>Response Headers</h3>
           <pre>{{ selectedRequest.response_headers }}</pre>
@@ -63,7 +68,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
+import UrlDecoder from './components/UrlDecoder.vue';
 
 interface CapturedRequest {
   id: number;
@@ -79,6 +85,22 @@ interface CapturedRequest {
 
 const requests = ref<CapturedRequest[]>([]);
 const selectedRequest = ref<CapturedRequest | null>(null);
+const searchQuery = ref('');
+const methodFilter = ref('ALL');
+
+const filteredRequests = computed(() => {
+  return requests.value.filter(req => {
+    const methodMatch = methodFilter.value === 'ALL' || req.method === methodFilter.value;
+    const searchMatch = req.url.toLowerCase().includes(searchQuery.value.toLowerCase());
+    return methodMatch && searchMatch;
+  });
+});
+
+const isWwwFormUrlEncoded = computed(() => {
+  if (!selectedRequest.value) return false;
+  const contentType = selectedRequest.value.request_headers['Content-Type']?.[0] || '';
+  return contentType.includes('application/x-www-form-urlencoded');
+});
 
 const fetchRequests = async () => {
   try {
@@ -138,10 +160,15 @@ onMounted(() => {
 
 .request-list-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
   padding: 1rem;
   border-bottom: 1px solid #ccc;
+}
+
+.filter-controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
 .request-list {
