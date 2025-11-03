@@ -88,7 +88,20 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		if strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
 			debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
 			script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
-			respBody = append(respBody, []byte("<script>"+script+"</script>")...)
+			injection := []byte("<script>" + script + "</script>")
+
+			bodyStr := string(respBody)
+			if pos := strings.LastIndex(bodyStr, "</body>"); pos != -1 {
+				// Found </body>, inject before it
+				var newBody bytes.Buffer
+				newBody.Write(respBody[:pos])
+				newBody.Write(injection)
+				newBody.Write(respBody[pos:])
+				respBody = newBody.Bytes()
+			} else {
+				// Fallback: append to the end
+				respBody = append(respBody, injection...)
+			}
 		}
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody)) // Restore body for the client
 	}
