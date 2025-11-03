@@ -17,29 +17,39 @@ def get_instance_list(timeout: int = 5):
     for host in DISCOVERY_SERVER_HOSTS:
         try:
             with socket.create_connection(
-                (host, DISCOVERY_SERVER_PORT), timeout=timeout
+                (host, DISCOVERY_SERVER_PORT), timeout=1
             ) as sock:
                 sock.sendall(b"LIST\n")
                 response = sock.makefile().readline()
                 if not response:
-                    logging.error(f"Did not receive a response from discovery server at {host}")
+                    logging.error(
+                        f"Did not receive a response from discovery server at {host}"
+                    )
                     continue
                 instances_raw = json.loads(response)
                 # The server gives us a list of objects with an "address" field
                 return [item["address"] for item in instances_raw]
         except socket.timeout:
-            logging.error(f"Timeout connecting to discovery server at {host}:{DISCOVERY_SERVER_PORT}")
+            logging.error(
+                f"Timeout connecting to discovery server at {host}:{DISCOVERY_SERVER_PORT}"
+            )
             continue
         except ConnectionRefusedError:
-            logging.error(f"Connection refused by discovery server at {host}:{DISCOVERY_SERVER_PORT}")
+            logging.error(
+                f"Connection refused by discovery server at {host}:{DISCOVERY_SERVER_PORT}"
+            )
             continue
         except json.JSONDecodeError as e:
-            logging.error(f"Failed to decode JSON response from discovery server at {host}: {e}")
+            logging.error(
+                f"Failed to decode JSON response from discovery server at {host}: {e}"
+            )
             continue
         except Exception as e:
-            logging.error(f"An unexpected error occurred while getting instance list from {host}: {e}")
+            logging.error(
+                f"An unexpected error occurred while getting instance list from {host}: {e}"
+            )
             continue
-    
+
     logging.error("Failed to connect to any discovery server.")
     return []
 
@@ -171,9 +181,10 @@ def discover_proxy(target_url, timeout=10):
             logging.error(f"Failed to request proxy creation from {instance_addr}: {e}")
             continue  # Try next instance
 
-    logging.info(
+    logging.fatal(
         f"Found API server(s), but none could reach or create a proxy for {target_url}"
     )
+    sys.exit(-1)
 
 
 if __name__ == "__main__":
