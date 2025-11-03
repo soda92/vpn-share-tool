@@ -69,6 +69,7 @@ func startHTTPServer() {
 	mux.HandleFunc("/", handleIndex)
 	mux.HandleFunc("/create-proxy", handleCreateProxy)
 	mux.HandleFunc("/instances", handleGetInstances)
+	mux.HandleFunc("/all-proxies", handleGetAllProxies)
 	log.Printf("Starting discovery HTTP server on port %s", httpListenPort)
 	if err := http.ListenAndServe(":"+httpListenPort, mux); err != nil {
 		log.Fatalf("Failed to start HTTP server: %v", err)
@@ -171,6 +172,53 @@ func handleGetInstances(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(activeInstances); err != nil {
 		log.Printf("Failed to encode instances to JSON: %v", err)
 		http.Error(w, "Failed to encode instances", http.StatusInternalServerError)
+	}
+}
+
+func handleGetAllProxies(w http.ResponseWriter, r *http.Request) {
+	mutex.Lock()
+	activeInstances := make([]Instance, 0, len(instances))
+	for _, instance := range instances {
+		activeInstances = append(activeInstances, instance)
+	}
+	mutex.Unlock()
+
+	type ProxyInfo struct {
+		OriginalURL string `json:"original_url"`
+		RemotePort  int    `json:"remote_port"`
+		Path        string `json:"path"`
+		SharedURL   string `json:"shared_url"`
+	}
+
+	allProxies := make([]ProxyInfo, 0)
+
+	for _, instance := range activeInstances {
+		resp, err := http.Get(fmt.Sprintf("http://%s/active-proxies", instance.Address))
+		if err != nil {
+			log.Printf("Failed to get active proxies from %s: %v", instance.Address, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			var proxies []ProxyInfo
+			if err := json.NewDecoder(resp.Body).Decode(&proxies); err != nil {
+				log.Printf("Failed to decode active proxies from %s: %v", instance.Address, err)
+				continue
+			}
+			// Add the server address to each proxy
+			for i := range proxies {
+				host, _, _ := net.SplitHostPort(instance.Address)
+				proxies[i].SharedURL = fmt.Sprintf("http://%s:%d%s", host, proxies[i].RemotePort, proxies[i].Path)
+			}
+			allProxies = append(allProxies, proxies...)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(allProxies); err != nil {
+		log.Printf("Failed to encode all proxies to JSON: %v", err)
+		http.Error(w, "Failed to encode all proxies", http.StatusInternalServerError)
 	}
 }
 
