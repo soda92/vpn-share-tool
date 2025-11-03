@@ -68,6 +68,7 @@ func startHTTPServer() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleIndex)
 	mux.HandleFunc("/create-proxy", handleCreateProxy)
+	mux.HandleFunc("/instances", handleGetInstances)
 	log.Printf("Starting discovery HTTP server on port %s", httpListenPort)
 	if err := http.ListenAndServe(":"+httpListenPort, mux); err != nil {
 		log.Fatalf("Failed to start HTTP server: %v", err)
@@ -155,6 +156,22 @@ func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(w).Encode(map[string]string{"error": "No available instance can reach the target URL."})
+}
+
+func handleGetInstances(w http.ResponseWriter, r *http.Request) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	activeInstances := make([]Instance, 0, len(instances))
+	for _, instance := range instances {
+		activeInstances = append(activeInstances, instance)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(activeInstances); err != nil {
+		log.Printf("Failed to encode instances to JSON: %v", err)
+		http.Error(w, "Failed to encode instances", http.StatusInternalServerError)
+	}
 }
 
 func handleConnection(conn net.Conn) {

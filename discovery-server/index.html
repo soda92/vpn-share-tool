@@ -18,7 +18,7 @@
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 500px;
+            max-width: 600px;
         }
         h1 {
             font-size: 1.5rem;
@@ -59,6 +59,24 @@
         #result a {
             color: #007bff;
         }
+        .server-list {
+            margin-top: 2rem;
+        }
+        .server-list h2 {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+        }
+        .server-list ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .server-list li {
+            background-color: #f8f9fa;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+        }
     </style>
 </head>
 <body>
@@ -69,10 +87,42 @@
             <input type="submit" value="Create Proxy">
         </form>
         <div id="result" style="display: none;"></div>
+
+        <div class="server-list">
+            <h2>Active Servers</h2>
+            <ul id="server-list-ul">
+                <!-- Server list will be populated here -->
+            </ul>
+        </div>
     </div>
     <script>
         const form = document.querySelector('form');
         const resultDiv = document.getElementById('result');
+        const serverListUl = document.getElementById('server-list-ul');
+
+        const fetchServers = async () => {
+            try {
+                const response = await fetch('/instances');
+                if (response.ok) {
+                    const servers = await response.json();
+                    serverListUl.innerHTML = '';
+                    if (servers && servers.length > 0) {
+                        servers.forEach(server => {
+                            const li = document.createElement('li');
+                            li.textContent = `${server.address} (Last seen: ${new Date(server.last_seen).toLocaleString()})`;
+                            serverListUl.appendChild(li);
+                        });
+                    } else {
+                        const li = document.createElement('li');
+                        li.textContent = 'No active servers found.';
+                        serverListUl.appendChild(li);
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching servers:', err);
+            }
+        };
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const formData = new FormData(form);
@@ -87,7 +137,7 @@
                 });
                 const data = await response.json();
                 if (response.ok) {
-                    resultDiv.innerHTML = `Proxy created: <a href="${data.shared_url}" target="_blank">${data.shared_url}</a>`;
+                    resultDiv.innerHTML = `Proxy created on ${data.shared_url.split('/')[2].split(':')[0]}: <a href="${data.shared_url}" target="_blank">${data.shared_url}</a>`;
                 } else {
                     resultDiv.innerHTML = `Error: ${data.error}`;
                 }
@@ -95,6 +145,10 @@
                 resultDiv.innerHTML = 'Error creating proxy: ' + err.message;
             }
         });
+
+        // Fetch servers on page load and then every 5 seconds
+        fetchServers();
+        setInterval(fetchServers, 5000);
     </script>
 </body>
 </html>
