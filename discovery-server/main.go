@@ -3,9 +3,10 @@ package main
 import (
 	"bufio"
 	"bytes"
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -17,6 +18,9 @@ import (
 
 //go:embed index.html
 var indexPage []byte
+
+//go:embed locales
+var locales embed.FS
 
 const (
 	listenPort     = "45679"
@@ -70,6 +74,13 @@ func startHTTPServer() {
 	mux.HandleFunc("/create-proxy", handleCreateProxy)
 	mux.HandleFunc("/instances", handleGetInstances)
 	mux.HandleFunc("/all-proxies", handleGetAllProxies)
+
+	localesFS, err := fs.Sub(locales, "locales")
+	if err != nil {
+		log.Fatal(err)
+	}
+	mux.Handle("/locales/", http.StripPrefix("/locales/", http.FileServer(http.FS(localesFS))))
+
 	log.Printf("Starting discovery HTTP server on port %s", httpListenPort)
 	if err := http.ListenAndServe(":"+httpListenPort, mux); err != nil {
 		log.Fatalf("Failed to start HTTP server: %v", err)
