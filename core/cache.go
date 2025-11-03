@@ -2,12 +2,18 @@ package core
 
 import (
 	"bytes"
+	_ "embed"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"sync"
 )
+
+//go:embed injector.js
+var injectorScript []byte
 
 // cacheEntry holds the cached response data and headers.
 type cacheEntry struct {
@@ -77,6 +83,12 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		if err != nil {
 			log.Printf("Error reading response body: %v", err)
 			return nil, err
+		}
+		// Inject script if the content is HTML
+		if strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
+			debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
+			script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
+			respBody = append(respBody, []byte("<script>"+script+"</script>")...)
 		}
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody)) // Restore body for the client
 	}

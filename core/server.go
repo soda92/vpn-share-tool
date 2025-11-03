@@ -22,6 +22,7 @@ const (
 
 var (
 	SERVER_IPs = []string{"192.168.0.81", "192.168.1.81"}
+	ApiPort    int
 )
 
 // servicesHandler provides the list of currently shared proxies as a JSON response.
@@ -208,6 +209,7 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 
 // StartApiServer starts the HTTP server to provide the API endpoints.
 func StartApiServer(apiPort int) error {
+	ApiPort = apiPort
 
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()
