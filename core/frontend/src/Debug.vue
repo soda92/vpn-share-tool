@@ -1,5 +1,5 @@
 <template>
-  <div id="app">
+  <div id="app" @click="hideContextMenu">
     <div class="main-layout">
       <div class="request-list-pane">
         <div class="request-list-header">
@@ -12,7 +12,6 @@
               <option value="POST">POST</option>
             </select>
             <button @click="clearHistory">Clear</button>
-            <button @click="compare" :disabled="selectedForCompare.length !== 2">Compare</button>
           </div>
         </div>
         <div v-if="filteredRequests.length === 0" class="no-requests">
@@ -23,19 +22,23 @@
             v-for="request in filteredRequests"
             :key="request.id"
             @click="selectRequest(request)"
+            @contextmenu.prevent="showContextMenu($event, request)"
             :class="{ selected: selectedRequest && selectedRequest.id === request.id }"
           >
-            <input
-              v-if="request.method === 'POST'"
-              type="checkbox"
-              :value="request.id"
-              v-model="selectedForCompare"
-              @click.stop
-            />
             <span class="method">{{ request.method }}</span>
             <span class="url">{{ request.url }}</span>
           </li>
         </ul>
+        <div
+          v-if="contextMenu.visible"
+          class="context-menu"
+          :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
+        >
+          <ul>
+            <li @click="selectForCompare">Select for Compare</li>
+            <li @click="compareWithSelected" :class="{ disabled: !selectedForCompare }">Compare with Selected</li>
+          </ul>
+        </div>
       </div>
       <div class="request-details-pane">
         <div v-if="selectedRequest">
@@ -95,7 +98,13 @@ const requests = ref<CapturedRequest[]>([]);
 const selectedRequest = ref<CapturedRequest | null>(null);
 const searchQuery = ref('');
 const methodFilter = ref('ALL');
-const selectedForCompare = ref<number[]>([]);
+const selectedForCompare = ref<CapturedRequest | null>(null);
+const contextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  request: null as CapturedRequest | null,
+});
 
 const filteredRequests = computed(() => {
   return requests.value.filter(req => {
@@ -130,7 +139,7 @@ const clearHistory = async () => {
     if (response.ok) {
       requests.value = [];
       selectedRequest.value = null;
-      selectedForCompare.value = [];
+      selectedForCompare.value = null;
     } else {
       console.error('Failed to clear history');
     }
@@ -143,32 +152,50 @@ const selectRequest = (request: CapturedRequest) => {
   selectedRequest.value = request;
 };
 
-const compare = () => {
-  if (selectedForCompare.value.length === 2) {
-    const req1 = requests.value.find(r => r.id === selectedForCompare.value[0]);
-    const req2 = requests.value.find(r => r.id === selectedForCompare.value[1]);
+const showContextMenu = (event: MouseEvent, request: CapturedRequest) => {
+  if (request.method !== 'POST') return;
+  contextMenu.value.visible = true;
+  contextMenu.value.x = event.clientX;
+  contextMenu.value.y = event.clientY;
+  contextMenu.value.request = request;
+};
 
-    if (req1 && req2) {
-        const req1ContentType = req1.request_headers['Content-Type']?.[0] || '';
-        const req2ContentType = req2.request_headers['Content-Type']?.[0] || '';
+const hideContextMenu = () => {
+  contextMenu.value.visible = false;
+};
 
-        const isReq1Json = req1ContentType.includes('application/json');
-        const isReq2Json = req2ContentType.includes('application/json');
-        const isReq1Form = req1ContentType.includes('application/x-www-form-urlencoded');
-        const isReq2Form = req2ContentType.includes('application/x-www-form-urlencoded');
+const selectForCompare = () => {
+  if (contextMenu.value.request) {
+    selectedForCompare.value = contextMenu.value.request;
+  }
+  hideContextMenu();
+};
 
-        if ((isReq1Json && isReq2Json) || (isReq1Form && isReq2Form)) {
-            window.open(`/debug/compare?req1=${req1.id}&req2=${req2.id}`, '_blank');
-        } else {
-            alert("Cannot compare requests with different content types (JSON vs. x-www-form-urlencoded).");
-        }
+const compareWithSelected = () => {
+  if (selectedForCompare.value && contextMenu.value.request) {
+    const req1 = selectedForCompare.value;
+    const req2 = contextMenu.value.request;
+
+    const req1ContentType = req1.request_headers['Content-Type']?.[0] || '';
+    const req2ContentType = req2.request_headers['Content-Type']?.[0] || '';
+
+    const isReq1Json = req1ContentType.includes('application/json');
+    const isReq2Json = req2ContentType.includes('application/json');
+    const isReq1Form = req1ContentType.includes('application/x-www-form-urlencoded');
+    const isReq2Form = req2ContentType.includes('application/x-www-form-urlencoded');
+
+    if ((isReq1Json && isReq2Json) || (isReq1Form && isReq2Form)) {
+        window.open(`/debug/compare?req1=${req1.id}&req2=${req2.id}`, '_blank');
+    } else {
+        alert("Cannot compare requests with different content types (JSON vs. x-www-form-urlencoded).");
     }
   }
+  hideContextMenu();
 };
 
 onMounted(() => {
   fetchRequests();
-  setInterval(fetchRequests, 2000); // Poll for new requests every 2 seconds
+  setInterval(fetchRequests, 2000);
 });
 </script>
 
@@ -191,86 +218,35 @@ onMounted(() => {
   flex-direction: column;
 }
 
-.request-list-header {
-  display: flex;
-  flex-direction: column;
-  padding: 1rem;
-  border-bottom: 1px solid #ccc;
-}
-
-.filter-controls {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-.request-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  overflow-y: auto;
-  flex-grow: 1;
-}
-
-.request-list li {
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-  border-bottom: 1px solid #eee;
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
-.request-list li:hover {
-  background-color: #f0f0f0;
-}
-
-.request-list li.selected {
-  background-color: #e0e0ff;
-}
-
-.method {
-  font-weight: bold;
-  width: 50px;
-}
-
-.url {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.no-requests,
-.no-selection {
-  padding: 1rem;
-  text-align: center;
-  color: #888;
-}
-
 .request-details-pane {
   width: 70%;
   padding: 1rem;
   overflow-y: auto;
 }
 
-.details-grid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.5rem 1rem;
-  margin-bottom: 1rem;
+.context-menu {
+  position: absolute;
+  background-color: white;
+  border: 1px solid #ccc;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+  padding: 0;
+  margin: 0;
+  list-style: none;
 }
-
-h3 {
-  margin-top: 2rem;
-  border-bottom: 1px solid #ccc;
-  padding-bottom: 0.5rem;
+.context-menu ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
 }
-
-pre {
-  background-color: #f5f5f5;
-  padding: 1rem;
-  border-radius: 4px;
-  white-space: pre-wrap;
-  word-break: break-all;
+.context-menu li {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+.context-menu li:hover {
+  background-color: #f0f0f0;
+}
+.context-menu li.disabled {
+  color: #ccc;
+  cursor: not-allowed;
 }
 </style>

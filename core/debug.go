@@ -4,8 +4,10 @@ import (
 	"embed"
 	"encoding/json"
 	"io/fs"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -41,7 +43,22 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 	if err != nil {
 		log.Fatalf("Failed to create sub-filesystem for debug frontend: %v", err)
 	}
-	mux.Handle("/debug/", http.StripPrefix("/debug/", http.FileServer(http.FS(debugFS))))
+
+	fileServer := http.FileServer(http.FS(debugFS))
+	mux.Handle("/debug/", http.StripPrefix("/debug/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If the path doesn't contain a dot, it's a route, so serve index.html.
+		if !strings.Contains(r.URL.Path, ".") {
+			index, err := debugFS.Open("index.html")
+			if err != nil {
+				log.Fatal(err)
+			}
+			w.Header().Set("Content-Type", "text/html")
+			io.Copy(w, index)
+			return
+		}
+		// Otherwise, it's a file, so serve it.
+		fileServer.ServeHTTP(w, r)
+	})))
 
 	// Add debug API endpoints
 	mux.HandleFunc("/debug/requests", handleDebugRequests)

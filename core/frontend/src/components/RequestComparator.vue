@@ -10,7 +10,7 @@
     </div>
     <div class="diff-pane">
       <h2>Diff</h2>
-      <pre v-html="diffOutput"></pre>
+      <DiffViewer v-if="diffData" :data1="diffData.data1" :data2="diffData.data2" />
     </div>
   </div>
 </template>
@@ -18,7 +18,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
-import * as Diff from 'diff';
+import DiffViewer from './DiffViewer.vue';
 
 interface CapturedRequest {
   id: number;
@@ -52,9 +52,9 @@ const fetchRequest = async (id: number): Promise<CapturedRequest | null> => {
   }
 };
 
-const diffOutput = computed(() => {
+const diffData = computed(() => {
   if (!req1.value || !req2.value) {
-    return '';
+    return null;
   }
 
   const req1Body = req1.value.request_body;
@@ -62,20 +62,20 @@ const diffOutput = computed(() => {
 
   const req1ContentType = req1.value.request_headers['Content-Type']?.[0] || '';
   const isJson = req1ContentType.includes('application/json');
+  const isForm = req1ContentType.includes('application/x-www-form-urlencoded');
 
-  let diff;
+  let data1: Record<string, any> = {};
+  let data2: Record<string, any> = {};
+
   if (isJson) {
-    const obj1 = JSON.parse(req1Body);
-    const obj2 = JSON.parse(req2Body);
-    diff = Diff.diffJson(obj1, obj2);
-  } else {
-    diff = Diff.diffLines(req1Body, req2Body);
+    data1 = JSON.parse(req1Body);
+    data2 = JSON.parse(req2Body);
+  } else if (isForm) {
+    data1 = Object.fromEntries(new URLSearchParams(req1Body));
+    data2 = Object.fromEntries(new URLSearchParams(req2Body));
   }
 
-  return diff.map(part => {
-    const color = part.added ? 'green' : part.removed ? 'red' : 'grey';
-    return `<span style="color: ${color}">${part.value}</span>`;
-  }).join('');
+  return { data1, data2 };
 });
 
 onMounted(async () => {
