@@ -17,7 +17,10 @@
     "lint": "run-s lint:*"
   },
   "dependencies": {
-    "vue": "^3.5.22"
+    "@types/diff": "^7.0.2",
+    "diff": "^8.0.2",
+    "vue": "^3.5.22",
+    "vue-router": "^4.6.3"
   },
   "devDependencies": {
     "@tsconfig/node22": "^22.0.2",
