@@ -1,14 +1,15 @@
 import { createI18n } from 'vue-i18n';
 
 async function loadLocaleMessages() {
-    const locales = import.meta.glob('../../locales/*.json');
     const messages = {};
-    for (const path in locales) {
-        const matched = path.match(/([A-Za-z0-9-_]+)\.json$/i);
-        if (matched && matched.length > 1) {
-            const locale = matched[1];
-            const module = await locales[path]();
-            messages[locale] = module.default;
+    for (const locale of ['en', 'zh']) {
+        try {
+            const response = await fetch(`/locales/${locale}.json`);
+            if (response.ok) {
+                messages[locale] = await response.json();
+            }
+        } catch (e) {
+            console.error(`Failed to load locale ${locale}`, e);
         }
     }
     return messages;

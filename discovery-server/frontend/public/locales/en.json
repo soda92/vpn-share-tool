@@ -1,14 +1,13 @@
 {
   "title": "VPN Share Tool - Discovery Server",
-  "create_proxy_title": "Create a new proxied URL",
-  "url_placeholder": "Enter URL to proxy",
-  "create_proxy_button": "Create Proxy",
-  "checking_servers": "Checking for available servers...",
-  "proxy_created": "Proxy created on",
-  "error_creating_proxy": "Error creating proxy:",
   "active_servers_title": "Active Servers",
   "no_active_servers": "No active servers found.",
-  "all_active_proxies_title": "All Active Proxies",
-  "no_active_proxies": "No active proxies found.",
-  "last_seen": "Last seen"
+  "last_seen": "Last seen",
+  "tagged_urls_title": "Tagged URLs",
+  "tag_placeholder": "Tag (e.g., PHIS Production)",
+  "url_placeholder": "URL",
+  "save_tagged_url_button": "Save Tagged URL",
+  "create_proxy_button": "Create Proxy",
+  "rename_button": "Rename",
+  "delete_button": "Delete"
 }
