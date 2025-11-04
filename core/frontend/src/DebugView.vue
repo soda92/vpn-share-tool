@@ -122,6 +122,10 @@ const filteredRequests = computed(() => {
 });
 
 const groupedAndFilteredRequests = computed(() => {
+  type GroupedListItem =
+    | { id: string; type: 'group-header'; groupName: string }
+    | { id: number; type: 'request'; request: CapturedRequest; groupName: string };
+
   const getUrlPrefix = (url: string) => {
     try {
       const urlObj = new URL(url);
@@ -139,13 +143,13 @@ const groupedAndFilteredRequests = computed(() => {
     }
   };
 
-  const result: any[] = [];
+  const result: GroupedListItem[] = [];
   let lastPrefix = '';
 
   for (const request of filteredRequests.value) {
     const currentPrefix = getUrlPrefix(request.url);
     if (currentPrefix !== lastPrefix) {
-      result.push({ id: `group-${currentPrefix}-${request.id}`, type: 'group-header', groupName: currentPrefix });
+      result.push({ id: `group-${currentPrefix}`, type: 'group-header', groupName: currentPrefix });
       lastPrefix = currentPrefix;
     }
     result.push({ id: request.id, type: 'request', request: request, groupName: currentPrefix });
