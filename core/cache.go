@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -102,6 +103,33 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			// Manually delete Content-Length header to avoid conflicts
 			resp.Header.Del("Content-Length")
 		}
+
+		// Handle Http.phis replacement for showView.jsp
+		if strings.HasSuffix(req.URL.Path, "showView.jsp") {
+			bodyStr := string(respBody)
+			re := regexp.MustCompile(`Http\.phis = '(.*?)';`)
+			matches := re.FindStringSubmatch(bodyStr)
+
+			if len(matches) > 1 {
+				originalPhisURL := matches[1]
+				log.Printf("Found Http.phis URL: %s", originalPhisURL)
+
+				newProxy, err := ShareUrlAndGetProxy(originalPhisURL)
+				if err != nil {
+					log.Printf("Error creating proxy for Http.phis: %v", err)
+				} else {
+					originalHost := req.Context().Value(originalHostKey).(string)
+					hostParts := strings.Split(originalHost, ":")
+					newProxyURL := fmt.Sprintf("http://%s:%d", hostParts[0], newProxy.RemotePort)
+
+					log.Printf("Replacing Http.phis URL with: %s", newProxyURL)
+					bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
+					respBody = []byte(bodyStr)
+					resp.Header.Del("Content-Length") // Delete content length again as we modified the body
+				}
+			}
+		}
+
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody)) // Restore body for the client
 	}
 

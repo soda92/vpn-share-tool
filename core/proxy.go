@@ -17,6 +17,10 @@ const (
 	startPort = 10081
 )
 
+type contextKey string
+
+const originalHostKey contextKey = "originalHost"
+
 type SharedProxy struct {
 	OriginalURL string                 `json:"original_url"`
 	RemotePort  int                    `json:"remote_port"`
@@ -124,8 +128,11 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 	ProxiesLock.Unlock()
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", remotePort),
-		Handler: proxy,
+		Addr: fmt.Sprintf(":%d", remotePort),
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), originalHostKey, r.Host)
+			proxy.ServeHTTP(w, r.WithContext(ctx))
+		}),
 	}
 
 	go func() {
