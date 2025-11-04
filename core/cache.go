@@ -172,9 +172,6 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			respBody = []byte(bodyStr)
 			resp.Header.Del("Content-Encoding")
 			resp.Header.Del("Content-Length")
-		} else {
-			// If not modified, use the original (potentially compressed) body
-			respBody = decompressedBody
 		}
 
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
