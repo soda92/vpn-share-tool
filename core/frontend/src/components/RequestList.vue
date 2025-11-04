@@ -3,8 +3,8 @@
     <div class="request-list-header">
       <h2>Requests</h2>
       <div class="filter-controls">
-        <input type="text" :value="searchQuery" @input="$emit('update:searchQuery', $event.target.value)" placeholder="Search URL..." />
-        <select :value="methodFilter" @change="$emit('update:methodFilter', $event.target.value)">
+        <input type="text" :value="searchQuery" @input="$emit('update:searchQuery', ($event.target as HTMLInputElement).value)" placeholder="Search URL..." />
+        <select :value="methodFilter" @change="$emit('update:methodFilter', ($event.target as HTMLSelectElement).value)">
           <option value="ALL">All</option>
           <option value="GET">GET</option>
           <option value="POST">POST</option>

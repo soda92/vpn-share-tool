@@ -14,7 +14,7 @@
       </div>
 
       <h3>Notes</h3>
-      <textarea :value="note" @input="$emit('update:note', $event.target.value)" placeholder="Add notes here..."></textarea>
+      <textarea :value="note" @input="$emit('update:note', ($event.target as HTMLTextAreaElement).value)" placeholder="Add notes here..."></textarea>
 
       <h3>Request Headers</h3>
       <pre>{{ request.request_headers }}</pre>

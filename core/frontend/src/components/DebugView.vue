@@ -32,10 +32,10 @@
 import { ref, onMounted, watch, defineProps } from 'vue';
 import axios from 'axios';
 import { useRouter } from 'vue-router';
-import type { CapturedRequest } from './types';
-import RequestList from './components/RequestList.vue';
-import RequestDetails from './components/RequestDetails.vue';
-import ContextMenu from './components/ContextMenu.vue';
+import type { CapturedRequest } from '../types';
+import RequestList from './RequestList.vue';
+import RequestDetails from './RequestDetails.vue';
+import ContextMenu from './ContextMenu.vue';
 
 const props = defineProps<{
   isLive: boolean;
@@ -154,7 +154,7 @@ const deleteRequest = async () => {
   if (confirm('Are you sure you want to permanently delete this request?')) {
     try {
       await axios.delete(`/debug/requests/${contextMenu.value.request.id}`);
-      const index = requests.value.findIndex(r => r.id === contextMenu.value.request!.id);
+      const index = requests.value.findIndex((r: CapturedRequest) => r.id === contextMenu.value.request!.id);
       if (index > -1) {
         requests.value.splice(index, 1);
       }
