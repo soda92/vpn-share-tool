@@ -22,6 +22,7 @@ const (
 
 var (
 	SERVER_IPs = []string{"192.168.0.81", "192.168.1.81"}
+	ApiPort    int
 )
 
 // servicesHandler provides the list of currently shared proxies as a JSON response.
@@ -206,14 +207,28 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func handleGetActiveProxies(w http.ResponseWriter, r *http.Request) {
+	proxies := GetProxies()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(proxies); err != nil {
+		log.Printf("Failed to encode active proxies to JSON: %v", err)
+		http.Error(w, "Failed to encode active proxies", http.StatusInternalServerError)
+	}
+}
+
 // StartApiServer starts the HTTP server to provide the API endpoints.
 func StartApiServer(apiPort int) error {
+	ApiPort = apiPort
 
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()
 	mux.HandleFunc("/services", servicesHandler)
 	mux.HandleFunc("/proxies", addProxyHandler)
 	mux.HandleFunc("/can-reach", canReachHandler)
+	mux.HandleFunc("/active-proxies", handleGetActiveProxies)
+
+	RegisterDebugRoutes(mux)
+
 	apiServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", apiPort),
 		Handler: mux,

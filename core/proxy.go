@@ -18,11 +18,11 @@ const (
 )
 
 type SharedProxy struct {
-	OriginalURL string `json:"original_url"`
-	RemotePort  int    `json:"remote_port"`
-	Path        string `json:"path"`
+	OriginalURL string                 `json:"original_url"`
+	RemotePort  int                    `json:"remote_port"`
+	Path        string                 `json:"path"`
 	Handler     *httputil.ReverseProxy `json:"-"`
-	Server      *http.Server `json:"-"`
+	Server      *http.Server           `json:"-"`
 }
 
 var (
@@ -96,14 +96,19 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Transport = &CachingTransport{
-		Transport: http.DefaultTransport,
-	}
-
 	proxy.Director = func(req *http.Request) {
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
 		req.Host = target.Host
+	}
+
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	proxy.Transport = &CachingTransport{
+		Transport: client.Transport,
 	}
 
 	ProxiesLock.Lock()
