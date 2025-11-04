@@ -150,10 +150,7 @@ func startHTTPServer() {
 	}
 }
 
-func handleIndex(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
-	w.Write(indexPage)
-}
+
 
 func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
