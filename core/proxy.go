@@ -154,7 +154,7 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 
 			if existingProxy != nil {
 				// A proxy already exists, rewrite with its URL
-				newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, existingProxy.RemotePort, locationURL.Path)
+				newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, existingProxy.RemotePort, locationURL.RequestURI())
 				resp.Header.Set("Location", newLocation)
 				log.Printf("Redirecting to existing proxy: %s", newLocation)
 			} else {
@@ -164,7 +164,7 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 				if err != nil {
 					log.Printf("Error creating new proxy for redirect: %v", err)
 				} else {
-					newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, newProxy.RemotePort, locationURL.Path)
+					newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, newProxy.RemotePort, locationURL.RequestURI())
 					resp.Header.Set("Location", newLocation)
 					log.Printf("Redirecting to new proxy: %s", newLocation)
 				}
