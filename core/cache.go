@@ -130,39 +130,39 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 
 		// 2. Handle Http.phis replacement
 		if strings.Contains(req.URL.Path, "showView.jsp") {
-			re := regexp.MustCompile(`Http\.phis *= *'(.*?)' *;`)
-			matches := re.FindStringSubmatch(bodyStr)
+			// Regex for Http.phis = '...'
+			reHttpPhis := regexp.MustCompile(`Http\.phis\s*=\s*['"](.*?)['"]`)
+			matchesHttpPhis := reHttpPhis.FindStringSubmatch(bodyStr)
 
-			if len(matches) > 1 {
-				originalPhisURL := matches[1]
-				log.Printf("Found Http.phis URL: %s", originalPhisURL)
+			// Regex for phisUrl:'...'
+			rePhisUrl := regexp.MustCompile(`phisUrl\s*:\s*['"](.*?)['"]`)
+			matchesPhisUrl := rePhisUrl.FindStringSubmatch(bodyStr)
+
+			var originalPhisURL string
+			var foundMatch bool
+
+			if len(matchesPhisUrl) > 1 {
+				originalPhisURL = matchesPhisUrl[1]
+				foundMatch = true
+			} else if len(matchesHttpPhis) > 1 {
+				originalPhisURL = matchesHttpPhis[1]
+				foundMatch = true
+			}
+
+			if foundMatch {
+				log.Printf("Found phis URL: %s", originalPhisURL)
 
 				newProxy, err := ShareUrlAndGetProxy(originalPhisURL)
 				if err != nil {
-					log.Printf("Error creating proxy for Http.phis: %v", err)
+					log.Printf("Error creating proxy for phis URL: %v", err)
 				} else {
 					originalHost := req.Context().Value(originalHostKey).(string)
 					hostParts := strings.Split(originalHost, ":")
-					newProxyURL := fmt.Sprintf("http://%s:%d", hostParts[0], newProxy.RemotePort)
+					// Construct the new URL, preserving the path from the original
+					newProxyURL := fmt.Sprintf("http://%s:%d%s", hostParts[0], newProxy.RemotePort, newProxy.Path)
 
-					log.Printf("Replacing Http.phis URL with: %s", newProxyURL)
+					log.Printf("Replacing phis URL with: %s", newProxyURL)
 					bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
-				}
-			} else {
-				// Manual check as a fallback
-				originalPhisURL := "http://10.216.11.24:8306/phis"
-				if strings.Contains(bodyStr, originalPhisURL) {
-					newProxy, err := ShareUrlAndGetProxy(originalPhisURL)
-					if err != nil {
-						log.Printf("Error creating proxy for Http.phis: %v", err)
-					} else {
-						originalHost := req.Context().Value(originalHostKey).(string)
-						hostParts := strings.Split(originalHost, ":")
-						newProxyURL := fmt.Sprintf("http://%s:%d", hostParts[0], newProxy.RemotePort)
-
-						log.Printf("Replacing Http.phis URL with: %s", newProxyURL)
-						bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
-					}
 				}
 			}
 		}
