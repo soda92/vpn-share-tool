@@ -76,7 +76,7 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 	})))
 
 	// Add debug API endpoints
-	mux.HandleFunc("/debug/requests", handleDebugRequests)
+	mux.HandleFunc("/debug/requests/", handleDebugRequests)
 	mux.HandleFunc("/debug/clear", handleClearRequests)
 	mux.HandleFunc("/debug/ws", handleDebugWS)
 
