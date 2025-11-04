@@ -19,11 +19,8 @@ import (
 	"github.com/google/uuid"
 )
 
-//go:embed index.html
-var indexPage []byte
-
-//go:embed locales
-var locales embed.FS
+//go:embed all:frontend/dist
+var frontendDist embed.FS
 
 const (
 	listenPort      = "45679"
@@ -124,18 +121,28 @@ func startTCPServer() {
 
 func startHTTPServer() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", handleIndex)
+
+	// API routes
 	mux.HandleFunc("/create-proxy", handleCreateProxy)
 	mux.HandleFunc("/instances", handleGetInstances)
-	mux.HandleFunc("/all-proxies", handleGetAllProxies)
 	mux.HandleFunc("/tagged-urls", handleTaggedURLs)
 	mux.HandleFunc("/tagged-urls/", handleTaggedURLs)
 
-	localesFS, err := fs.Sub(locales, "locales")
+	// Serve the Vue frontend
+	fsys, err := fs.Sub(frontendDist, "frontend/dist")
 	if err != nil {
 		log.Fatal(err)
 	}
-	mux.Handle("/locales/", http.StripPrefix("/locales/", http.FileServer(http.FS(localesFS))))
+	fileServer := http.FileServer(http.FS(fsys))
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if the requested file exists
+		_, err := fsys.Open(strings.TrimPrefix(r.URL.Path, "/"))
+		if os.IsNotExist(err) {
+			// If not, serve index.html for SPA routing
+			r.URL.Path = "/"
+		}
+		fileServer.ServeHTTP(w, r)
+	}))
 
 	log.Printf("Starting discovery HTTP server on port %s", httpListenPort)
 	if err := http.ListenAndServe(":"+httpListenPort, mux); err != nil {
@@ -310,15 +317,72 @@ func handleTaggedURLs(w http.ResponseWriter, r *http.Request) {
 
 func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	taggedURLsMutex.Lock()
-	defer taggedURLsMutex.Unlock()
-
 	urls := make([]TaggedURL, 0, len(taggedURLs))
 	for _, u := range taggedURLs {
 		urls = append(urls, u)
 	}
+	taggedURLsMutex.Unlock()
+
+	// Concurrently fetch all active proxies to enrich the response
+	mutex.Lock()
+	activeInstances := make([]Instance, 0, len(instances))
+	for _, instance := range instances {
+		activeInstances = append(activeInstances, instance)
+	}
+	mutex.Unlock()
+
+	type ProxyInfo struct {
+		OriginalURL string `json:"original_url"`
+		RemotePort  int    `json:"remote_port"`
+		Path        string `json:"path"`
+		SharedURL   string `json:"shared_url"`
+	}
+
+	allProxies := make(map[string]string)
+	var wg sync.WaitGroup
+	var proxyMutex sync.Mutex
+
+	for _, instance := range activeInstances {
+		wg.Add(1)
+		go func(instance Instance) {
+			defer wg.Done()
+			resp, err := http.Get(fmt.Sprintf("http://%s/active-proxies", instance.Address))
+			if err != nil {
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode == http.StatusOK {
+				var proxies []ProxyInfo
+				if err := json.NewDecoder(resp.Body).Decode(&proxies); err == nil {
+					proxyMutex.Lock()
+					for _, p := range proxies {
+						host, _, _ := net.SplitHostPort(instance.Address)
+						allProxies[p.OriginalURL] = fmt.Sprintf("http://%s:%d%s", host, p.RemotePort, p.Path)
+					}
+					proxyMutex.Unlock()
+				}
+			}
+		}(instance)
+	}
+	wg.Wait()
+
+	// Enrich the tagged URLs with their proxy status
+	type EnrichedTaggedURL struct {
+		TaggedURL
+		ProxyURL string `json:"proxy_url,omitempty"`
+	}
+
+	enrichedUrls := make([]EnrichedTaggedURL, len(urls))
+	for i, u := range urls {
+		enrichedUrls[i] = EnrichedTaggedURL{TaggedURL: u}
+		if proxyURL, ok := allProxies[u.URL]; ok {
+			enrichedUrls[i].ProxyURL = proxyURL
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(urls); err != nil {
+	if err := json.NewEncoder(w).Encode(enrichedUrls); err != nil {
 		log.Printf("Failed to encode tagged URLs: %v", err)
 		http.Error(w, "Failed to encode URLs", http.StatusInternalServerError)
 	}
