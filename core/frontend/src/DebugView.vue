@@ -28,7 +28,7 @@
             <template v-if="item.type === 'request'">
               <span class="timestamp">{{ new Date(item.request.timestamp).toLocaleTimeString() }}</span>
               <span class="method">{{ item.request.method }}</span>
-              <span class="url">{{ item.request.url }}</span>
+              <span class="url">{{ item.request.url.substring(item.groupName.length) }}</span>
             </template>
             <template v-else>
               <span>{{ item.groupName }}</span>
@@ -148,7 +148,7 @@ const groupedAndFilteredRequests = computed(() => {
       result.push({ id: `group-${currentPrefix}-${request.id}`, type: 'group-header', groupName: currentPrefix });
       lastPrefix = currentPrefix;
     }
-    result.push({ id: request.id, type: 'request', request: request });
+    result.push({ id: request.id, type: 'request', request: request, groupName: currentPrefix });
   }
 
   return result;
@@ -374,6 +374,8 @@ onMounted(() => {
   top: 0;
   z-index: 10;
   cursor: default;
+  white-space: normal; /* Allow multiline */
+  word-break: break-all; /* Break long words */
 }
 
 .timestamp {
