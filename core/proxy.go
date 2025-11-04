@@ -102,7 +102,14 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 		req.Host = target.Host
 	}
 
-	proxy.Transport = http.DefaultTransport
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	proxy.Transport = &CachingTransport{
+		Transport: client.Transport,
+	}
 
 	ProxiesLock.Lock()
 	var remotePort int
