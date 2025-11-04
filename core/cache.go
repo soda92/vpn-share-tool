@@ -19,6 +19,9 @@ import (
 //go:embed injector.js
 var injectorScript []byte
 
+var rePhisUrl = regexp.MustCompile(`phisUrl\s*:\s*['"](.*?)['"]`)
+var reHttpPhis = regexp.MustCompile(`Http\.phis\s*=\s*['"](.*?)['"]`)
+
 // cacheEntry holds the cached response data and headers.
 type cacheEntry struct {
 	Header http.Header
@@ -131,11 +134,9 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		// 2. Handle Http.phis replacement
 		if strings.Contains(req.URL.Path, "showView.jsp") {
 			// Regex for Http.phis = '...'
-			reHttpPhis := regexp.MustCompile(`Http\.phis\s*=\s*['"](.*?)['"]`)
 			matchesHttpPhis := reHttpPhis.FindStringSubmatch(bodyStr)
 
 			// Regex for phisUrl:'...'
-			rePhisUrl := regexp.MustCompile(`phisUrl\s*:\s*['"](.*?)['"]`)
 			matchesPhisUrl := rePhisUrl.FindStringSubmatch(bodyStr)
 
 			var originalPhisURL string
