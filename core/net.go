@@ -8,7 +8,7 @@ import (
 
 func IsURLReachable(targetURL string) bool {
 	client := http.Client{
-		Timeout: 3 * time.Second,
+		Timeout: 10 * time.Second,
 	}
 	// Use HEAD request for efficiency
 	req, err := http.NewRequest("HEAD", targetURL, nil)
