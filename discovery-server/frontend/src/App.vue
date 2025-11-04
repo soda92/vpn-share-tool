@@ -56,7 +56,7 @@ const fetchServers = async () => {
 const fetchTaggedURLs = async () => {
   try {
     const response = await axios.get('/tagged-urls');
-    taggedUrls.value = response.data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) || [];
+    taggedUrls.value = (response.data || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   } catch (err) { console.error('Error fetching tagged URLs:', err); }
 };
 
