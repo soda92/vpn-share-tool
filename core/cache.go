@@ -70,7 +70,11 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 
 	// If not cacheable or not in cache, make the request.
-	resp, err := t.Transport.RoundTrip(req)
+	transport := t.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	resp, err := transport.RoundTrip(req)
 	if err != nil {
 		return nil, err
 	}
