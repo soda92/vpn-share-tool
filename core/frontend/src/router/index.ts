@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import DebugView from '../DebugView.vue'
+import DebugView from '../components/DebugView.vue'
 import RequestComparator from '../components/RequestComparator.vue'
 
 const routes = [

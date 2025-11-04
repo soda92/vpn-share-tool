@@ -14,7 +14,7 @@
             <button @click="clearHistory">Clear</button>
           </div>
         </div>
-        <div v-if="filteredRequests.length === 0" class="no-requests">
+        <div v-if="groupedAndFilteredRequests.length === 0" class="no-requests">
           No requests match the filter.
         </div>
         <ul v-else class="request-list">
@@ -43,6 +43,7 @@
           <ul>
             <li @click="selectForCompare">Select for Compare</li>
             <li @click="compareWithSelected" :class="{ disabled: !selectedForCompare }">Compare with Selected</li>
+            <li @click="shareRequest">Share Request</li>
           </ul>
         </div>
       </div>
@@ -86,8 +87,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
-import UrlDecoder from './components/UrlDecoder.vue';
+import { ref, onMounted, computed, defineProps } from 'vue';
+import axios from 'axios';
+import UrlDecoder from './UrlDecoder.vue';
+import { useRouter } from 'vue-router';
+
+const props = defineProps<{
+  isLive: boolean;
+  sessionId?: string;
+}>();
+
+const router = useRouter();
 
 interface CapturedRequest {
   id: number;
@@ -121,35 +131,31 @@ const filteredRequests = computed(() => {
   });
 });
 
-const groupedAndFilteredRequests = computed(() => {
-  type GroupedListItem =
-    | { id: string; type: 'group-header'; groupName: string }
-    | { id: number; type: 'request'; request: CapturedRequest; groupName: string };
-
-  const getUrlPrefix = (url: string) => {
-    try {
-      const urlObj = new URL(url);
-      const pathParts = urlObj.pathname.split('/').filter(p => p);
-      if (pathParts.length > 1) {
-        return `${urlObj.origin}/${pathParts.slice(0, -1).join('/')}/`;
-      }
-      return urlObj.origin + '/';
-    } catch (e) {
-      const parts = url.split('/');
-      if (parts.length > 3) {
-        return parts.slice(0, parts.length - 1).join('/') + '/';
-      }
-      return url;
+const getUrlPrefix = (url: string) => {
+  try {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/').filter(p => p);
+    if (pathParts.length > 1) {
+      return `${urlObj.origin}/${pathParts.slice(0, -1).join('/')}/`;
     }
-  };
+    return urlObj.origin + '/';
+  } catch (e) {
+    const parts = url.split('/');
+    if (parts.length > 3) {
+      return parts.slice(0, parts.length - 1).join('/') + '/';
+    }
+    return url;
+  }
+};
 
-  const result: GroupedListItem[] = [];
+const groupedAndFilteredRequests = computed(() => {
+  const result: any[] = [];
   let lastPrefix = '';
 
   for (const request of filteredRequests.value) {
     const currentPrefix = getUrlPrefix(request.url);
     if (currentPrefix !== lastPrefix) {
-      result.push({ id: `group-${currentPrefix}`, type: 'group-header', groupName: currentPrefix });
+      result.push({ id: `group-${currentPrefix}-${request.id}`, type: 'group-header', groupName: currentPrefix });
       lastPrefix = currentPrefix;
     }
     result.push({ id: request.id, type: 'request', request: request, groupName: currentPrefix });
@@ -176,7 +182,6 @@ const formattedResponseBody = computed(() => {
       const jsonObj = JSON.parse(selectedRequest.value.response_body);
       return JSON.stringify(jsonObj, null, 2);
     } catch {
-      // Not a valid JSON, return as is
       return selectedRequest.value.response_body;
     }
   }
@@ -185,29 +190,32 @@ const formattedResponseBody = computed(() => {
 
 const fetchRequests = async () => {
   try {
-    const response = await fetch('/debug/requests');
-    if (response.ok) {
-      requests.value = (await response.json()).sort((a: CapturedRequest, b: CapturedRequest) => b.id - a.id);
-    } else {
-      console.error('Failed to fetch requests');
+    let url = '';
+    if (props.isLive) {
+      url = '/debug/live-requests'; // New endpoint for live requests
+    } else if (props.sessionId) {
+      url = `/debug/sessions/${props.sessionId}/requests`;
     }
+    const response = await axios.get(url);
+    requests.value = (response.data || []).sort((a: CapturedRequest, b: CapturedRequest) => b.id - a.id);
   } catch (error) {
     console.error('Error fetching requests:', error);
   }
 };
 
 const clearHistory = async () => {
-  try {
-    const response = await fetch('/debug/clear', { method: 'POST' });
-    if (response.ok) {
+  if (props.isLive) {
+    try {
+      await axios.post('/debug/clear');
       requests.value = [];
       selectedRequest.value = null;
       selectedForCompare.value = null;
-    } else {
-      console.error('Failed to clear history');
+    } catch (error) {
+      console.error('Error clearing history:', error);
     }
-  } catch (error) {
-    console.error('Error clearing history:', error);
+  } else {
+    // For saved sessions, clearing history is not applicable
+    alert('Cannot clear history for a saved session.');
   }
 };
 
@@ -216,7 +224,6 @@ const selectRequest = (request: CapturedRequest) => {
 };
 
 const showContextMenu = (event: MouseEvent, request: CapturedRequest) => {
-  if (request.method !== 'POST') return;
   contextMenu.value.visible = true;
   contextMenu.value.x = event.clientX;
   contextMenu.value.y = event.clientY;
@@ -256,27 +263,54 @@ const compareWithSelected = () => {
   hideContextMenu();
 };
 
-onMounted(() => {
-  fetchRequests();
-  document.title = "Debug View";
+const shareRequest = async () => {
+  if (!contextMenu.value.request) return;
 
-  const ws = new WebSocket(`ws://${window.location.host}/debug/ws`);
+  let requestIdToShare = contextMenu.value.request.id;
 
-  ws.onmessage = (event) => {
-    const newRequest: CapturedRequest = JSON.parse(event.data);
-    requests.value.unshift(newRequest); // Add new request to the beginning
-    if (requests.value.length > 1000) {
-      requests.value.pop(); // Keep only the latest 1000 requests
+  // If it's a live request, save it first to make it persistent
+  if (props.isLive) {
+    try {
+      const response = await axios.post('/debug/share-request', contextMenu.value.request);
+      requestIdToShare = response.data.id;
+      alert('Request saved and link copied to clipboard!');
+    } catch (error) {
+      console.error('Error saving request for sharing:', error);
+      alert('Failed to save request for sharing.');
+      return;
     }
-  };
+  }
 
-  ws.onclose = () => {
-    console.log('WebSocket connection closed');
-  };
+  const shareUrl = `${window.location.origin}/debug/request/${requestIdToShare}`;
+  navigator.clipboard.writeText(shareUrl);
+  alert('Share URL copied to clipboard!');
+  hideContextMenu();
+};
 
-  ws.onerror = (error) => {
-    console.error('WebSocket error:', error);
-  };
+onMounted(() => {
+  if (props.isLive) {
+    fetchRequests(); // Initial fetch for live view
+    const ws = new WebSocket(`ws://${window.location.host}/debug/ws`);
+
+    ws.onmessage = (event) => {
+      const newRequest: CapturedRequest = JSON.parse(event.data);
+      requests.value.unshift(newRequest); // Add new request to the beginning
+      if (requests.value.length > 1000) {
+        requests.value.pop(); // Keep only the latest 1000 requests
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket connection closed');
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+  } else {
+    fetchRequests(); // Fetch requests for saved session
+  }
+  document.title = props.isLive ? "Live Session" : `Session ${props.sessionId}`;
 });
 </script>
 
@@ -367,26 +401,6 @@ onMounted(() => {
   background-color: #d5e5f5;
   border-left: 4px solid #007bff;
   padding-left: calc(1rem - 4px);
-}
-
-.request-list li.group-header {
-  background-color: #f8f9fa;
-  color: #6c757d;
-  font-weight: bold;
-  padding: 0.5rem 1rem;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  cursor: default;
-  white-space: normal; /* Allow multiline */
-  word-break: break-all; /* Break long words */
-}
-
-.timestamp {
-  font-family: monospace;
-  font-size: 0.8rem;
-  color: #6c757d;
-  min-width: 80px;
 }
 
 .method {
@@ -490,5 +504,25 @@ pre {
   color: #aaa;
   cursor: not-allowed;
   background-color: #fff;
+}
+
+.request-list li.group-header {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  font-weight: bold;
+  padding: 0.5rem 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  cursor: default;
+  white-space: normal; /* Allow multiline */
+  word-break: break-all; /* Break long words */
+}
+
+.timestamp {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #6c757d;
+  min-width: 80px;
 }
 </style>
