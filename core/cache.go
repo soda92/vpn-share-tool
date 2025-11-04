@@ -105,9 +105,9 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		}
 
 		// Handle Http.phis replacement for showView.jsp
-		if strings.HasSuffix(req.URL.Path, "showView.jsp") {
+		if strings.Contains(req.URL.Path, "showView.jsp") {
 			bodyStr := string(respBody)
-			re := regexp.MustCompile(`Http\.phis = '(.*?)';`)
+			re := regexp.MustCompile(`Http\.phis *= *'(.*?)' *;`)
 			matches := re.FindStringSubmatch(bodyStr)
 
 			if len(matches) > 1 {
