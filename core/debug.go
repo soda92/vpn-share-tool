@@ -117,7 +117,20 @@ func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []
 }
 
 func handleLiveRequests(w http.ResponseWriter, r *http.Request) {
-	// This handler will be used for the live view
+	capturedRequestsLock.RLock()
+	defer capturedRequestsLock.RUnlock()
+
+	var sortedRequests []*CapturedRequest
+	// Iterate backwards from the head to get newest first
+	for i := 0; i < maxCapturedRequests; i++ {
+		idx := (captureHead - 1 - i + maxCapturedRequests) % maxCapturedRequests
+		if capturedRequests[idx] != nil {
+			sortedRequests = append(sortedRequests, capturedRequests[idx])
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(sortedRequests)
 }
 
 
