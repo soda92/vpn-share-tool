@@ -19,14 +19,20 @@
         </div>
         <ul v-else class="request-list">
           <li
-            v-for="request in filteredRequests"
-            :key="request.id"
-            @click="selectRequest(request)"
-            @contextmenu.prevent="showContextMenu($event, request)"
-            :class="{ selected: selectedRequest && selectedRequest.id === request.id }"
+            v-for="item in groupedAndFilteredRequests"
+            :key="item.id"
+            :class="item.type === 'request' ? { selected: selectedRequest && selectedRequest.id === item.request.id } : 'group-header'"
+            @click="item.type === 'request' && selectRequest(item.request)"
+            @contextmenu.prevent="item.type === 'request' && showContextMenu($event, item.request)"
           >
-            <span class="method">{{ request.method }}</span>
-            <span class="url">{{ request.url }}</span>
+            <template v-if="item.type === 'request'">
+              <span class="timestamp">{{ new Date(item.request.timestamp).toLocaleTimeString() }}</span>
+              <span class="method">{{ item.request.method }}</span>
+              <span class="url">{{ item.request.url }}</span>
+            </template>
+            <template v-else>
+              <span>{{ item.groupName }}</span>
+            </template>
           </li>
         </ul>
         <div
@@ -113,6 +119,39 @@ const filteredRequests = computed(() => {
     const searchMatch = req.url.toLowerCase().includes(searchQuery.value.toLowerCase());
     return methodMatch && searchMatch;
   });
+});
+
+const groupedAndFilteredRequests = computed(() => {
+  const getUrlPrefix = (url: string) => {
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/').filter(p => p);
+      if (pathParts.length > 1) {
+        return `${urlObj.origin}/${pathParts.slice(0, -1).join('/')}/`;
+      }
+      return urlObj.origin + '/';
+    } catch (e) {
+      const parts = url.split('/');
+      if (parts.length > 3) {
+        return parts.slice(0, parts.length - 1).join('/') + '/';
+      }
+      return url;
+    }
+  };
+
+  const result: any[] = [];
+  let lastPrefix = '';
+
+  for (const request of filteredRequests.value) {
+    const currentPrefix = getUrlPrefix(request.url);
+    if (currentPrefix !== lastPrefix) {
+      result.push({ id: `group-${currentPrefix}-${request.id}`, type: 'group-header', groupName: currentPrefix });
+      lastPrefix = currentPrefix;
+    }
+    result.push({ id: request.id, type: 'request', request: request });
+  }
+
+  return result;
 });
 
 const isWwwFormUrlEncoded = computed(() => {
@@ -324,6 +363,24 @@ onMounted(() => {
   background-color: #d5e5f5;
   border-left: 4px solid #007bff;
   padding-left: calc(1rem - 4px);
+}
+
+.request-list li.group-header {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  font-weight: bold;
+  padding: 0.5rem 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  cursor: default;
+}
+
+.timestamp {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #6c757d;
+  min-width: 80px;
 }
 
 .method {
