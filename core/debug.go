@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.etcd.io/bbolt"
 )
 
 
@@ -34,6 +36,8 @@ type CapturedRequest struct {
 	ResponseStatus  int         `json:"response_status"`
 	ResponseHeaders http.Header `json:"response_headers"`
 	ResponseBody    string      `json:"response_body"`
+	Bookmarked      bool        `json:"bookmarked"`
+	Note            string      `json:"note"`
 }
 
 var (
