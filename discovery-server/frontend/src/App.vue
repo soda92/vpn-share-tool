@@ -41,6 +41,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
+import { ElNotification, ElMessageBox } from 'element-plus';
 
 const servers = ref([]);
 const taggedUrls = ref([]);
@@ -65,33 +66,59 @@ const saveTaggedUrl = async () => {
     await axios.post('/tagged-urls', newTag.value);
     newTag.value = { tag: '', url: '' };
     fetchTaggedURLs();
-  } catch (err) { alert('Error saving URL.'); }
+    ElNotification({ title: 'Success', message: 'Tagged URL saved.', type: 'success' });
+  } catch (err) { 
+    ElNotification({ title: 'Error', message: 'Error saving URL.', type: 'error' });
+  }
 };
 
 const createProxy = async (url) => {
   try {
     const response = await axios.post('/create-proxy', { url });
-    alert(`Proxy created: ${response.data.shared_url}`);
+    ElNotification({ title: 'Success', message: `Proxy created: ${response.data.shared_url}`, type: 'success' });
     fetchTaggedURLs(); // Refresh to show new proxy status
-  } catch (err) { alert(`Error: ${err.response?.data?.error || err.message}`); }
+  } catch (err) { 
+    ElNotification({ title: 'Error', message: err.response?.data?.error || err.message, type: 'error' });
+  }
 };
 
 const renameTag = async (id, oldTag) => {
-  const newTag = prompt('Enter new tag name:', oldTag);
-  if (newTag && newTag !== oldTag) {
-    try {
-      await axios.put(`/tagged-urls/${id}`, { tag: newTag });
+  try {
+    const { value } = await ElMessageBox.prompt('Enter new tag name:', 'Rename Tag', {
+      confirmButtonText: 'Save',
+      cancelButtonText: 'Cancel',
+      inputValue: oldTag,
+    });
+    if (value && value !== oldTag) {
+      await axios.put(`/tagged-urls/${id}`, { tag: value });
       fetchTaggedURLs();
-    } catch (err) { alert('Error renaming tag.'); }
+      ElNotification({ title: 'Success', message: 'Tag renamed.', type: 'success' });
+    }
+  } catch (action) {
+    if (action === 'cancel') {
+      ElNotification({ message: 'Rename cancelled.', type: 'info' });
+    }
   }
 };
 
 const deleteTag = async (id) => {
-  if (confirm('Are you sure you want to delete this tagged URL?')) {
-    try {
-      await axios.delete(`/tagged-urls/${id}`);
-      fetchTaggedURLs();
-    } catch (err) { alert('Error deleting tag.'); }
+  try {
+    await ElMessageBox.confirm(
+      'Are you sure you want to delete this tagged URL?',
+      'Warning',
+      {
+        confirmButtonText: 'Delete',
+        cancelButtonText: 'Cancel',
+        type: 'warning',
+      }
+    );
+    await axios.delete(`/tagged-urls/${id}`);
+    fetchTaggedURLs();
+    ElNotification({ title: 'Success', message: 'Tag deleted.', type: 'success' });
+  } catch (action) {
+    if (action === 'cancel') {
+      ElNotification({ message: 'Delete cancelled.', type: 'info' });
+    }
   }
 };
 
