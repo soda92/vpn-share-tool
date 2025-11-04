@@ -96,10 +96,14 @@ const deleteTag = async (id) => {
 };
 
 onMounted(() => {
-  fetchServers();
-  fetchTaggedURLs();
-  setInterval(fetchServers, 5000);
-  setInterval(fetchTaggedURLs, 5000); // Refresh tagged URLs and their proxy status
+  const pollServers = () => {
+    fetchServers().finally(() => setTimeout(pollServers, 5000));
+  };
+  const pollTaggedURLs = () => {
+    fetchTaggedURLs().finally(() => setTimeout(pollTaggedURLs, 5000));
+  };
+  pollServers();
+  pollTaggedURLs();
 });
 </script>
 
