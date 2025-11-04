@@ -93,7 +93,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		if strings.Contains(resp.Header.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
 			debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
 			script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
-			
+
 			// Use strings.Replace for a safer and cleaner injection
 			bodyStr := string(respBody)
 			injectionHTML := "<script>" + string(script) + "</script>"
@@ -111,20 +111,22 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			matches := re.FindStringSubmatch(bodyStr)
 
 			if len(matches) == 0 {
-				originalPhisURL := "http://10.216.11.24:8306/phis";
+				originalPhisURL := "http://10.216.11.24:8306/phis"
 				if strings.Contains(bodyStr, originalPhisURL) {
 					newProxy, err := ShareUrlAndGetProxy(originalPhisURL)
 					if err != nil {
-					log.Printf("Error creating proxy for Http.phis: %v", err)
-				} else {
-					originalHost := req.Context().Value(originalHostKey).(string)
-					hostParts := strings.Split(originalHost, ":")
-					newProxyURL := fmt.Sprintf("http://%s:%d", hostParts[0], newProxy.RemotePort)
+						log.Printf("Error creating proxy for Http.phis: %v", err)
 
-					log.Printf("Replacing Http.phis URL with: %s", newProxyURL)
-					bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
-					respBody = []byte(bodyStr)
-					resp.Header.Del("Content-Length") // Delete content length again as we modified the body
+					} else {
+						originalHost := req.Context().Value(originalHostKey).(string)
+						hostParts := strings.Split(originalHost, ":")
+						newProxyURL := fmt.Sprintf("http://%s:%d", hostParts[0], newProxy.RemotePort)
+
+						log.Printf("Replacing Http.phis URL with: %s", newProxyURL)
+						bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
+						respBody = []byte(bodyStr)
+						resp.Header.Del("Content-Length") // Delete content length again as we modified the body
+					}
 				}
 			}
 
