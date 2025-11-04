@@ -2,18 +2,25 @@ package core
 
 import (
 	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	_ "embed"
 	"fmt"
 	"io"
 	"log"
+	// "mime"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 )
 
 //go:embed injector.js
 var injectorScript []byte
+
+var rePhisUrl = regexp.MustCompile(`phisUrl\s*:\s*['"](.*?)['"]`)
+var reHttpPhis = regexp.MustCompile(`Http\.phis\s*=\s*['"](.*?)['"]`)
 
 // cacheEntry holds the cached response data and headers.
 type cacheEntry struct {
@@ -88,21 +95,91 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			log.Printf("Error reading response body: %v", err)
 			return nil, err
 		}
-		// Inject script if the content is HTML and debug info is available
+
+		// Decompress body if necessary
+		var reader io.ReadCloser
+		switch resp.Header.Get("Content-Encoding") {
+		case "gzip":
+			reader, err = gzip.NewReader(bytes.NewReader(respBody))
+			if err != nil {
+				log.Printf("Error creating gzip reader: %v", err)
+				return nil, err
+			}
+			defer reader.Close()
+		case "deflate":
+			reader = flate.NewReader(bytes.NewReader(respBody))
+			defer reader.Close()
+		default:
+			reader = io.NopCloser(bytes.NewReader(respBody))
+		}
+
+		decompressedBody, err := io.ReadAll(reader)
+		if err != nil {
+			log.Printf("Error decompressing response body: %v", err)
+			return nil, err
+		}
+
+		// Now, use decompressedBody for all manipulations
+		bodyStr := string(decompressedBody)
+		originalBodyStr := bodyStr
+
+		// 1. Inject script
 		if strings.Contains(resp.Header.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
 			debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
 			script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
-			
-			// Use strings.Replace for a safer and cleaner injection
-			bodyStr := string(respBody)
 			injectionHTML := "<script>" + string(script) + "</script>"
-			newBodyStr := strings.Replace(bodyStr, "</body>", injectionHTML+"</body>", 1)
-			respBody = []byte(newBodyStr)
+			bodyStr = strings.Replace(bodyStr, "</body>", injectionHTML+"</body>", 1)
+		}
 
-			// Manually delete Content-Length header to avoid conflicts
+		// 2. Handle Http.phis replacement
+		if strings.Contains(req.URL.Path, "showView.jsp") {
+			// Regex for Http.phis = '...'
+			matchesHttpPhis := reHttpPhis.FindStringSubmatch(bodyStr)
+
+			// Regex for phisUrl:'...'
+			matchesPhisUrl := rePhisUrl.FindStringSubmatch(bodyStr)
+
+			var originalPhisURL string
+			var foundMatch bool
+
+			if len(matchesPhisUrl) > 1 {
+				originalPhisURL = matchesPhisUrl[1]
+				foundMatch = true
+			} else if len(matchesHttpPhis) > 1 {
+				originalPhisURL = matchesHttpPhis[1]
+				foundMatch = true
+			}
+
+			if foundMatch {
+				log.Printf("Found phis URL: %s", originalPhisURL)
+
+				newProxy, err := ShareUrlAndGetProxy(originalPhisURL)
+				if err != nil {
+					log.Printf("Error creating proxy for phis URL: %v", err)
+				} else {
+					originalHost, ok := req.Context().Value(originalHostKey).(string)
+					if !ok {
+						log.Printf("Error: originalHost not found in request context for URL %s", req.URL.String())
+					} else {
+						hostParts := strings.Split(originalHost, ":")
+						// Construct the new URL, preserving the path from the original
+						newProxyURL := fmt.Sprintf("http://%s:%d%s", hostParts[0], newProxy.RemotePort, newProxy.Path)
+
+						log.Printf("Replacing phis URL with: %s", newProxyURL)
+						bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
+					}
+				}
+			}
+		}
+
+		// If body was modified, update respBody and headers
+		if bodyStr != originalBodyStr {
+			respBody = []byte(bodyStr)
+			resp.Header.Del("Content-Encoding")
 			resp.Header.Del("Content-Length")
 		}
-		resp.Body = io.NopCloser(bytes.NewBuffer(respBody)) // Restore body for the client
+
+		resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
 	}
 
 	// Capture the request and response

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -17,7 +18,20 @@ func main() {
 		log.Fatal(err)
 	}
 
-	http.Handle("/", http.FileServer(http.FS(fs)))
+	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if the requested file exists in the embedded filesystem
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path != "" {
+			f, err := fs.Open(path)
+			if err != nil {
+				// If the file doesn't exist, serve index.html
+				r.URL.Path = "/"
+			} else {
+				f.Close()
+			}
+		}
+		http.FileServer(http.FS(fs)).ServeHTTP(w, r)
+	}))
 
 	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

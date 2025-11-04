@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Show View JSP (Simulated)</title>
+</head>
+<body>
+    <h1>Simulated showView.jsp Page</h1>
+    <p>This is a static HTML file to test the Http.phis replacement.</p>
+    
+    <button onclick="openPhisWindow()">Open PHIS Window</button>
+
+    <script>
+        // This script simulates the content found in the real showView.jsp
+        var Http = {
+        phis: 'aaa'
+        };
+
+        Http.phis = 'http://10.216.11.24:8306/phis';
+
+        function openPhisWindow() {
+            if (Http.phis) {
+                console.log('Opening window with URL:', Http.phis);
+                window.open(Http.phis, '_blank');
+            } else {
+                alert('Http.phis is not defined!');
+            }
+        }
+    </script>
+</body>
+</html>
