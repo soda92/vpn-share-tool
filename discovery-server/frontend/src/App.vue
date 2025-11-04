@@ -103,8 +103,7 @@ onMounted(() => {
 });
 </script>
 
-<style>
-/* ... Add the styles from the previous index.html here ... */
+<style scoped>
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; margin: 0; padding: 1rem; }
 .container { max-width: 1200px; margin: auto; background-color: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
 h1, h2 { color: #333; }
