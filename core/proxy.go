@@ -115,6 +115,60 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 		Transport: client.Transport,
 	}
 
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		if resp.StatusCode >= 300 && resp.StatusCode <= 399 {
+			location := resp.Header.Get("Location")
+			if location == "" {
+				return nil // No Location header, nothing to do
+			}
+
+			locationURL, err := url.Parse(location)
+			if err != nil {
+				log.Printf("Error parsing Location header: %v", err)
+				return nil
+			}
+
+			// If the location is relative, resolve it against the original target
+			if !locationURL.IsAbs() {
+				locationURL = target.ResolveReference(locationURL)
+			}
+
+			// Check if a proxy already exists for this URL
+			ProxiesLock.RLock()
+			var existingProxy *SharedProxy
+			for _, p := range Proxies {
+				if p.OriginalURL == locationURL.String() {
+					existingProxy = p
+					break
+				}
+			}
+			ProxiesLock.RUnlock()
+
+			originalHost := resp.Request.Context().Value(originalHostKey).(string)
+			hostParts := strings.Split(originalHost, ":")
+			proxyHost := hostParts[0]
+
+			if existingProxy != nil {
+				// A proxy already exists, rewrite with its URL
+				newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, existingProxy.RemotePort, locationURL.Path)
+				resp.Header.Set("Location", newLocation)
+				log.Printf("Redirecting to existing proxy: %s", newLocation)
+			} else {
+				// No proxy exists, create a new one
+				log.Printf("Redirect location not proxied, creating new proxy for: %s", locationURL.String())
+				newProxy, err := ShareUrlAndGetProxy(locationURL.String())
+				if err != nil {
+					log.Printf("Error creating new proxy for redirect: %v", err)
+				} else {
+					newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, newProxy.RemotePort, locationURL.Path)
+					resp.Header.Set("Location", newLocation)
+					log.Printf("Redirecting to new proxy: %s", newLocation)
+				}
+			}
+		}
+		return nil
+	}
+
 	ProxiesLock.Lock()
 	var remotePort int
 	for {
