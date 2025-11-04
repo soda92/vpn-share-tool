@@ -38,3 +38,47 @@ defineEmits<{
   (e: 'delete-request'): void;
 }>();
 </script>
+
+<style scoped>
+.context-menu {
+  position: absolute;
+  background-color: white;
+  border: 1px solid #ccc;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  padding: 0.5rem 0;
+  margin: 0;
+  list-style: none;
+  z-index: 1000;
+}
+
+.context-menu ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.context-menu li {
+  padding: 0.6rem 1.2rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.context-menu li:hover {
+  background-color: #f0f0f0;
+}
+
+.context-menu li.disabled {
+  color: #aaa;
+  cursor: not-allowed;
+  background-color: #fff;
+}
+
+.delete-option {
+  color: #dc3545;
+}
+
+.delete-option:hover {
+  background-color: #f8d7da !important;
+}
+</style>

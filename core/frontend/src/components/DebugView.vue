@@ -29,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, defineProps } from 'vue';
+import { ref, onMounted, watch, defineProps, nextTick } from 'vue';
 import axios from 'axios';
 import { useRouter } from 'vue-router';
 import type { CapturedRequest } from '../types';
@@ -103,9 +103,7 @@ const clearHistory = async () => {
       selectedForCompare.value = null;
     } catch (error) {
       console.error('Error clearing history:', error);
-    }
-  } else {
-    alert('Cannot clear history for a saved session.');
+    } 
   }
 };
 
@@ -114,10 +112,13 @@ const selectRequest = (request: CapturedRequest) => {
 };
 
 const showContextMenu = (event: MouseEvent, request: CapturedRequest) => {
-  contextMenu.value.visible = true;
-  contextMenu.value.x = event.clientX;
-  contextMenu.value.y = event.clientY;
-  contextMenu.value.request = request;
+  hideContextMenu(); // Hide any existing menu first
+  nextTick(() => {
+    contextMenu.value.visible = true;
+    contextMenu.value.x = event.clientX;
+    contextMenu.value.y = event.clientY;
+    contextMenu.value.request = request;
+  });
 };
 
 const hideContextMenu = () => {
@@ -133,7 +134,7 @@ const selectForCompare = () => {
 
 const compareWithSelected = () => {
   if (selectedForCompare.value && contextMenu.value.request) {
-    window.open(`/debug/compare?req1=${selectedForCompare.value.id}&req2=${contextMenu.value.request.id}`, '_blank');
+    window.open(`/debug/compare?req1=${selectedForCompare.value.id}&req2=${contextMenu.value.request.id}`, ' _blank');
   }
   hideContextMenu();
 };
@@ -185,7 +186,7 @@ const shareRequest = async () => {
   }
 
   const shareUrl = `${window.location.origin}/debug/request/${requestIdToShare}`;
-  window.open(shareUrl, '_blank');
+  window.open(shareUrl, ' _blank');
   hideContextMenu();
 };
 
@@ -223,224 +224,20 @@ onMounted(() => {
   height: 100%;
 }
 
-.request-list-pane {
-  width: 35%;
-  min-width: 300px;
-  border-right: 1px solid #ddd;
-  display: flex;
-  flex-direction: column;
-  background-color: #fff;
-}
-
-.request-list-header {
-  padding: 1rem;
-  border-bottom: 1px solid #ddd;
-}
-
-.request-list-header h2 {
-  margin: 0 0 1rem 0;
-  font-size: 1.25rem;
-}
-
-.filter-controls {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.filter-controls input,
-.filter-controls select,
-.filter-controls button {
-  padding: 0.5rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
-
-.filter-controls input {
-  flex-grow: 1;
-}
-
-.filter-controls button {
-  cursor: pointer;
-  background-color: #e0e0e0;
-  transition: background-color 0.2s;
-}
-
-.filter-controls button:hover {
-  background-color: #d0d0d0;
-}
-
-.request-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  overflow-y: auto;
-  flex-grow: 1;
-}
-
-.request-list li {
-  padding: 0.75rem 1rem;
-  cursor: pointer;
-  border-bottom: 1px solid #eee;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  transition: background-color 0.2s;
-}
-
-.request-list li:hover {
-  background-color: #f0f0f0;
-}
-
-.request-list li.selected {
-  background-color: #d5e5f5;
-  border-left: 4px solid #007bff;
-  padding-left: calc(1rem - 4px);
-}
-
-.method {
-  font-weight: 600;
-  padding: 0.2rem 0.4rem;
-  border-radius: 4px;
-  background-color: #e0e0e0;
-  font-size: 0.8rem;
-  min-width: 40px;
-  text-align: center;
-}
-
-.url {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.no-requests {
-  padding: 1rem;
-  text-align: center;
-  color: #777;
-}
-
-.request-details-pane {
-  width: 65%;
-  padding: 1.5rem;
-  overflow-y: auto;
-}
-
-.details-grid {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-  background-color: #fff;
-  padding: 1rem;
-  border-radius: 6px;
-  border: 1px solid #ddd;
-}
-
-.details-grid div {
-  word-break: break-all;
-}
-
-h2, h3 {
-  border-bottom: 2px solid #007bff;
-  padding-bottom: 0.5rem;
-  margin-bottom: 1rem;
-  color: #0056b3;
-}
-
-pre {
-  background-color: #fff;
-  padding: 1rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  font-family: 'Fira Code', 'Courier New', Courier, monospace;
-}
-
-.no-selection {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
-  font-size: 1.2rem;
-  color: #777;
-}
-
-.context-menu {
-  position: absolute;
-  background-color: white;
-  border: 1px solid #ccc;
-  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.15);
-  border-radius: 4px;
-  padding: 0.5rem 0;
-  margin: 0;
-  list-style: none;
-  z-index: 1000;
-}
-
-.context-menu ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.context-menu li {
-  padding: 0.6rem 1.2rem;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.context-menu li:hover {
-  background-color: #f0f0f0;
-}
-
-.context-menu li.disabled {
-  color: #aaa;
-  cursor: not-allowed;
-  background-color: #fff;
-}
-
-.request-list li.group-header {
-  background-color: #f8f9fa;
-  color: #6c757d;
-  font-weight: bold;
+button {
+  background-color: #007bff;
+  color: white;
+  border: none;
   padding: 0.5rem 1rem;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  cursor: default;
-  white-space: normal; /* Allow multiline */
-  word-break: break-all; /* Break long words */
-}
-
-.timestamp {
-  font-family: monospace;
-  font-size: 0.8rem;
-  color: #6c757d;
-  min-width: 80px;
-}
-
-.bookmark-star {
-  color: #ffc107;
-  font-size: 1.2rem;
-  cursor: pointer;
-}
-
-textarea {
-  width: 100%;
-  min-height: 100px;
-  padding: 0.5rem;
-  border: 1px solid #ddd;
   border-radius: 4px;
-  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
-.delete-option {
-  color: #dc3545;
-}
-
-.delete-option:hover {
-  background-color: #f8d7da !important;
+button:hover {
+  background-color: #0056b3;
 }
 </style>
+
+
+
