@@ -45,8 +45,41 @@
         const taggedListUl = document.getElementById('tagged-list-ul');
         const taggedUrlForm = document.getElementById('tagged-url-form');
 
-        const fetchServers = async () => { /* ... existing implementation ... */ };
-        const fetchProxies = async () => { /* ... existing implementation ... */ };
+        const fetchServers = async () => {
+            try {
+                const response = await fetch('/instances');
+                if (!response.ok) throw new Error('Failed to fetch servers');
+                const servers = await response.json();
+                serverListUl.innerHTML = '';
+                if (servers && servers.length > 0) {
+                    servers.forEach(server => {
+                        const li = document.createElement('li');
+                        li.textContent = `${server.address} (Last seen: ${new Date(server.last_seen).toLocaleString()})`;
+                        serverListUl.appendChild(li);
+                    });
+                } else {
+                    serverListUl.innerHTML = '<li>No active servers found.</li>';
+                }
+            } catch (err) { console.error('Error fetching servers:', err); }
+        };
+
+        const fetchProxies = async () => {
+            try {
+                const response = await fetch('/all-proxies');
+                if (!response.ok) throw new Error('Failed to fetch proxies');
+                const proxies = await response.json();
+                proxyListUl.innerHTML = '';
+                if (proxies && proxies.length > 0) {
+                    proxies.forEach(proxy => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<a href="${proxy.shared_url}" target="_blank">${proxy.original_url}</a> -> <a href="${proxy.shared_url}" target="_blank">${proxy.shared_url}</a>`;
+                        proxyListUl.appendChild(li);
+                    });
+                } else {
+                    proxyListUl.innerHTML = '<li>No active proxies found.</li>';
+                }
+            } catch (err) { console.error('Error fetching proxies:', err); }
+        };
 
         const fetchTaggedURLs = async () => {
             try {
