@@ -3,12 +3,12 @@ package core
 import (
 	"bytes"
 	_ "embed"
-	// "fmt"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"path/filepath"
-	// "strings"
+	"strings"
 	"sync"
 )
 
@@ -63,7 +63,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 				Request:    req,
 			}
 			// Capture the cached response
-			// CaptureRequest(req, resp, reqBody, cached.Body)
+			CaptureRequest(req, resp, reqBody, cached.Body)
 			return resp, nil
 		}
 		log.Printf("Cache MISS for: %s", req.URL.String())
@@ -89,34 +89,26 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			return nil, err
 		}
 		// Inject script if the content is HTML and debug info is available
-		/*
 		if strings.Contains(resp.Header.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
 			debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
 			script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
-			injection := []byte("<script>" + script + "</script>")
-
+			
+			// Use strings.Replace for a safer and cleaner injection
 			bodyStr := string(respBody)
-			if pos := strings.LastIndex(bodyStr, "</body>"); pos != -1 {
-				// Found </body>, inject before it
-				var newBody bytes.Buffer
-				newBody.Write(respBody[:pos])
-				newBody.Write(injection)
-				newBody.Write(respBody[pos:])
-				respBody = newBody.Bytes()
-			} else {
-				// Fallback: append to the end
-				respBody = append(respBody, injection...)
-			}
+			injectionHTML := "<script>" + string(script) + "</script>"
+			newBodyStr := strings.Replace(bodyStr, "</body>", injectionHTML+"</body>", 1)
+			respBody = []byte(newBodyStr)
+
+			// Manually delete Content-Length header to avoid conflicts
+			resp.Header.Del("Content-Length")
 		}
-		*/
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody)) // Restore body for the client
 	}
 
 	// Capture the request and response
-	// CaptureRequest(req, resp, reqBody, respBody)
+	CaptureRequest(req, resp, reqBody, respBody)
 
 	// If cacheable, store the response in the cache.
-	/*
 	if isCacheable && resp.StatusCode == http.StatusOK {
 		entry := cacheEntry{
 			Header: resp.Header,
@@ -124,7 +116,6 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		}
 		t.Cache.Store(req.URL.String(), entry)
 	}
-	*/
 
 	return resp, nil
 }
