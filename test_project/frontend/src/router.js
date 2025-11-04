@@ -12,6 +12,19 @@ const routes = [
     path: '/',
     name: 'Main',
     component: Main,
+    beforeEnter: async (to, from, next) => {
+      try {
+        const response = await fetch('/check-auth');
+        if (response.ok) {
+          next();
+        } else {
+          next('/login');
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error);
+        next('/login');
+      }
+    },
   },
 ];
 
