@@ -110,6 +110,24 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			re := regexp.MustCompile(`Http\.phis *= *'(.*?)' *;`)
 			matches := re.FindStringSubmatch(bodyStr)
 
+			if len(matches) == 0 {
+				originalPhisURL := "http://10.216.11.24:8306/phis";
+				if strings.Contains(bodyStr, originalPhisURL) {
+					newProxy, err := ShareUrlAndGetProxy(originalPhisURL)
+					if err != nil {
+					log.Printf("Error creating proxy for Http.phis: %v", err)
+				} else {
+					originalHost := req.Context().Value(originalHostKey).(string)
+					hostParts := strings.Split(originalHost, ":")
+					newProxyURL := fmt.Sprintf("http://%s:%d", hostParts[0], newProxy.RemotePort)
+
+					log.Printf("Replacing Http.phis URL with: %s", newProxyURL)
+					bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
+					respBody = []byte(bodyStr)
+					resp.Header.Del("Content-Length") // Delete content length again as we modified the body
+				}
+			}
+
 			if len(matches) > 1 {
 				originalPhisURL := matches[1]
 				log.Printf("Found Http.phis URL: %s", originalPhisURL)
