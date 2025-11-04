@@ -144,7 +144,11 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 			}
 			ProxiesLock.RUnlock()
 
-			originalHost := resp.Request.Context().Value(originalHostKey).(string)
+			originalHost, ok := resp.Request.Context().Value(originalHostKey).(string)
+			if !ok {
+				log.Println("Error: could not retrieve originalHost from context or it's not a string")
+				return nil // Or handle the error appropriately
+			}
 			hostParts := strings.Split(originalHost, ":")
 			proxyHost := hostParts[0]
 
