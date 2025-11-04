@@ -2,10 +2,13 @@ package core
 
 import (
 	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	_ "embed"
 	"fmt"
 	"io"
 	"log"
+	// "mime"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -89,46 +92,46 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			log.Printf("Error reading response body: %v", err)
 			return nil, err
 		}
-		// Inject script if the content is HTML and debug info is available
+
+		// Decompress body if necessary
+		var reader io.ReadCloser
+		switch resp.Header.Get("Content-Encoding") {
+		case "gzip":
+			reader, err = gzip.NewReader(bytes.NewReader(respBody))
+			if err != nil {
+				log.Printf("Error creating gzip reader: %v", err)
+				return nil, err
+			}
+			defer reader.Close()
+		case "deflate":
+			reader = flate.NewReader(bytes.NewReader(respBody))
+			defer reader.Close()
+		default:
+			reader = io.NopCloser(bytes.NewReader(respBody))
+		}
+
+		decompressedBody, err := io.ReadAll(reader)
+		if err != nil {
+			log.Printf("Error decompressing response body: %v", err)
+			return nil, err
+		}
+
+		// Now, use decompressedBody for all manipulations
+		bodyStr := string(decompressedBody)
+		originalBodyStr := bodyStr
+
+		// 1. Inject script
 		if strings.Contains(resp.Header.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
 			debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
 			script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
-
-			// Use strings.Replace for a safer and cleaner injection
-			bodyStr := string(respBody)
 			injectionHTML := "<script>" + string(script) + "</script>"
-			newBodyStr := strings.Replace(bodyStr, "</body>", injectionHTML+"</body>", 1)
-			respBody = []byte(newBodyStr)
-
-			// Manually delete Content-Length header to avoid conflicts
-			resp.Header.Del("Content-Length")
+			bodyStr = strings.Replace(bodyStr, "</body>", injectionHTML+"</body>", 1)
 		}
 
-		// Handle Http.phis replacement for showView.jsp
+		// 2. Handle Http.phis replacement
 		if strings.Contains(req.URL.Path, "showView.jsp") {
-			bodyStr := string(respBody)
 			re := regexp.MustCompile(`Http\.phis *= *'(.*?)' *;`)
 			matches := re.FindStringSubmatch(bodyStr)
-
-			if len(matches) == 0 {
-				originalPhisURL := "http://10.216.11.24:8306/phis"
-				if strings.Contains(bodyStr, originalPhisURL) {
-					newProxy, err := ShareUrlAndGetProxy(originalPhisURL)
-					if err != nil {
-						log.Printf("Error creating proxy for Http.phis: %v", err)
-
-					} else {
-						originalHost := req.Context().Value(originalHostKey).(string)
-						hostParts := strings.Split(originalHost, ":")
-						newProxyURL := fmt.Sprintf("http://%s:%d", hostParts[0], newProxy.RemotePort)
-
-						log.Printf("Replacing Http.phis URL with: %s", newProxyURL)
-						bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
-						respBody = []byte(bodyStr)
-						resp.Header.Del("Content-Length") // Delete content length again as we modified the body
-					}
-				}
-			}
 
 			if len(matches) > 1 {
 				originalPhisURL := matches[1]
@@ -144,13 +147,37 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 
 					log.Printf("Replacing Http.phis URL with: %s", newProxyURL)
 					bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
-					respBody = []byte(bodyStr)
-					resp.Header.Del("Content-Length") // Delete content length again as we modified the body
+				}
+			} else {
+				// Manual check as a fallback
+				originalPhisURL := "http://10.216.11.24:8306/phis"
+				if strings.Contains(bodyStr, originalPhisURL) {
+					newProxy, err := ShareUrlAndGetProxy(originalPhisURL)
+					if err != nil {
+						log.Printf("Error creating proxy for Http.phis: %v", err)
+					} else {
+						originalHost := req.Context().Value(originalHostKey).(string)
+						hostParts := strings.Split(originalHost, ":")
+						newProxyURL := fmt.Sprintf("http://%s:%d", hostParts[0], newProxy.RemotePort)
+
+						log.Printf("Replacing Http.phis URL with: %s", newProxyURL)
+						bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
+					}
 				}
 			}
 		}
 
-		resp.Body = io.NopCloser(bytes.NewBuffer(respBody)) // Restore body for the client
+		// If body was modified, update respBody and headers
+		if bodyStr != originalBodyStr {
+			respBody = []byte(bodyStr)
+			resp.Header.Del("Content-Encoding")
+			resp.Header.Del("Content-Length")
+		} else {
+			// If not modified, use the original (potentially compressed) body
+			respBody = decompressedBody
+		}
+
+		resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
 	}
 
 	// Capture the request and response
