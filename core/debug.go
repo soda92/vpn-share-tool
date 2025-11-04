@@ -3,6 +3,7 @@ package core
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/google/uuid"
 	"go.etcd.io/bbolt"
 )
 
@@ -99,9 +101,13 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 	})))
 
 	// Add debug API endpoints
-	mux.HandleFunc("/debug/requests/", handleDebugRequests)
+	mux.HandleFunc("/debug/sessions", handleSessions)
+	mux.HandleFunc("/debug/sessions/", handleSession)
+	mux.HandleFunc("/debug/live-requests", handleLiveRequests)
 	mux.HandleFunc("/debug/clear", handleClearRequests)
 	mux.HandleFunc("/debug/ws", handleDebugWS)
+	mux.HandleFunc("/debug/requests/", handleSingleRequest)
+	mux.HandleFunc("/debug/share-request", handleShareRequest)
 
 	log.Println("Debug UI registered at /debug/")
 }
@@ -359,4 +365,88 @@ func handleClearRequests(w http.ResponseWriter, r *http.Request) {
 	nextRequestID = 0
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("History cleared"))
+}
+
+func handleSingleRequest(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimPrefix(r.URL.Path, "/debug/requests/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid request ID", http.StatusBadRequest)
+		return
+	}
+
+	var foundRequest *CapturedRequest
+	err = db.View(func(tx *bbolt.Tx) error {
+		// Iterate over all session buckets to find the request
+		return tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
+			if string(name) == sessionsMetadataBucket { // Skip metadata bucket
+				return nil
+			}
+			data := b.Get([]byte(strconv.FormatInt(id, 10)))
+			if data != nil {
+				var req CapturedRequest
+				if err := json.Unmarshal(data, &req); err == nil {
+					foundRequest = &req
+				}
+				return fmt.Errorf("found") // Stop iteration
+			}
+			return nil
+		})
+	})
+
+	if err != nil && err.Error() != "found" {
+		log.Printf("Error searching for single request: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if foundRequest == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(foundRequest)
+}
+
+func handleShareRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req CapturedRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Assign a new ID to ensure uniqueness for shared requests
+	// This ID will be used for the shareable URL
+	req.ID = time.Now().UnixNano() // Use nanoseconds for a highly unique ID
+
+	// Save to a special "shared_requests" bucket
+	sharedBucketName := "shared_requests"
+	err := db.Update(func(tx *bbolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(sharedBucketName))
+		if err != nil {
+			return err
+		}
+		jsonReq, err := json.Marshal(req)
+		if err != nil {
+			return err
+		}
+		return b.Put([]byte(strconv.FormatInt(req.ID, 10)), jsonReq)
+	})
+
+	if err != nil {
+		log.Printf("Error saving shared request: %v", err)
+		http.Error(w, "Failed to save request for sharing", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int64{"id": req.ID})
 }
