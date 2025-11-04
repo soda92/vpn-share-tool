@@ -156,13 +156,17 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 				if err != nil {
 					log.Printf("Error creating proxy for phis URL: %v", err)
 				} else {
-					originalHost := req.Context().Value(originalHostKey).(string)
-					hostParts := strings.Split(originalHost, ":")
-					// Construct the new URL, preserving the path from the original
-					newProxyURL := fmt.Sprintf("http://%s:%d%s", hostParts[0], newProxy.RemotePort, newProxy.Path)
+					originalHost, ok := req.Context().Value(originalHostKey).(string)
+					if !ok {
+						log.Printf("Error: originalHost not found in request context for URL %s", req.URL.String())
+					} else {
+						hostParts := strings.Split(originalHost, ":")
+						// Construct the new URL, preserving the path from the original
+						newProxyURL := fmt.Sprintf("http://%s:%d%s", hostParts[0], newProxy.RemotePort, newProxy.Path)
 
-					log.Printf("Replacing phis URL with: %s", newProxyURL)
-					bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
+						log.Printf("Replacing phis URL with: %s", newProxyURL)
+						bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
+					}
 				}
 			}
 		}
