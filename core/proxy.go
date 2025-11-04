@@ -96,34 +96,13 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.Transport = &CachingTransport{
-		Transport: http.DefaultTransport,
-	}
-
 	proxy.Director = func(req *http.Request) {
-		// Save the original host
-		req.Header.Set("X-Forwarded-Host", req.Host)
-
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
 		req.Host = target.Host
 	}
 
-	proxy.ModifyResponse = func(resp *http.Response) error {
-		if location, err := resp.Location(); err == nil {
-			if location.Host == resp.Request.URL.Host {
-				// It's a redirect to the same host as the target.
-				// We need to rewrite it to point to the proxy.
-				proxyHost := resp.Request.Header.Get("X-Forwarded-Host")
-				if proxyHost != "" {
-					location.Host = proxyHost
-					location.Scheme = "http" // Assuming proxy is http
-					resp.Header.Set("Location", location.String())
-				}
-			}
-		}
-		return nil
-	}
+	proxy.Transport = http.DefaultTransport
 
 	ProxiesLock.Lock()
 	var remotePort int
