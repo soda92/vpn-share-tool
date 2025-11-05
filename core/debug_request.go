@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.etcd.io/bbolt"
 )
@@ -119,7 +120,11 @@ func updateSingleRequest(w http.ResponseWriter, r *http.Request) {
 	capturedRequestsLock.Unlock()
 
 	if foundInMemory {
-		// If any update was made to an in-memory request, persist it to the shared bucket
+		originalID := requestInMemory.ID
+		newID := time.Now().UnixNano()
+		requestInMemory.ID = newID
+
+		// Persist the updated in-memory request to the shared bucket with the new ID
 		err := db.Update(func(tx *bbolt.Tx) error {
 			b, err := tx.CreateBucketIfNotExists([]byte("shared_requests"))
 			if err != nil {
@@ -129,12 +134,26 @@ func updateSingleRequest(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			return b.Put([]byte(strconv.FormatInt(id, 10)), jsonReq)
+			return b.Put([]byte(strconv.FormatInt(newID, 10)), jsonReq)
 		})
 		if err != nil {
 			log.Printf("Error persisting updated live request: %v", err)
+			// Revert ID on failure
+			requestInMemory.ID = originalID
+			http.Error(w, "Failed to save request", http.StatusInternalServerError)
+			return
 		}
-		w.WriteHeader(http.StatusOK)
+
+		// Remove the old request from memory
+		for i, req := range capturedRequests {
+			if req != nil && req.ID == originalID {
+				capturedRequests[i] = nil // Or shift elements to keep array dense
+				break
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]int64{"old_id": originalID, "new_id": newID})
 		return
 	}
 

@@ -42,6 +42,18 @@ const props = defineProps<{
   sessionId?: string;
 }>();
 
+const isPersisted = (req: CapturedRequest) => {
+  // Live requests have small, sequential IDs. Persisted IDs are nanosecond timestamps. 
+  return req.id > 1000000000; 
+};
+
+const handlePersistResponse = (data: { old_id: number, new_id: number }) => {
+  const req = requests.value.find(r => r.id === data.old_id);
+  if (req) {
+    req.id = data.new_id;
+  }
+};
+
 const router = useRouter();
 
 const requests = ref<CapturedRequest[]>([]);
@@ -73,7 +85,12 @@ const saveNote = async () => {
   if (!selectedRequest.value) return;
   selectedRequest.value.note = selectedRequestNote.value;
   try {
-    await axios.put(`/debug/requests/${selectedRequest.value.id}`, { note: selectedRequestNote.value });
+    if (props.isLive && !isPersisted(selectedRequest.value)) {
+      const response = await axios.put(`/debug/requests/${selectedRequest.value.id}`, { note: selectedRequestNote.value });
+      handlePersistResponse(response.data);
+    } else {
+      await axios.put(`/debug/requests/${selectedRequest.value.id}`, { note: selectedRequestNote.value });
+    }
   } catch (error) {
     console.error('Error saving note:', error);
   }
@@ -103,7 +120,7 @@ const clearHistory = async () => {
       selectedForCompare.value = null;
     } catch (error) {
       console.error('Error clearing history:', error);
-    } 
+    }
   }
 };
 
@@ -141,12 +158,18 @@ const compareWithSelected = () => {
 
 const toggleBookmark = async (request: CapturedRequest) => {
   const newStatus = !request.bookmarked;
-  request.bookmarked = newStatus;
   try {
-    await axios.put(`/debug/requests/${request.id}`, { bookmarked: newStatus });
+    if (props.isLive && newStatus && !isPersisted(request)) {
+      const response = await axios.put(`/debug/requests/${request.id}`, { bookmarked: newStatus });
+      handlePersistResponse(response.data);
+      const updatedReq = requests.value.find(r => r.id === response.data.new_id);
+      if(updatedReq) updatedReq.bookmarked = newStatus;
+    } else {
+      await axios.put(`/debug/requests/${request.id}`, { bookmarked: newStatus });
+      request.bookmarked = newStatus;
+    }
   } catch (error) {
     console.error('Error updating bookmark:', error);
-    request.bookmarked = !newStatus; // Revert on error
   }
 };
 
@@ -174,22 +197,27 @@ const shareRequest = async () => {
   if (!contextMenu.value.request) return;
   let requestIdToShare = contextMenu.value.request.id;
 
-  if (props.isLive) {
+  if (props.isLive && !isPersisted(contextMenu.value.request)) {
     try {
       const response = await axios.post('/debug/share-request', contextMenu.value.request);
-      requestIdToShare = response.data.id;
+      handlePersistResponse(response.data);
+      requestIdToShare = response.data.new_id;
     } catch (error) {
       console.error('Error saving request for sharing:', error);
       alert('Failed to save request for sharing.');
       return;
     }
+  } else if (!isPersisted(contextMenu.value.request)) {
+      // It's a saved session, but the request itself hasn't been individually persisted
+      // This case might need a dedicated endpoint if we want to share from saved sessions
+      // For now, we just use its existing ID
   }
+
 
   const shareUrl = `${window.location.origin}/debug/request/${requestIdToShare}`;
   window.open(shareUrl, ' _blank');
   hideContextMenu();
 };
-
 onMounted(() => {
   if (props.isLive) {
     fetchRequests();

@@ -167,8 +167,8 @@ func handleShareRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	originalID := req.ID
 	// Assign a new ID to ensure uniqueness for shared requests
-	// This ID will be used for the shareable URL
 	req.ID = time.Now().UnixNano() // Use nanoseconds for a highly unique ID
 
 	// Save to a special "shared_requests" bucket
@@ -192,5 +192,5 @@ func handleShareRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int64{"id": req.ID})
+	json.NewEncoder(w).Encode(map[string]int64{"old_id": originalID, "new_id": req.ID})
 }
