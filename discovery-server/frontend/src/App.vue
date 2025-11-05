@@ -135,18 +135,29 @@ onMounted(() => {
 </script>
 
 <style scoped>
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; margin: 0; padding: 1rem; }
-.container { max-width: 1200px; margin: auto; background-color: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
-h1, h2 { color: #333; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-input[type="text"], input[type="submit"], button { padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; width: 100%; box-sizing: border-box; margin-bottom: 0.5rem; }
-input[type="submit"], button { background-color: #007bff; color: white; cursor: pointer; border: none; }
-button.delete { background-color: #dc3545; }
-button.rename { background-color: #ffc107; }
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 1rem; }
+.container { max-width: 1200px; margin: auto; background-color: #ffffff; padding: 2.5rem; border-radius: 12px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); }
+h1 { color: #2c3e50; text-align: center; margin-bottom: 2rem; font-size: 2.5rem; font-weight: 700; }
+h2 { color: #34495e; border-bottom: 2px solid #eceff1; padding-bottom: 0.75rem; margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.75rem; font-weight: 600; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; }
+input[type="text"], input[type="submit"], button { padding: 0.85rem; border: 1px solid #dcdfe6; border-radius: 6px; font-size: 1rem; width: 100%; box-sizing: border-box; margin-bottom: 0.75rem; transition: all 0.3s ease; }
+input[type="text"]:focus { border-color: #409eff; box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2); outline: none; }
+input[type="submit"], button { background-color: #409eff; color: white; cursor: pointer; border: none; font-weight: 500; }
+input[type="submit"]:hover, button:hover { background-color: #66b1ff; box-shadow: 0 4px 10px rgba(64, 158, 255, 0.2); }
+button.delete { background-color: #f56c6c; }
+button.delete:hover { background-color: #f78989; }
+button.rename { background-color: #e6a23c; }
+button.rename:hover { background-color: #ebb563; }
 ul { list-style: none; padding: 0; }
-li { background-color: #f8f9fa; padding: 1rem; border-radius: 4px; margin-bottom: 0.5rem; }
-.url-info { word-break: break-all; }
-.url-actions { display: flex; gap: 0.5rem; margin-top: 1rem; justify-content: flex-end; }
-.proxy-link a { color: #28a745; }
-.no-proxy { color: #6c757d; font-style: italic; }
+li { background-color: #fdfdfd; padding: 1.2rem; border-radius: 8px; margin-bottom: 0.75rem; border: 1px solid #ebeef5; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); transition: all 0.3s ease; }
+li:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
+.url-info { word-break: break-all; line-height: 1.6; }
+.url-info strong { color: #2c3e50; font-size: 1.1rem; }
+.url-info small { color: #7f8c8d; }
+.url-actions { display: flex; gap: 0.75rem; margin-top: 1.2rem; justify-content: flex-end; }
+.proxy-link a { color: #2ecc71; font-weight: 500; text-decoration: none; }
+.proxy-link a:hover { text-decoration: underline; }
+.no-proxy { color: #95a5a6; font-style: italic; }
+#server-list-ul li { display: flex; justify-content: space-between; align-items: center; }
+#server-list-ul li span { color: #7f8c8d; font-size: 0.9rem; }
 </style>
