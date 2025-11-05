@@ -24,8 +24,32 @@ func InitDB(dbPath string) error {
 	}
 
 	return db.Update(func(tx *bbolt.Tx) error {
+		// Ensure metadata bucket exists
 		_, err := tx.CreateBucketIfNotExists([]byte(sessionsMetadataBucket))
-		return err
+		if err != nil {
+			return err
+		}
+
+		// Ensure live session bucket exists and clean it
+		liveBucket, err := tx.CreateBucketIfNotExists([]byte(liveSessionBucketName))
+		if err != nil {
+			return err
+		}
+
+		// Initialize nextRequestID from the largest existing ID in any bucket
+		nextRequestID = 0
+		tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
+			b.ForEach(func(k, v []byte) error {
+				id, _ := strconv.ParseInt(string(k), 10, 64)
+				if id > nextRequestID {
+					nextRequestID = id
+				}
+				return nil
+			})
+			return nil
+		})
+
+		return nil
 	})
 }
 
@@ -41,13 +65,16 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSession(w http.ResponseWriter, r *http.Request) {
+	sessionID := strings.TrimPrefix(r.URL.Path, "/debug/sessions/")
+	sessionID = strings.TrimSuffix(sessionID, "/requests")
+
 	switch r.Method {
 	case http.MethodGet:
-		getSessionRequests(w, r)
+		getSessionRequests(w, r, sessionID)
 	case http.MethodPut:
-		updateSession(w, r)
+		updateSession(w, r, sessionID)
 	case http.MethodDelete:
-		deleteSession(w, r)
+		deleteSession(w, r, sessionID)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -58,7 +85,10 @@ func listSessions(w http.ResponseWriter, r *http.Request) {
 	err := db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(sessionsMetadataBucket))
 		return b.ForEach(func(k, v []byte) error {
-			sessions = append(sessions, map[string]string{"id": string(k), "name": string(v)})
+			// Do not list the internal live session
+			if string(k) != liveSessionBucketName {
+				sessions = append(sessions, map[string]string{"id": string(k), "name": string(v)})
+			}
 			return nil
 		})
 	})
@@ -84,8 +114,17 @@ func createSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := uuid.New().String()
 
 	err := db.Update(func(tx *bbolt.Tx) error {
-		// Create bucket for the session
-		_, err := tx.CreateBucket([]byte(sessionID))
+		// Create new bucket for the session
+		destBucket, err := tx.CreateBucket([]byte(sessionID))
+		if err != nil {
+			return err
+		}
+
+		// Copy from live session bucket
+		sourceBucket := tx.Bucket([]byte(liveSessionBucketName))
+		err = sourceBucket.ForEach(func(k, v []byte) error {
+			return destBucket.Put(k, v)
+		})
 		if err != nil {
 			return err
 		}
@@ -101,36 +140,11 @@ func createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Now, copy live requests to the new session bucket
-	capturedRequestsLock.RLock()
-	defer capturedRequestsLock.RUnlock()
-
-	err = db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(sessionID))
-		for _, req := range capturedRequests {
-			if req != nil {
-				jsonReq, _ := json.Marshal(req)
-				if err := b.Put([]byte(strconv.FormatInt(req.ID, 10)), jsonReq); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	})
-
-	if err != nil {
-		log.Printf("Error saving requests to session: %v", err)
-		// Don't block the user, session is created, but requests might be missing
-	}
-
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"id": sessionID, "name": reqBody.Name})
 }
 
-func getSessionRequests(w http.ResponseWriter, r *http.Request) {
-	sessionID := strings.TrimPrefix(r.URL.Path, "/debug/sessions/")
-	sessionID = strings.TrimSuffix(sessionID, "/requests")
-
+func getSessionRequests(w http.ResponseWriter, r *http.Request, sessionID string) {
 	var requests []*CapturedRequest
 	err := db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(sessionID))
@@ -151,12 +165,16 @@ func getSessionRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Sort by ID descending (newest first)
+	sort.Slice(requests, func(i, j int) bool {
+		return requests[i].ID > requests[j].ID
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(requests)
 }
 
-func updateSession(w http.ResponseWriter, r *http.Request) {
-	sessionID := strings.TrimPrefix(r.URL.Path, "/debug/sessions/")
+func updateSession(w http.ResponseWriter, r *http.Request, sessionID string) {
 	var reqBody struct {
 		Name string `json:"name"`
 	}
@@ -185,8 +203,7 @@ func updateSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func deleteSession(w http.ResponseWriter, r *http.Request) {
-	sessionID := strings.TrimPrefix(r.URL.Path, "/debug/sessions/")
+func deleteSession(w http.ResponseWriter, r *http.Request, sessionID string) {
 	err := db.Update(func(tx *bbolt.Tx) error {
 		metaBucket := tx.Bucket([]byte(sessionsMetadataBucket))
 		if err := metaBucket.Delete([]byte(sessionID)); err != nil {

@@ -14,70 +14,47 @@ import (
 
 
 func handleSingleRequest(w http.ResponseWriter, r *http.Request) {
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(pathParts) < 3 {
+		http.Error(w, "Invalid request path", http.StatusBadRequest)
+		return
+	}
+	sessionID := pathParts[2]
+	idStr := pathParts[3]
+
 	switch r.Method {
 	case http.MethodGet:
-		getSingleRequest(w, r)
+		getSingleRequest(w, r, sessionID, idStr)
 	case http.MethodPut:
-		updateSingleRequest(w, r)
+		updateSingleRequest(w, r, sessionID, idStr)
 	case http.MethodDelete:
-		deleteSingleRequest(w, r)
+		deleteSingleRequest(w, r, sessionID, idStr)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-func getSingleRequest(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/debug/requests/")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid request ID", http.StatusBadRequest)
-		return
-	}
-
-	// First, check in-memory requests
-	capturedRequestsLock.RLock()
+func getSingleRequest(w http.ResponseWriter, r *http.Request, sessionID, idStr string) {
 	var foundRequest *CapturedRequest
-	for _, req := range capturedRequests {
-		if req != nil && req.ID == id {
-			foundRequest = req
-			break
+	err := db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(sessionID))
+		if b == nil {
+			return fmt.Errorf("session not found")
 		}
-	}
-	capturedRequestsLock.RUnlock()
-
-	// If found in memory, return it
-	if foundRequest != nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(foundRequest)
-		return
-	}
-
-	// If not in memory, check the database
-	err = db.View(func(tx *bbolt.Tx) error {
-		// Iterate over all session buckets to find the request
-		return tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
-			if string(name) == sessionsMetadataBucket { // Skip metadata bucket
-				return nil
-			}
-			data := b.Get([]byte(strconv.FormatInt(id, 10)))
-			if data != nil {
-				var req CapturedRequest
-				if err := json.Unmarshal(data, &req); err == nil {
-					foundRequest = &req
-				}
-				return fmt.Errorf("found") // Stop iteration
-			}
-			return nil
-		})
+		data := b.Get([]byte(idStr))
+		if data == nil {
+			return fmt.Errorf("request not found")
+		}
+		var req CapturedRequest
+		if err := json.Unmarshal(data, &req); err != nil {
+			return fmt.Errorf("failed to unmarshal request: %v", err)
+		}
+		foundRequest = &req
+		return nil
 	})
 
-	if err != nil && err.Error() != "found" {
-		log.Printf("Error searching for single request: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if foundRequest == nil {
+	if err != nil {
+		log.Printf("Error getting single request: %v", err)
 		http.NotFound(w, r)
 		return
 	}
@@ -86,100 +63,26 @@ func getSingleRequest(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(foundRequest)
 }
 
-func updateSingleRequest(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/debug/requests/")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid request ID", http.StatusBadRequest)
-		return
-	}
-
+func updateSingleRequest(w http.ResponseWriter, r *http.Request, sessionID, idStr string) {
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// First, try to update in-memory requests
-	capturedRequestsLock.Lock()
-	var foundInMemory bool
-	var requestInMemory *CapturedRequest
-	for _, req := range capturedRequests {
-		if req != nil && req.ID == id {
-			if bookmarked, ok := updates["bookmarked"].(bool); ok {
-				req.Bookmarked = bookmarked
-			}
-			if note, ok := updates["note"].(string); ok {
-				req.Note = note
-			}
-			foundInMemory = true
-			requestInMemory = req
-			break
-		}
-	}
-	capturedRequestsLock.Unlock()
-
-	if foundInMemory {
-		originalID := requestInMemory.ID
-		newID := time.Now().UnixNano()
-		requestInMemory.ID = newID
-
-		// Persist the updated in-memory request to the shared bucket with the new ID
-		err := db.Update(func(tx *bbolt.Tx) error {
-			b, err := tx.CreateBucketIfNotExists([]byte("shared_requests"))
-			if err != nil {
-				return err
-			}
-			jsonReq, err := json.Marshal(requestInMemory)
-			if err != nil {
-				return err
-			}
-			return b.Put([]byte(strconv.FormatInt(newID, 10)), jsonReq)
-		})
-		if err != nil {
-			log.Printf("Error persisting updated live request: %v", err)
-			// Revert ID on failure
-			requestInMemory.ID = originalID
-			http.Error(w, "Failed to save request", http.StatusInternalServerError)
-			return
+	err := db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(sessionID))
+		if b == nil {
+			return fmt.Errorf("session not found")
 		}
 
-		// Remove the old request from memory
-		for i, req := range capturedRequests {
-			if req != nil && req.ID == originalID {
-				capturedRequests[i] = nil // Or shift elements to keep array dense
-				break
-			}
+		// Get existing request
+		data := b.Get([]byte(idStr))
+		if data == nil {
+			return fmt.Errorf("request not found")
 		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]int64{"old_id": originalID, "new_id": newID})
-		return
-	}
-
-	// If not in memory, try to update in the database
-	err = db.Update(func(tx *bbolt.Tx) error {
-		var bucketName, reqData []byte
-		// Find the request and its bucket
-		tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
-			if string(name) == sessionsMetadataBucket {
-				return nil
-			}
-			data := b.Get([]byte(strconv.FormatInt(id, 10)))
-			if data != nil {
-				bucketName = name
-				reqData = data
-				return fmt.Errorf("found")
-			}
-			return nil
-		})
-
-		if bucketName == nil {
-			return fmt.Errorf("not found")
-		}
-
 		var req CapturedRequest
-		if err := json.Unmarshal(reqData, &req); err != nil {
+		if err := json.Unmarshal(data, &req); err != nil {
 			return err
 		}
 
@@ -196,12 +99,11 @@ func updateSingleRequest(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		b := tx.Bucket(bucketName)
-		return b.Put([]byte(strconv.FormatInt(id, 10)), updatedData)
+		return b.Put([]byte(idStr), updatedData)
 	})
 
 	if err != nil {
-		if err.Error() == "not found" {
+		if strings.Contains(err.Error(), "not found") {
 			http.NotFound(w, r)
 		} else {
 			log.Printf("Error updating request: %v", err)
@@ -212,38 +114,20 @@ func updateSingleRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func deleteSingleRequest(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/debug/requests/")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid request ID", http.StatusBadRequest)
-		return
-	}
-
-	err = db.Update(func(tx *bbolt.Tx) error {
-		var bucketName []byte
-		// Find the request's bucket
-		tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
-			if string(name) == sessionsMetadataBucket {
-				return nil
-			}
-			if b.Get([]byte(strconv.FormatInt(id, 10))) != nil {
-				bucketName = name
-				return fmt.Errorf("found")
-			}
-			return nil
-		})
-
-		if bucketName == nil {
-			return fmt.Errorf("not found")
+func deleteSingleRequest(w http.ResponseWriter, r *http.Request, sessionID, idStr string) {
+	err := db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(sessionID))
+		if b == nil {
+			return fmt.Errorf("session not found")
 		}
-
-		b := tx.Bucket(bucketName)
-		return b.Delete([]byte(strconv.FormatInt(id, 10)))
+		if b.Get([]byte(idStr)) == nil {
+			return fmt.Errorf("request not found")
+		}
+		return b.Delete([]byte(idStr))
 	})
 
 	if err != nil {
-		if err.Error() == "not found" {
+		if strings.Contains(err.Error(), "not found") {
 			http.NotFound(w, r)
 		} else {
 			log.Printf("Error deleting request: %v", err)

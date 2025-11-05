@@ -31,30 +31,15 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, defineProps, nextTick } from 'vue';
 import axios from 'axios';
-import { useRouter } from 'vue-router';
 import type { CapturedRequest } from '../types';
 import RequestList from './RequestList.vue';
 import RequestDetails from './RequestDetails.vue';
 import ContextMenu from './ContextMenu.vue';
 
 const props = defineProps<{
-  isLive: boolean;
-  sessionId?: string;
+  isLive?: boolean;
+  sessionId: string;
 }>();
-
-const isPersisted = (req: CapturedRequest) => {
-  // Live requests have small, sequential IDs. Persisted IDs are nanosecond timestamps. 
-  return req.id > 1000000000; 
-};
-
-const handlePersistResponse = (data: { old_id: number, new_id: number }) => {
-  const req = requests.value.find(r => r.id === data.old_id);
-  if (req) {
-    req.id = data.new_id;
-  }
-};
-
-const router = useRouter();
 
 const requests = ref<CapturedRequest[]>([]);
 const selectedRequest = ref<CapturedRequest | null>(null);
@@ -85,27 +70,17 @@ const saveNote = async () => {
   if (!selectedRequest.value) return;
   selectedRequest.value.note = selectedRequestNote.value;
   try {
-    if (props.isLive && !isPersisted(selectedRequest.value)) {
-      const response = await axios.put(`/debug/requests/${selectedRequest.value.id}`, { note: selectedRequestNote.value });
-      handlePersistResponse(response.data);
-    } else {
-      await axios.put(`/debug/requests/${selectedRequest.value.id}`, { note: selectedRequestNote.value });
-    }
+    await axios.put(`/debug/requests/${props.sessionId}/${selectedRequest.value.id}`, { note: selectedRequestNote.value });
   } catch (error) {
     console.error('Error saving note:', error);
   }
 };
 
 const fetchRequests = async () => {
+  if (!props.sessionId) return;
   try {
-    let url = '';
-    if (props.isLive) {
-      url = '/debug/live-requests';
-    } else if (props.sessionId) {
-      url = `/debug/sessions/${props.sessionId}/requests`;
-    }
-    const response = await axios.get(url);
-    requests.value = (response.data || []).sort((a: CapturedRequest, b: CapturedRequest) => b.id - a.id);
+    const response = await axios.get(`/debug/sessions/${props.sessionId}/requests`);
+    requests.value = response.data || [];
   } catch (error) {
     console.error('Error fetching requests:', error);
   }
@@ -114,13 +89,13 @@ const fetchRequests = async () => {
 const clearHistory = async () => {
   if (props.isLive) {
     try {
-      await axios.post('/debug/clear');
-      requests.value = [];
-      selectedRequest.value = null;
-      selectedForCompare.value = null;
+      await axios.post('/debug/clear-live');
+      fetchRequests(); // Refetch to show only persisted items
     } catch (error) {
       console.error('Error clearing history:', error);
     }
+  } else {
+    alert('Cannot clear history for a saved session.');
   }
 };
 
@@ -129,7 +104,7 @@ const selectRequest = (request: CapturedRequest) => {
 };
 
 const showContextMenu = (event: MouseEvent, request: CapturedRequest) => {
-  hideContextMenu(); // Hide any existing menu first
+  hideContextMenu();
   nextTick(() => {
     contextMenu.value.visible = true;
     contextMenu.value.x = event.clientX;
@@ -159,15 +134,8 @@ const compareWithSelected = () => {
 const toggleBookmark = async (request: CapturedRequest) => {
   const newStatus = !request.bookmarked;
   try {
-    if (props.isLive && newStatus && !isPersisted(request)) {
-      const response = await axios.put(`/debug/requests/${request.id}`, { bookmarked: newStatus });
-      handlePersistResponse(response.data);
-      const updatedReq = requests.value.find(r => r.id === response.data.new_id);
-      if(updatedReq) updatedReq.bookmarked = newStatus;
-    } else {
-      await axios.put(`/debug/requests/${request.id}`, { bookmarked: newStatus });
-      request.bookmarked = newStatus;
-    }
+    await axios.put(`/debug/requests/${props.sessionId}/${request.id}`, { bookmarked: newStatus });
+    request.bookmarked = newStatus; // Optimistically update UI
   } catch (error) {
     console.error('Error updating bookmark:', error);
   }
@@ -177,7 +145,7 @@ const deleteRequest = async () => {
   if (!contextMenu.value.request) return;
   if (confirm('Are you sure you want to permanently delete this request?')) {
     try {
-      await axios.delete(`/debug/requests/${contextMenu.value.request.id}`);
+      await axios.delete(`/debug/requests/${props.sessionId}/${contextMenu.value.request.id}`);
       const index = requests.value.findIndex((r: CapturedRequest) => r.id === contextMenu.value.request!.id);
       if (index > -1) {
         requests.value.splice(index, 1);
@@ -195,32 +163,14 @@ const deleteRequest = async () => {
 
 const shareRequest = async () => {
   if (!contextMenu.value.request) return;
-  let requestIdToShare = contextMenu.value.request.id;
-
-  if (props.isLive && !isPersisted(contextMenu.value.request)) {
-    try {
-      const response = await axios.post('/debug/share-request', contextMenu.value.request);
-      handlePersistResponse(response.data);
-      requestIdToShare = response.data.new_id;
-    } catch (error) {
-      console.error('Error saving request for sharing:', error);
-      alert('Failed to save request for sharing.');
-      return;
-    }
-  } else if (!isPersisted(contextMenu.value.request)) {
-      // It's a saved session, but the request itself hasn't been individually persisted
-      // This case might need a dedicated endpoint if we want to share from saved sessions
-      // For now, we just use its existing ID
-  }
-
-
-  const shareUrl = `${window.location.origin}/debug/request/${requestIdToShare}`;
+  const shareUrl = `${window.location.origin}/debug/request/${props.sessionId}/${contextMenu.value.request.id}`;
   window.open(shareUrl, ' _blank');
   hideContextMenu();
 };
+
 onMounted(() => {
+  fetchRequests();
   if (props.isLive) {
-    fetchRequests();
     const ws = new WebSocket(`ws://${window.location.host}/debug/ws`);
     ws.onmessage = (event) => {
       const newRequest: CapturedRequest = JSON.parse(event.data);
@@ -231,10 +181,11 @@ onMounted(() => {
     };
     ws.onclose = () => console.log('WebSocket connection closed');
     ws.onerror = (error) => console.error('WebSocket error:', error);
+    document.title = "Live Session";
   } else {
-    fetchRequests();
+    // In a real app, you'd fetch the session name
+    document.title = `Session ${props.sessionId}`;
   }
-  document.title = props.isLive ? "Live Session" : `Session ${props.sessionId}`;
 });
 </script>
 

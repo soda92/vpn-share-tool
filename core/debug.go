@@ -17,34 +17,31 @@ import (
 
 
 const (
-	maxCapturedRequests    = 1000
+	maxCapturedRequests   = 1000
+	liveSessionBucketName = "live_session"
 )
-
 
 //go:embed frontend/dist
 var debugFrontend embed.FS
 
-
 // CapturedRequest holds details of an intercepted HTTP request and its response.
 type CapturedRequest struct {
-	ID              int64       `json:"id"`
-	Timestamp       time.Time   `json:"timestamp"`
-	Method          string      `json:"method"`
-	URL             string      `json:"url"`
-	RequestHeaders  http.Header `json:"request_headers"`
-	RequestBody     string      `json:"request_body"`
-	ResponseStatus  int         `json:"response_status"`
+	ID         int64       `json:"id"`
+	Timestamp  time.Time   `json:"timestamp"`
+	Method     string      `json:"method"`
+	URL        string      `json:"url"`
+	RequestHeaders http.Header `json:"request_headers"`
+	RequestBody    string      `json:"request_body"`
+	ResponseStatus int         `json:"response_status"`
 	ResponseHeaders http.Header `json:"response_headers"`
-	ResponseBody    string      `json:"response_body"`
-	Bookmarked      bool        `json:"bookmarked"`
-	Note            string      `json:"note"`
+	ResponseBody   string      `json:"response_body"`
+	Bookmarked bool        `json:"bookmarked"`
+	Note       string      `json:"note"`
 }
 
 var (
-	capturedRequests     [maxCapturedRequests]*CapturedRequest
-	capturedRequestsLock sync.RWMutex
-	nextRequestID        int64
-	captureHead          int
+	nextRequestID int64
+	requestIDLock sync.Mutex
 )
 
 // RegisterDebugRoutes registers the debug UI and API routes.
@@ -80,24 +77,17 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 	// Add debug API endpoints
 	mux.HandleFunc("/debug/sessions", handleSessions)
 	mux.HandleFunc("/debug/sessions/", handleSession)
-	mux.HandleFunc("/debug/live-requests", handleLiveRequests)
-	mux.HandleFunc("/debug/clear", handleClearRequests)
+	mux.HandleFunc("/debug/clear-live", handleClearLiveRequests)
 	mux.HandleFunc("/debug/ws", handleDebugWS)
 	mux.HandleFunc("/debug/requests/", handleSingleRequest)
-	mux.HandleFunc("/debug/share-request", handleShareRequest)
 
 	log.Println("Debug UI registered at /debug/")
 }
 
-
-
 // CaptureRequest captures the request and response for debugging.
 func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []byte) {
-	capturedRequestsLock.Lock()
-	defer capturedRequestsLock.Unlock()
-
+	requestIDLock.Lock()
 	nextRequestID++
-
 	cr := &CapturedRequest{
 		ID:              nextRequestID,
 		Timestamp:       time.Now(),
@@ -109,88 +99,68 @@ func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []
 		ResponseHeaders: resp.Header,
 		ResponseBody:    string(respBody),
 	}
+	requestIDLock.Unlock()
 
-	capturedRequests[captureHead] = cr
-	captureHead = (captureHead + 1) % maxCapturedRequests
+	err := db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(liveSessionBucketName))
+
+		// Enforce request limit
+		if b.Stats().KeyN >= maxCapturedRequests {
+			c := b.Cursor()
+			// Iterate and delete the oldest non-essential requests
+			for k, v := c.First(); k != nil; k, v = c.Next() {
+				var tempReq CapturedRequest
+				if json.Unmarshal(v, &tempReq) == nil {
+					if !tempReq.Bookmarked && tempReq.Note == "" {
+						b.Delete(k)
+						// Check if we are now under the limit
+						if b.Stats().KeyN < maxCapturedRequests {
+							break
+						}
+					}
+				}
+			}
+		}
+
+		// Save the new request
+		jsonReq, _ := json.Marshal(cr)
+		return b.Put([]byte(strconv.FormatInt(cr.ID, 10)), jsonReq)
+	})
+
+	if err != nil {
+		log.Printf("Error capturing request to DB: %v", err)
+		return
+	}
 
 	wsBroadCast(cr)
 }
 
-func handleLiveRequests(w http.ResponseWriter, r *http.Request) {
-	capturedRequestsLock.RLock()
-	defer capturedRequestsLock.RUnlock()
-
-	var sortedRequests []*CapturedRequest
-	// Iterate backwards from the head to get newest first
-	for i := 0; i < maxCapturedRequests; i++ {
-		idx := (captureHead - 1 - i + maxCapturedRequests) % maxCapturedRequests
-		if capturedRequests[idx] != nil {
-			sortedRequests = append(sortedRequests, capturedRequests[idx])
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(sortedRequests)
-}
-
-
-func handleClearRequests(w http.ResponseWriter, r *http.Request) {
+func handleClearLiveRequests(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	capturedRequestsLock.Lock()
-	defer capturedRequestsLock.Unlock()
-
-	for i := range capturedRequests {
-		capturedRequests[i] = nil
-	}
-	captureHead = 0
-	nextRequestID = 0
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("History cleared"))
-}
-
-
-func handleShareRequest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req CapturedRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	originalID := req.ID
-	// Assign a new ID to ensure uniqueness for shared requests
-	req.ID = time.Now().UnixNano() // Use nanoseconds for a highly unique ID
-
-	// Save to a special "shared_requests" bucket
-	sharedBucketName := "shared_requests"
 	err := db.Update(func(tx *bbolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte(sharedBucketName))
-		if err != nil {
-			return err
+		b := tx.Bucket([]byte(liveSessionBucketName))
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var req CapturedRequest
+			if json.Unmarshal(v, &req) == nil {
+				if !req.Bookmarked && req.Note == "" {
+					b.Delete(k)
+				}
+			}
 		}
-		jsonReq, err := json.Marshal(req)
-		if err != nil {
-			return err
-		}
-		return b.Put([]byte(strconv.FormatInt(req.ID, 10)), jsonReq)
+		return nil
 	})
 
 	if err != nil {
-		log.Printf("Error saving shared request: %v", err)
-		http.Error(w, "Failed to save request for sharing", http.StatusInternalServerError)
+		log.Printf("Error clearing live requests: %v", err)
+		http.Error(w, "Failed to clear requests", http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int64{"old_id": originalID, "new_id": req.ID})
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Non-essential requests cleared"))
 }
