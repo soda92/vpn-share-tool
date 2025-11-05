@@ -102,6 +102,7 @@ func updateSingleRequest(w http.ResponseWriter, r *http.Request) {
 	// First, try to update in-memory requests
 	capturedRequestsLock.Lock()
 	var foundInMemory bool
+	var requestInMemory *CapturedRequest
 	for _, req := range capturedRequests {
 		if req != nil && req.ID == id {
 			if bookmarked, ok := updates["bookmarked"].(bool); ok {
@@ -111,12 +112,28 @@ func updateSingleRequest(w http.ResponseWriter, r *http.Request) {
 				req.Note = note
 			}
 			foundInMemory = true
+			requestInMemory = req
 			break
 		}
 	}
 	capturedRequestsLock.Unlock()
 
 	if foundInMemory {
+		// If any update was made to an in-memory request, persist it to the shared bucket
+		err := db.Update(func(tx *bbolt.Tx) error {
+			b, err := tx.CreateBucketIfNotExists([]byte("shared_requests"))
+			if err != nil {
+				return err
+			}
+			jsonReq, err := json.Marshal(requestInMemory)
+			if err != nil {
+				return err
+			}
+			return b.Put([]byte(strconv.FormatInt(id, 10)), jsonReq)
+		})
+		if err != nil {
+			log.Printf("Error persisting updated live request: %v", err)
+		}
 		w.WriteHeader(http.StatusOK)
 		return
 	}
