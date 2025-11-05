@@ -180,6 +180,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		} else {
 			// If no modifications, the captured body should still be the decompressed one
 			respBody = decompressedBody
+			resp.Header.Del("Content-Encoding")
 		}
 
 		// Restore the body for the client
