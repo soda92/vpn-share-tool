@@ -10,7 +10,8 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}",
-            "preLaunchTask": "build_frontend"
+            "preLaunchTask": "build_frontend",
+            "args": ["--proxy-url http://localhost:8002"]
         }
     ]
 }

@@ -29,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, defineProps, nextTick } from 'vue';
+import { ref, onMounted, watch, defineProps, nextTick, computed } from 'vue';
 import axios from 'axios';
 import type { CapturedRequest } from '../types';
 import RequestList from './RequestList.vue';
@@ -55,6 +55,8 @@ const contextMenu = ref({
 const selectedRequestNote = ref('');
 let noteUpdateTimeout: number | undefined;
 
+const activeSessionId = computed(() => props.isLive ? 'live_session' : props.sessionId);
+
 watch(selectedRequest, (newReq) => {
   selectedRequestNote.value = newReq?.note || '';
 });
@@ -70,19 +72,20 @@ const saveNote = async () => {
   if (!selectedRequest.value) return;
   selectedRequest.value.note = selectedRequestNote.value;
   try {
-    await axios.put(`/api/debug/requests/${props.sessionId}/${selectedRequest.value.id}`, { note: selectedRequestNote.value });
+    await axios.put(`/api/debug/requests/${activeSessionId.value}/${selectedRequest.value.id}`, { note: selectedRequestNote.value });
   } catch (error) {
     console.error('Error saving note:', error);
   }
 };
 
 const fetchRequests = async () => {
-  if (!props.sessionId) return;
+  if (!activeSessionId.value) return;
   try {
-    const response = await axios.get(`/debug/sessions/${props.sessionId}/requests`);
+    const response = await axios.get(`/debug/sessions/${activeSessionId.value}/requests`);
     requests.value = response.data || [];
   } catch (error) {
     console.error('Error fetching requests:', error);
+    requests.value = []; // Clear requests on error
   }
 };
 
@@ -134,7 +137,7 @@ const compareWithSelected = () => {
 const toggleBookmark = async (request: CapturedRequest) => {
   const newStatus = !request.bookmarked;
   try {
-    await axios.put(`/api/debug/requests/${props.sessionId}/${request.id}`, { bookmarked: newStatus });
+    await axios.put(`/api/debug/requests/${activeSessionId.value}/${request.id}`, { bookmarked: newStatus });
     request.bookmarked = newStatus; // Optimistically update UI
   } catch (error) {
     console.error('Error updating bookmark:', error);
@@ -145,7 +148,7 @@ const deleteRequest = async () => {
   if (!contextMenu.value.request) return;
   if (confirm('Are you sure you want to permanently delete this request?')) {
     try {
-      await axios.delete(`/api/debug/requests/${props.sessionId}/${contextMenu.value.request.id}`);
+      await axios.delete(`/api/debug/requests/${activeSessionId.value}/${contextMenu.value.request.id}`);
       const index = requests.value.findIndex((r: CapturedRequest) => r.id === contextMenu.value.request!.id);
       if (index > -1) {
         requests.value.splice(index, 1);
@@ -163,7 +166,7 @@ const deleteRequest = async () => {
 
 const shareRequest = async () => {
   if (!contextMenu.value.request) return;
-  const shareUrl = `${window.location.origin}/debug/request/${props.sessionId}/${contextMenu.value.request.id}`;
+  const shareUrl = `${window.location.origin}/debug/request/${activeSessionId.value}/${contextMenu.value.request.id}`;
   window.open(shareUrl, ' _blank');
   hideContextMenu();
 };
@@ -173,8 +176,14 @@ onMounted(() => {
   if (props.isLive) {
     const ws = new WebSocket(`ws://${window.location.host}/debug/ws`);
     ws.onmessage = (event) => {
-      // The backend has updated the database, so we just need to refetch.
-      fetchRequests();
+      const newRequest = JSON.parse(event.data);
+      // Avoid full refetch for performance. Add to list if not present.
+      const existingIndex = requests.value.findIndex(r => r.id === newRequest.id);
+      if (existingIndex === -1) {
+        requests.value.unshift(newRequest);
+      } else {
+        requests.value[existingIndex] = newRequest;
+      }
     };
     ws.onclose = () => console.log('WebSocket connection closed');
     ws.onerror = (error) => console.error('WebSocket error:', error);

@@ -30,7 +30,7 @@
           </span>
           <span class="timestamp">{{ new Date(request.timestamp).toLocaleTimeString() }}</span>
           <span class="method">{{ request.method }}</span>
-          <span class="url">{{ request.url.substring((groupName as string).length) }}</span>
+          <span class="url">{{ getUrlPath(request.url) }}</span>
         </li>
       </template>
     </ul>
@@ -181,20 +181,24 @@ defineEmits<{
   (e: 'clear'): void;
 }>();
 
-const getUrlPrefix = (url: string) => {
+const getUrlOrigin = (url: string) => {
   try {
-    const urlObj = new URL(url);
-    const pathParts = urlObj.pathname.split('/').filter(p => p);
-    if (pathParts.length > 1) {
-      return `${urlObj.origin}/${pathParts.slice(0, -1).join('/')}/`;
-    }
-    return urlObj.origin + '/';
+    return new URL(url).origin;
   } catch (e) {
     const parts = url.split('/');
-    if (parts.length > 3) {
-      return parts.slice(0, parts.length - 1).join('/') + '/';
+    if (parts.length >= 3) {
+      return parts.slice(0, 3).join('/');
     }
-    return url;
+    return 'Invalid URL';
+  }
+};
+
+const getUrlPath = (url: string) => {
+  try {
+    return new URL(url).pathname;
+  } catch (e) {
+    const origin = getUrlOrigin(url);
+    return url.substring(origin.length);
   }
 };
 
@@ -209,11 +213,11 @@ const filteredRequests = computed(() => {
 const groupedRequests = computed(() => {
   const groups: Record<string, CapturedRequest[]> = {};
   for (const request of filteredRequests.value) {
-    const prefix = getUrlPrefix(request.url);
-    if (!groups[prefix]) {
-      groups[prefix] = [];
+    const origin = getUrlOrigin(request.url);
+    if (!groups[origin]) {
+      groups[origin] = [];
     }
-    groups[prefix].push(request);
+    groups[origin].push(request);
   }
   return groups;
 });

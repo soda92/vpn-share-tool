@@ -16,4 +16,15 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  server: {
+    proxy: {
+      '/debug/sessions': 'http://localhost:10081',
+      '/api/debug/requests': 'http://localhost:10081',
+      '/debug/clear-live': 'http://localhost:10081',
+      '/debug/ws': {
+        target: 'ws://localhost:10081',
+        ws: true,
+      },
+    }
+  }
 })
