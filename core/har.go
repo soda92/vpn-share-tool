@@ -85,7 +85,7 @@ type PostData struct {
 type Content struct {
 	Size     int64  `json:"size"`
 	MimeType string `json:"mimeType"`
-	Text     string `json:from_json,omitempty"`
+	Text     string `json:"text,omitempty"`
 	Encoding string `json:"encoding,omitempty"`
 }
 
