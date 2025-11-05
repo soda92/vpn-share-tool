@@ -15,7 +15,6 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-
 const (
 	maxCapturedRequests   = 1000
 	liveSessionBucketName = "live_session"
@@ -26,17 +25,18 @@ var debugFrontend embed.FS
 
 // CapturedRequest holds details of an intercepted HTTP request and its response.
 type CapturedRequest struct {
-	ID         int64       `json:"id"`
-	Timestamp  time.Time   `json:"timestamp"`
-	Method     string      `json:"method"`
-	URL        string      `json:"url"`
-	RequestHeaders http.Header `json:"request_headers"`
-	RequestBody    string      `json:"request_body"`
-	ResponseStatus int         `json:"response_status"`
-	ResponseHeaders http.Header `json:"response_headers"`
-	ResponseBody   string      `json:"response_body"`
-	Bookmarked bool        `json:"bookmarked"`
-	Note       string      `json:"note"`
+	ID               int64       `json:"id"`
+	Timestamp        time.Time   `json:"timestamp"`
+	Method           string      `json:"method"`
+	URL              string      `json:"url"`
+	RequestHeaders   http.Header `json:"request_headers"`
+	RequestBody      string      `json:"request_body"`
+	ResponseStatus   int         `json:"response_status"`
+	ResponseHeaders  http.Header `json:"response_headers"`
+	ResponseBody     string      `json:"response_body"`
+	Bookmarked       bool        `json:"bookmarked"`
+	Note             string      `json:"note"`
+	VpnShareToolMeta string      `json:"_vpnShareToolMetadata,omitempty"` // Field for HAR metadata
 }
 
 var (
@@ -76,12 +76,21 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 
 	// Add debug API endpoints
 	mux.HandleFunc("/debug/sessions", handleSessions)
-	mux.HandleFunc("/debug/sessions/", handleSession)
+	mux.HandleFunc("/debug/sessions/", handleSessionOrHar)
+	mux.HandleFunc("/debug/har/import", importHar)
 	mux.HandleFunc("/debug/clear-live", handleClearLiveRequests)
 	mux.HandleFunc("/debug/ws", handleDebugWS)
 	mux.HandleFunc("/api/debug/requests/", handleSingleRequest) // New unambiguous endpoint
 
 	log.Println("Debug UI registered at /debug/")
+}
+
+func handleSessionOrHar(w http.ResponseWriter, r *http.Request) {
+	if strings.HasSuffix(r.URL.Path, "/har") {
+		exportHar(w, r)
+	} else {
+		handleSession(w, r)
+	}
 }
 
 // CaptureRequest captures the request and response for debugging.

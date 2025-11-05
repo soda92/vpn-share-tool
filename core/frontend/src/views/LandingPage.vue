@@ -1,12 +1,17 @@
 <template>
   <div class="container">
     <h1>Welcome to the Debugger</h1>
-    <router-link to="/live" class="start-session-link">Start New Live Session</router-link>
+    <div class="top-actions">
+      <router-link to="/live" class="action-btn">Start New Live Session</router-link>
+      <button @click="triggerImport" class="action-btn">Import HAR</button>
+      <input type="file" ref="fileInput" @change="importHar" accept=".har" style="display: none" />
+    </div>
     <h2>Saved Sessions</h2>
     <ul>
       <li v-for="session in sessions" :key="session.id">
         <router-link :to="`/session/${session.id}`">{{ session.name }}</router-link>
         <div>
+          <button @click="exportHar(session.id, session.name)">Export</button>
           <button @click="renameSession(session.id, session.name)">Rename</button>
           <button @click="deleteSession(session.id)" class="delete-btn">Delete</button>
         </div>
@@ -20,6 +25,7 @@ import { ref, onMounted } from 'vue';
 import axios from 'axios';
 
 const sessions = ref([]);
+const fileInput = ref(null);
 
 const fetchSessions = async () => {
   try {
@@ -43,6 +49,33 @@ const deleteSession = async (id) => {
     await axios.delete(`/debug/sessions/${id}`);
     fetchSessions();
   }
+};
+
+const triggerImport = () => {
+  fileInput.value.click();
+};
+
+const importHar = async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const har = JSON.parse(e.target.result);
+      await axios.post(`/debug/har/import?name=${file.name}`, har);
+      fetchSessions();
+      alert('HAR file imported successfully!');
+    } catch (error) {
+      console.error('Failed to import HAR file', error);
+      alert('Failed to import HAR file. See console for details.');
+    }
+  };
+  reader.readAsText(file);
+};
+
+const exportHar = (id, name) => {
+  window.open(`/debug/sessions/${id}/har`, '_blank');
 };
 
 onMounted(fetchSessions);
@@ -71,7 +104,13 @@ h2 {
   margin-bottom: 1rem;
 }
 
-.start-session-link {
+.top-actions {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.action-btn {
   display: inline-block;
   background-color: #007bff;
   color: white;
@@ -80,9 +119,13 @@ h2 {
   text-decoration: none;
   font-weight: bold;
   transition: background-color 0.2s;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
 }
 
-.start-session-link:hover {
+.action-btn:hover {
   background-color: #0056b3;
 }
 
