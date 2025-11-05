@@ -70,7 +70,7 @@ const saveNote = async () => {
   if (!selectedRequest.value) return;
   selectedRequest.value.note = selectedRequestNote.value;
   try {
-    await axios.put(`/debug/requests/${props.sessionId}/${selectedRequest.value.id}`, { note: selectedRequestNote.value });
+    await axios.put(`/api/debug/requests/${props.sessionId}/${selectedRequest.value.id}`, { note: selectedRequestNote.value });
   } catch (error) {
     console.error('Error saving note:', error);
   }
@@ -134,7 +134,7 @@ const compareWithSelected = () => {
 const toggleBookmark = async (request: CapturedRequest) => {
   const newStatus = !request.bookmarked;
   try {
-    await axios.put(`/debug/requests/${props.sessionId}/${request.id}`, { bookmarked: newStatus });
+    await axios.put(`/api/debug/requests/${props.sessionId}/${request.id}`, { bookmarked: newStatus });
     request.bookmarked = newStatus; // Optimistically update UI
   } catch (error) {
     console.error('Error updating bookmark:', error);
@@ -145,7 +145,7 @@ const deleteRequest = async () => {
   if (!contextMenu.value.request) return;
   if (confirm('Are you sure you want to permanently delete this request?')) {
     try {
-      await axios.delete(`/debug/requests/${props.sessionId}/${contextMenu.value.request.id}`);
+      await axios.delete(`/api/debug/requests/${props.sessionId}/${contextMenu.value.request.id}`);
       const index = requests.value.findIndex((r: CapturedRequest) => r.id === contextMenu.value.request!.id);
       if (index > -1) {
         requests.value.splice(index, 1);
@@ -173,11 +173,8 @@ onMounted(() => {
   if (props.isLive) {
     const ws = new WebSocket(`ws://${window.location.host}/debug/ws`);
     ws.onmessage = (event) => {
-      const newRequest: CapturedRequest = JSON.parse(event.data);
-      requests.value.unshift(newRequest);
-      if (requests.value.length > 1000) {
-        requests.value.pop();
-      }
+      // The backend has updated the database, so we just need to refetch.
+      fetchRequests();
     };
     ws.onclose = () => console.log('WebSocket connection closed');
     ws.onerror = (error) => console.error('WebSocket error:', error);

@@ -12,13 +12,15 @@ import (
 
 
 func handleSingleRequest(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(pathParts) < 3 {
-		http.Error(w, "Invalid request path", http.StatusBadRequest)
+	// New path: /api/debug/requests/{sessionID}/{requestID}
+	path := strings.TrimPrefix(r.URL.Path, "/api/debug/requests/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 {
+		http.Error(w, "Invalid request path. Expected /api/debug/requests/{sessionID}/{requestID}", http.StatusBadRequest)
 		return
 	}
-	sessionID := pathParts[2]
-	idStr := pathParts[3]
+	sessionID := parts[0]
+	idStr := parts[1]
 
 	switch r.Method {
 	case http.MethodGet:

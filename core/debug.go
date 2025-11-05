@@ -79,7 +79,7 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/debug/sessions/", handleSession)
 	mux.HandleFunc("/debug/clear-live", handleClearLiveRequests)
 	mux.HandleFunc("/debug/ws", handleDebugWS)
-	mux.HandleFunc("/debug/requests/", handleSingleRequest)
+	mux.HandleFunc("/api/debug/requests/", handleSingleRequest) // New unambiguous endpoint
 
 	log.Println("Debug UI registered at /debug/")
 }
