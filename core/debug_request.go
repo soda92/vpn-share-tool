@@ -33,7 +33,25 @@ func getSingleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// First, check in-memory requests
+	capturedRequestsLock.RLock()
 	var foundRequest *CapturedRequest
+	for _, req := range capturedRequests {
+		if req != nil && req.ID == id {
+			foundRequest = req
+			break
+		}
+	}
+	capturedRequestsLock.RUnlock()
+
+	// If found in memory, return it
+	if foundRequest != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(foundRequest)
+		return
+	}
+
+	// If not in memory, check the database
 	err = db.View(func(tx *bbolt.Tx) error {
 		// Iterate over all session buckets to find the request
 		return tx.ForEach(func(name []byte, b *bbolt.Bucket) error {
@@ -81,6 +99,29 @@ func updateSingleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// First, try to update in-memory requests
+	capturedRequestsLock.Lock()
+	var foundInMemory bool
+	for _, req := range capturedRequests {
+		if req != nil && req.ID == id {
+			if bookmarked, ok := updates["bookmarked"].(bool); ok {
+				req.Bookmarked = bookmarked
+			}
+			if note, ok := updates["note"].(string); ok {
+				req.Note = note
+			}
+			foundInMemory = true
+			break
+		}
+	}
+	capturedRequestsLock.Unlock()
+
+	if foundInMemory {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// If not in memory, try to update in the database
 	err = db.Update(func(tx *bbolt.Tx) error {
 		var bucketName, reqData []byte
 		// Find the request and its bucket
