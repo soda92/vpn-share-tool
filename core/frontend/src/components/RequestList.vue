@@ -12,29 +12,27 @@
         <button @click="$emit('clear')">Clear</button>
       </div>
     </div>
-    <div v-if="groupedRequests.length === 0" class="no-requests">
-      No requests match the filter.
+    <div v-if="filteredRequests.length === 0" class="no-requests">
+      No requests found.
     </div>
     <ul v-else class="request-list">
-      <li
-        v-for="item in groupedRequests"
-        :key="item.id"
-        :class="item.type === 'request' ? { selected: selectedRequest && selectedRequest.id === item.request.id } : 'group-header'"
-        @click="item.type === 'request' && $emit('select-request', item.request)"
-        @contextmenu.prevent="item.type === 'request' && $emit('show-context-menu', $event, item.request)"
-      >
-        <template v-if="item.type === 'request'">
-          <span class="bookmark-star" @click.stop="$emit('toggle-bookmark', item.request)">
-            {{ item.request.bookmarked ? '★' : '☆' }}
+      <template v-for="(group, groupName) in groupedRequests" :key="groupName">
+        <li class="group-header">{{ groupName }}</li>
+        <li
+          v-for="request in group"
+          :key="request.id"
+          :class="{ selected: selectedRequest?.id === request.id }"
+          @click="$emit('select-request', request)"
+          @contextmenu.prevent="$emit('show-context-menu', $event, request)"
+        >
+          <span class="bookmark-star" @click.stop="$emit('toggle-bookmark', request)">
+            {{ request.bookmarked ? '★' : '☆' }}
           </span>
-          <span class="timestamp">{{ new Date(item.request.timestamp).toLocaleTimeString() }}</span>
-          <span class="method">{{ item.request.method }}</span>
-          <span class="url">{{ item.request.url.substring(item.groupName.length) }}</span>
-        </template>
-        <template v-else>
-          <span>{{ item.groupName }}</span>
-        </template>
-      </li>
+          <span class="timestamp">{{ new Date(request.timestamp).toLocaleTimeString() }}</span>
+          <span class="method">{{ request.method }}</span>
+          <span class="url">{{ request.url.substring((groupName as string).length) }}</span>
+        </li>
+      </template>
     </ul>
   </div>
 </template>
@@ -200,25 +198,23 @@ const getUrlPrefix = (url: string) => {
   }
 };
 
-const groupedRequests = computed(() => {
-  const result: any[] = [];
-  let lastPrefix = '';
-
-  const filtered = props.requests.filter(req => {
+const filteredRequests = computed(() => {
+  return props.requests.filter(req => {
     const methodMatch = props.methodFilter === 'ALL' || req.method === props.methodFilter;
     const searchMatch = req.url.toLowerCase().includes(props.searchQuery.toLowerCase());
     return methodMatch && searchMatch;
   });
+});
 
-  for (const request of filtered) {
-    const currentPrefix = getUrlPrefix(request.url);
-    if (currentPrefix !== lastPrefix) {
-      result.push({ id: `group-${currentPrefix}-${request.id}`, type: 'group-header', groupName: currentPrefix });
-      lastPrefix = currentPrefix;
+const groupedRequests = computed(() => {
+  const groups: Record<string, CapturedRequest[]> = {};
+  for (const request of filteredRequests.value) {
+    const prefix = getUrlPrefix(request.url);
+    if (!groups[prefix]) {
+      groups[prefix] = [];
     }
-    result.push({ id: request.id, type: 'request', request: request, groupName: currentPrefix });
+    groups[prefix].push(request);
   }
-
-  return result;
+  return groups;
 });
 </script>
