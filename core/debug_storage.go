@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -31,7 +32,7 @@ func InitDB(dbPath string) error {
 		}
 
 		// Ensure live session bucket exists and clean it
-		liveBucket, err := tx.CreateBucketIfNotExists([]byte(liveSessionBucketName))
+		_, err = tx.CreateBucketIfNotExists([]byte(liveSessionBucketName))
 		if err != nil {
 			return err
 		}
