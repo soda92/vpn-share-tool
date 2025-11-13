@@ -177,19 +177,27 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			respBody = []byte(bodyStr)
 			resp.Header.Del("Content-Encoding")
 			resp.Header.Del("Content-Length")
+		} else {
+			// If no modifications, the captured body should still be the decompressed one
+			respBody = decompressedBody
+			resp.Header.Del("Content-Encoding")
 		}
 
+		// Restore the body for the client
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
-	}
 
-	// Capture the request and response
-	CaptureRequest(req, resp, reqBody, respBody)
+		// Capture the request and the final (potentially modified and decompressed) response
+		CaptureRequest(req, resp, reqBody, respBody)
+	} else {
+		// If there was no body, capture the request anyway
+		CaptureRequest(req, resp, reqBody, nil)
+	}
 
 	// If cacheable, store the response in the cache.
 	if isCacheable && resp.StatusCode == http.StatusOK {
 		entry := cacheEntry{
 			Header: resp.Header,
-			Body:   respBody,
+			Body:   respBody, // This is the final, correct body
 		}
 		t.Cache.Store(req.URL.String(), entry)
 	}

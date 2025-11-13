@@ -12,45 +12,44 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"go.etcd.io/bbolt"
+)
+
+const (
+	maxCapturedRequests   = 1000
+	liveSessionBucketName = "live_session"
 )
 
 //go:embed frontend/dist
 var debugFrontend embed.FS
 
-const maxCapturedRequests = 1000
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all connections
-	},
-}
-
-var wsClients = make(map[*websocket.Conn]bool)
-var wsMutex = &sync.Mutex{}
-
 // CapturedRequest holds details of an intercepted HTTP request and its response.
 type CapturedRequest struct {
-	ID              int64       `json:"id"`
-	Timestamp       time.Time   `json:"timestamp"`
-	Method          string      `json:"method"`
-	URL             string      `json:"url"`
-	RequestHeaders  http.Header `json:"request_headers"`
-	RequestBody     string      `json:"request_body"`
-	ResponseStatus  int         `json:"response_status"`
-	ResponseHeaders http.Header `json:"response_headers"`
-	ResponseBody    string      `json:"response_body"`
+	ID               int64       `json:"id"`
+	Timestamp        time.Time   `json:"timestamp"`
+	Method           string      `json:"method"`
+	URL              string      `json:"url"`
+	RequestHeaders   http.Header `json:"request_headers"`
+	RequestBody      string      `json:"request_body"`
+	ResponseStatus   int         `json:"response_status"`
+	ResponseHeaders  http.Header `json:"response_headers"`
+	ResponseBody     string      `json:"response_body"`
+	Bookmarked       bool        `json:"bookmarked"`
+	Note             string      `json:"note"`
+	VpnShareToolMeta string      `json:"_vpnShareToolMetadata,omitempty"` // Field for HAR metadata
 }
 
 var (
-	capturedRequests     [maxCapturedRequests]*CapturedRequest
-	capturedRequestsLock sync.RWMutex
-	nextRequestID        int64
-	captureHead          int
+	nextRequestID int64
+	requestIDLock sync.Mutex
 )
 
 // RegisterDebugRoutes registers the debug UI and API routes.
 func RegisterDebugRoutes(mux *http.ServeMux) {
+	if err := InitDB("debug_requests.db"); err != nil {
+		log.Fatalf("Failed to initialize debug database: %v", err)
+	}
+
 	// Serve the embedded frontend for the /debug/ path
 	debugFS, err := fs.Sub(debugFrontend, "frontend/dist")
 	if err != nil {
@@ -76,132 +75,101 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 	})))
 
 	// Add debug API endpoints
-	mux.HandleFunc("/debug/requests/", handleDebugRequests)
-	mux.HandleFunc("/debug/clear", handleClearRequests)
+	mux.HandleFunc("/debug/sessions", handleSessions)
+	mux.HandleFunc("/debug/sessions/", handleSessionOrHar)
+	mux.HandleFunc("/debug/har/import", importHar)
+	mux.HandleFunc("/debug/clear-live", handleClearLiveRequests)
 	mux.HandleFunc("/debug/ws", handleDebugWS)
+	mux.HandleFunc("/api/debug/requests/", handleSingleRequest) // New unambiguous endpoint
 
 	log.Println("Debug UI registered at /debug/")
 }
 
-func handleDebugWS(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("Failed to upgrade to websocket: %v", err)
-		return
+func handleSessionOrHar(w http.ResponseWriter, r *http.Request) {
+	if strings.HasSuffix(r.URL.Path, "/har") {
+		exportHar(w, r)
+	} else {
+		handleSession(w, r)
 	}
-	defer conn.Close()
-
-	wsMutex.Lock()
-	wsClients[conn] = true
-	wsMutex.Unlock()
-
-	// Keep the connection open
-	for {
-		_, _, err := conn.ReadMessage()
-		if err != nil {
-			log.Printf("WebSocket read error: %v", err)
-			break
-		}
-	}
-
-	wsMutex.Lock()
-	delete(wsClients, conn)
-	wsMutex.Unlock()
 }
 
 // CaptureRequest captures the request and response for debugging.
 func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []byte) {
-	capturedRequestsLock.Lock()
-	defer capturedRequestsLock.Unlock()
-
+	requestIDLock.Lock()
 	nextRequestID++
-
 	cr := &CapturedRequest{
-		ID:           nextRequestID,
-		Timestamp:    time.Now(),
-		Method:       req.Method,
-		URL:          req.URL.String(),
+		ID:              nextRequestID,
+		Timestamp:       time.Now(),
+		Method:          req.Method,
+		URL:             req.URL.String(),
 		RequestHeaders:  req.Header,
-		RequestBody:  string(reqBody),
-		ResponseStatus: resp.StatusCode,
+		RequestBody:     string(reqBody),
+		ResponseStatus:  resp.StatusCode,
 		ResponseHeaders: resp.Header,
-		ResponseBody: string(respBody),
+		ResponseBody:    string(respBody),
 	}
+	requestIDLock.Unlock()
 
-	capturedRequests[captureHead] = cr
-	captureHead = (captureHead + 1) % maxCapturedRequests
+	err := db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(liveSessionBucketName))
 
-	// Broadcast the new request to all WebSocket clients
-	wsMutex.Lock()
-	defer wsMutex.Unlock()
-	for client := range wsClients {
-		if err := client.WriteJSON(cr); err != nil {
-			log.Printf("Error writing to websocket client: %v", err)
-			client.Close()
-			delete(wsClients, client)
-		}
-	}
-}
-
-func handleDebugRequests(w http.ResponseWriter, r *http.Request) {
-	capturedRequestsLock.RLock()
-	defer capturedRequestsLock.RUnlock()
-
-	// Check if an ID is present in the URL path, e.g., /debug/requests/123
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) > 3 && parts[3] != "" {
-		idStr := parts[3]
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			http.Error(w, "Invalid request ID", http.StatusBadRequest)
-			return
-		}
-
-		for _, req := range capturedRequests {
-			if req != nil && req.ID == id {
-				w.Header().Set("Content-Type", "application/json")
-				if err := json.NewEncoder(w).Encode(req); err != nil {
-					log.Printf("Failed to encode captured request to JSON: %v", err)
-					http.Error(w, "Failed to encode captured request", http.StatusInternalServerError)
+		// Enforce request limit
+		if b.Stats().KeyN >= maxCapturedRequests {
+			c := b.Cursor()
+			// Iterate and delete the oldest non-essential requests
+			for k, v := c.First(); k != nil; k, v = c.Next() {
+				var tempReq CapturedRequest
+				if json.Unmarshal(v, &tempReq) == nil {
+					if !tempReq.Bookmarked && tempReq.Note == "" {
+						b.Delete(k)
+						// Check if we are now under the limit
+						if b.Stats().KeyN < maxCapturedRequests {
+							break
+						}
+					}
 				}
-				return
 			}
 		}
 
-		http.NotFound(w, r)
+		// Save the new request
+		jsonReq, _ := json.Marshal(cr)
+		return b.Put([]byte(strconv.FormatInt(cr.ID, 10)), jsonReq)
+	})
+
+	if err != nil {
+		log.Printf("Error capturing request to DB: %v", err)
 		return
 	}
 
-	// If no ID, return all requests in newest-first order
-	orderedRequests := make([]*CapturedRequest, 0, maxCapturedRequests)
-	for i := 0; i < maxCapturedRequests; i++ {
-		idx := (captureHead - 1 - i + maxCapturedRequests) % maxCapturedRequests
-		if capturedRequests[idx] != nil {
-			orderedRequests = append(orderedRequests, capturedRequests[idx])
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(orderedRequests); err != nil {
-		log.Printf("Failed to encode captured requests to JSON: %v", err)
-		http.Error(w, "Failed to encode captured requests", http.StatusInternalServerError)
-	}
+	wsBroadCast(cr)
 }
 
-func handleClearRequests(w http.ResponseWriter, r *http.Request) {
+func handleClearLiveRequests(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	capturedRequestsLock.Lock()
-	defer capturedRequestsLock.Unlock()
+	err := db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(liveSessionBucketName))
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var req CapturedRequest
+			if json.Unmarshal(v, &req) == nil {
+				if !req.Bookmarked && req.Note == "" {
+					b.Delete(k)
+				}
+			}
+		}
+		return nil
+	})
 
-	for i := range capturedRequests {
-		capturedRequests[i] = nil
+	if err != nil {
+		log.Printf("Error clearing live requests: %v", err)
+		http.Error(w, "Failed to clear requests", http.StatusInternalServerError)
+		return
 	}
-	captureHead = 0
-	nextRequestID = 0
+
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("History cleared"))
+	w.Write([]byte("Non-essential requests cleared"))
 }

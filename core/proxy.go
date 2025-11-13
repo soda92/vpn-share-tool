@@ -144,13 +144,17 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 			}
 			ProxiesLock.RUnlock()
 
-			originalHost := resp.Request.Context().Value(originalHostKey).(string)
+			originalHost, ok := resp.Request.Context().Value(originalHostKey).(string)
+			if !ok {
+				log.Println("Error: could not retrieve originalHost from context or it's not a string")
+				return nil // Or handle the error appropriately
+			}
 			hostParts := strings.Split(originalHost, ":")
 			proxyHost := hostParts[0]
 
 			if existingProxy != nil {
 				// A proxy already exists, rewrite with its URL
-				newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, existingProxy.RemotePort, locationURL.Path)
+				newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, existingProxy.RemotePort, locationURL.RequestURI())
 				resp.Header.Set("Location", newLocation)
 				log.Printf("Redirecting to existing proxy: %s", newLocation)
 			} else {
@@ -160,7 +164,7 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 				if err != nil {
 					log.Printf("Error creating new proxy for redirect: %v", err)
 				} else {
-					newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, newProxy.RemotePort, locationURL.Path)
+					newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, newProxy.RemotePort, locationURL.RequestURI())
 					resp.Header.Set("Location", newLocation)
 					log.Printf("Redirecting to new proxy: %s", newLocation)
 				}

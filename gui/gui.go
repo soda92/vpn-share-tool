@@ -25,6 +25,7 @@ const (
 )
 
 func Run() {
+	proxyURL := flag.String("proxy-url", "", "URL to proxy on startup")
 	startMinimized := flag.Bool("minimized", false, "start minimized with windows start")
 	flag.Parse()
 
@@ -75,6 +76,28 @@ func Run() {
 		})
 		// NOTE: saveConfig() is removed from here to prevent saving during startup loops.
 		// The caller is now responsible for saving the config.
+	}
+
+	if *proxyURL != "" {
+		go func() {
+			// Wait for the IP address to be ready
+			ip := <-core.IPReadyChan
+
+			newProxy, err := core.ShareUrlAndGetProxy(*proxyURL)
+			if err != nil {
+				log.Printf("Error sharing URL from command line: %v", err)
+				return
+			}
+
+			// Print the shared URL to the console
+			sharedURL := fmt.Sprintf("http://%s:%d%s", ip, newProxy.RemotePort, newProxy.Path)
+			fmt.Println("--- SHARED URL ---")
+			fmt.Println(sharedURL)
+			fmt.Println("------------------")
+
+			// Also add it to the UI list for consistency
+			addProxyToUI(newProxy)
+		}()
 	}
 
 	removeProxyFromUI := func(p *core.SharedProxy) {
@@ -213,7 +236,7 @@ func Run() {
 	})
 
 	myWindow.Resize(fyne.NewSize(600, 400))
-	if !*startMinimized {
+	if !*startMinimized && *proxyURL == "" {
 		myWindow.Show()
 	}
 	myApp.Run()

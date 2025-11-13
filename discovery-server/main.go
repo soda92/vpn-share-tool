@@ -46,7 +46,7 @@ var (
 	cleanupInterval = 1 * time.Minute
 	staleTimeout    = 5 * time.Minute
 
-	taggedURLs     = make(map[string]TaggedURL)
+	taggedURLs      = make(map[string]TaggedURL)
 	taggedURLsMutex = &sync.Mutex{}
 )
 
@@ -150,11 +150,6 @@ func startHTTPServer() {
 	}
 }
 
-func handleIndex(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
-	w.Write(indexPage)
-}
-
 func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -185,7 +180,8 @@ func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 	for _, instance := range activeInstances {
 		// Check if the instance can reach the URL
 		canReachURL := fmt.Sprintf("http://%s/can-reach?url=%s", instance.Address, url.QueryEscape(req.URL))
-		resp, err := http.Get(canReachURL)
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(canReachURL)
 		if err != nil {
 			log.Printf("Error checking reachability on %s: %v", instance.Address, err)
 			continue
@@ -271,7 +267,8 @@ func handleGetAllProxies(w http.ResponseWriter, r *http.Request) {
 	allProxies := make([]ProxyInfo, 0)
 
 	for _, instance := range activeInstances {
-		resp, err := http.Get(fmt.Sprintf("http://%s/active-proxies", instance.Address))
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(fmt.Sprintf("http://%s/active-proxies", instance.Address))
 		if err != nil {
 			log.Printf("Failed to get active proxies from %s: %v", instance.Address, err)
 			continue
@@ -346,7 +343,8 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func(instance Instance) {
 			defer wg.Done()
-			resp, err := http.Get(fmt.Sprintf("http://%s/active-proxies", instance.Address))
+			client := &http.Client{Timeout: 10 * time.Second}
+			resp, err := client.Get(fmt.Sprintf("http://%s/active-proxies", instance.Address))
 			if err != nil {
 				return
 			}

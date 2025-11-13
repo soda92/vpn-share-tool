@@ -1,0 +1,10 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build_frontend",
+            "type": "shell",
+            "command": "pushd core/frontend && npm run build && popd"
+        }
+    ]
+}

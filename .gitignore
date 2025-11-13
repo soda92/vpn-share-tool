@@ -1,6 +1,6 @@
 /vpn-share-tool
 *.exe
-
+*.db
 *.apk
 *.jar
 *.aar
