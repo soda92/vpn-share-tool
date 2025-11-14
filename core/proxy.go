@@ -32,7 +32,6 @@ type SharedProxy struct {
 var (
 	Proxies          []*SharedProxy
 	ProxiesLock      sync.RWMutex
-	NextRemotePort   = startPort
 	ProxyAddedChan   = make(chan *SharedProxy)
 	ProxyRemovedChan = make(chan *SharedProxy)
 	IPReadyChan      = make(chan string, 1)
@@ -79,24 +78,64 @@ func removeProxy(p *SharedProxy) {
 
 // startHealthChecker runs in a goroutine to periodically check if a URL is reachable.
 func startHealthChecker(p *SharedProxy) {
-	healthCheckTicker := time.NewTicker(3 * time.Minute)
+	healthCheckTicker := time.NewTicker(1 * time.Minute) // Check more frequently
 	defer healthCheckTicker.Stop()
+
+	failureCount := 0
+	const maxFailures = 3
 
 	for range healthCheckTicker.C {
 		log.Printf("Performing health check for %s", p.OriginalURL)
 		if !IsURLReachable(p.OriginalURL) {
-			log.Printf("Health check failed for %s. Tearing down proxy.", p.OriginalURL)
-			removeProxy(p)
-			return // Stop this health checker goroutine
+			failureCount++
+			log.Printf("Health check failed for %s (%d/%d).", p.OriginalURL, failureCount, maxFailures)
+			if failureCount >= maxFailures {
+				log.Printf("Health check failed for %s after %d attempts. Tearing down proxy.", p.OriginalURL, maxFailures)
+				removeProxy(p)
+				return // Stop this health checker goroutine
+			}
+		} else {
+			if failureCount > 0 {
+				log.Printf("Health check successful for %s after %d failures, resetting failure count.", p.OriginalURL, failureCount)
+				failureCount = 0 // Reset on success
+			} else {
+				log.Printf("Health check successful for %s", p.OriginalURL)
+			}
 		}
-		log.Printf("Health check successful for %s", p.OriginalURL)
 	}
 }
 
-func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
+func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
+	if rawURL == "" {
+		return nil, fmt.Errorf("URL cannot be empty")
+	}
+
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		rawURL = "http://" + rawURL
+	}
+
+	// Replace localhost with 127.0.0.1 for Android compatibility
+	rawURL = strings.ReplaceAll(rawURL, "localhost", "127.0.0.1")
+
 	target, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
+	}
+
+	ProxiesLock.Lock()
+	defer ProxiesLock.Unlock()
+
+	// Prevent adding duplicate Proxies by checking inside the lock
+	hostname := target.Hostname()
+	for _, p := range Proxies {
+		existingURL, err := url.Parse(p.OriginalURL)
+		if err != nil {
+			continue // Skip invalid stored URL
+		}
+		if existingURL.Hostname() == hostname {
+			log.Printf("Proxy for %s already exists, returning existing one.", rawURL)
+			return p, nil
+		}
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
@@ -128,12 +167,10 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 				return nil
 			}
 
-			// If the location is relative, resolve it against the original target
 			if !locationURL.IsAbs() {
 				locationURL = target.ResolveReference(locationURL)
 			}
 
-			// Check if a proxy already exists for this URL
 			ProxiesLock.RLock()
 			var existingProxy *SharedProxy
 			for _, p := range Proxies {
@@ -147,18 +184,16 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 			originalHost, ok := resp.Request.Context().Value(originalHostKey).(string)
 			if !ok {
 				log.Println("Error: could not retrieve originalHost from context or it's not a string")
-				return nil // Or handle the error appropriately
+				return nil
 			}
 			hostParts := strings.Split(originalHost, ":")
 			proxyHost := hostParts[0]
 
 			if existingProxy != nil {
-				// A proxy already exists, rewrite with its URL
 				newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, existingProxy.RemotePort, locationURL.RequestURI())
 				resp.Header.Set("Location", newLocation)
 				log.Printf("Redirecting to existing proxy: %s", newLocation)
 			} else {
-				// No proxy exists, create a new one
 				log.Printf("Redirect location not proxied, creating new proxy for: %s", locationURL.String())
 				newProxy, err := ShareUrlAndGetProxy(locationURL.String())
 				if err != nil {
@@ -173,17 +208,25 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 		return nil
 	}
 
-	ProxiesLock.Lock()
-	var remotePort int
+	remotePort := 0
+	port := startPort
 	for {
-		port := NextRemotePort
-		NextRemotePort++
-		if isPortAvailable(port) {
+		isUsed := false
+		for _, p := range Proxies {
+			if p.RemotePort == port {
+				isUsed = true
+				break
+			}
+		}
+		if !isUsed && isPortAvailable(port) {
 			remotePort = port
 			break
 		}
+		port++
+		if port > startPort+1000 {
+			return nil, fmt.Errorf("could not find an available port")
+		}
 	}
-	ProxiesLock.Unlock()
 
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", remotePort),
@@ -191,6 +234,14 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 			ctx := context.WithValue(r.Context(), originalHostKey, r.Host)
 			proxy.ServeHTTP(w, r.WithContext(ctx))
 		}),
+	}
+
+	newProxy := &SharedProxy{
+		OriginalURL: rawURL,
+		RemotePort:  remotePort,
+		Path:        target.Path,
+		Handler:     proxy,
+		Server:      server,
 	}
 
 	go func() {
@@ -201,60 +252,10 @@ func AddAndStartProxy(rawURL string) (*SharedProxy, error) {
 		log.Printf("Proxy for %s on port %d stopped gracefully.", rawURL, remotePort)
 	}()
 
-	newProxy := &SharedProxy{
-		OriginalURL: rawURL,
-		RemotePort:  remotePort,
-		Path:        target.Path,
-		Handler:     proxy,
-		Server:      server,
-	}
-
 	go startHealthChecker(newProxy)
 
-	return newProxy, nil
-}
-
-func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
-	if rawURL == "" {
-		return nil, fmt.Errorf("URL cannot be empty")
-	}
-
-	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
-		rawURL = "http://" + rawURL
-	}
-
-	// Replace localhost with 127.0.0.1 for Android compatibility
-	rawURL = strings.ReplaceAll(rawURL, "localhost", "127.0.0.1")
-
-	// Prevent adding duplicate Proxies
-	parsedURL, err := url.Parse(rawURL)
-	if err == nil {
-		hostname := parsedURL.Hostname()
-		ProxiesLock.RLock()
-		for _, p := range Proxies {
-			existingURL, err := url.Parse(p.OriginalURL)
-			if err != nil {
-				continue // Skip invalid stored URL
-			}
-			if existingURL.Hostname() == hostname {
-				ProxiesLock.RUnlock()
-				log.Printf("Proxy for %s already exists, returning existing one.", rawURL)
-				return p, nil // Return existing proxy instead of an error
-			}
-		}
-		ProxiesLock.RUnlock()
-	}
-
-	newProxy, err := AddAndStartProxy(rawURL)
-	if err != nil {
-		return nil, fmt.Errorf("error adding proxy for %s: %w", rawURL, err)
-	}
-
-	ProxiesLock.Lock()
 	Proxies = append(Proxies, newProxy)
-	ProxiesLock.Unlock()
 
-	// Announce the new proxy to the UI
 	ProxyAddedChan <- newProxy
 
 	return newProxy, nil
@@ -269,7 +270,6 @@ func Shutdown() {
 			wg.Add(1)
 			go func(s *http.Server) {
 				defer wg.Done()
-				// Give server 5 seconds to shutdown gracefully
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := s.Shutdown(ctx); err != nil {
