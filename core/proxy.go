@@ -171,6 +171,7 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 				locationURL = target.ResolveReference(locationURL)
 			}
 
+			ProxiesLock.RLock()
 			var existingProxy *SharedProxy
 			for _, p := range Proxies {
 				if p.OriginalURL == locationURL.String() {
@@ -178,6 +179,7 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 					break
 				}
 			}
+			ProxiesLock.RUnlock()
 
 			originalHost, ok := resp.Request.Context().Value(originalHostKey).(string)
 			if !ok {
@@ -193,11 +195,14 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 				log.Printf("Redirecting to existing proxy: %s", newLocation)
 			} else {
 				log.Printf("Redirect location not proxied, creating new proxy for: %s", locationURL.String())
-				go func() {
-					if _, err := ShareUrlAndGetProxy(locationURL.String()); err != nil {
-						log.Printf("Error creating new proxy for redirect: %v", err)
-					}
-				}()
+				newProxy, err := ShareUrlAndGetProxy(locationURL.String())
+				if err != nil {
+					log.Printf("Error creating new proxy for redirect: %v", err)
+				} else {
+					newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, newProxy.RemotePort, locationURL.RequestURI())
+					resp.Header.Set("Location", newLocation)
+					log.Printf("Redirecting to new proxy: %s", newLocation)
+				}
 			}
 		}
 		return nil
