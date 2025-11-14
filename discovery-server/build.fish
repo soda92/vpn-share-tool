@@ -4,4 +4,4 @@ pushd frontend
 npm run build
 popd
 
-go build main.go
+go build -o discovery-server

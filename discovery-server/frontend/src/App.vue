@@ -134,9 +134,11 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
+<style>
 body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 1rem; }
-.container { max-width: 1200px; margin: auto; background-color: #ffffff; padding: 2.5rem; border-radius: 12px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); }
+</style>
+<style scoped>
+.container { margin: auto; background-color: #ffffff; padding: 2.5rem; border-radius: 12px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); }
 h1 { color: #2c3e50; text-align: center; margin-bottom: 2rem; font-size: 2.5rem; font-weight: 700; }
 h2 { color: #34495e; border-bottom: 2px solid #eceff1; padding-bottom: 0.75rem; margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.75rem; font-weight: 600; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; }
