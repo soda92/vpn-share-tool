@@ -13,7 +13,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
+
+	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 //go:embed injector.js
@@ -31,7 +32,19 @@ type cacheEntry struct {
 // CachingTransport is an http.RoundTripper that caches responses for static assets.
 type CachingTransport struct {
 	Transport http.RoundTripper
-	Cache     sync.Map // Using sync.Map for concurrent access
+	Cache     *lru.Cache[string, cacheEntry]
+}
+
+func NewCachingTransport(transport http.RoundTripper) *CachingTransport {
+	cache, err := lru.New[string, cacheEntry](2560)
+	if err != nil {
+		// This should not happen with a static size
+		panic(err)
+	}
+	return &CachingTransport{
+		Transport: transport,
+		Cache:     cache,
+	}
 }
 
 // RoundTrip implements the http.RoundTripper interface.
@@ -60,17 +73,16 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 
 	// If cacheable, check the cache first.
 	if isCacheable {
-		if entry, ok := t.Cache.Load(req.URL.String()); ok {
+		if entry, ok := t.Cache.Get(req.URL.String()); ok {
 			log.Printf("Cache HIT for: %s", req.URL.String())
-			cached := entry.(cacheEntry)
 			resp := &http.Response{
 				StatusCode: http.StatusOK,
-				Header:     cached.Header,
-				Body:       io.NopCloser(bytes.NewReader(cached.Body)),
+				Header:     entry.Header,
+				Body:       io.NopCloser(bytes.NewReader(entry.Body)),
 				Request:    req,
 			}
 			// Capture the cached response
-			CaptureRequest(req, resp, reqBody, cached.Body)
+			CaptureRequest(req, resp, reqBody, entry.Body)
 			return resp, nil
 		}
 		log.Printf("Cache MISS for: %s", req.URL.String())
@@ -199,7 +211,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			Header: resp.Header,
 			Body:   respBody, // This is the final, correct body
 		}
-		t.Cache.Store(req.URL.String(), entry)
+		t.Cache.Add(req.URL.String(), entry)
 	}
 
 	return resp, nil
