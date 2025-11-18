@@ -1,9 +1,5 @@
 <template>
   <div class="container">
-    <div class="top-actions">
-      <button @click="triggerImport" class="action-btn">Import HAR</button>
-      <input type="file" ref="fileInput" @change="importHar" accept=".har" style="display: none" />
-    </div>
     <h2>Saved Sessions</h2>
     <ul>
       <li v-for="session in sessions" :key="session.id">
@@ -23,7 +19,6 @@ import { ref, onMounted } from 'vue';
 import axios from 'axios';
 
 const sessions = ref([]);
-const fileInput = ref(null);
 
 const fetchSessions = async () => {
   try {
@@ -47,29 +42,6 @@ const deleteSession = async (id) => {
     await axios.delete(`/debug/sessions/${id}`);
     fetchSessions();
   }
-};
-
-const triggerImport = () => {
-  fileInput.value.click();
-};
-
-const importHar = async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    try {
-      const har = JSON.parse(e.target.result);
-      await axios.post(`/debug/har/import?name=${file.name}`, har);
-      fetchSessions();
-      alert('HAR file imported successfully!');
-    } catch (error) {
-      console.error('Failed to import HAR file', error);
-      alert('Failed to import HAR file. See console for details.');
-    }
-  };
-  reader.readAsText(file);
 };
 
 const exportHar = (id, name) => {
