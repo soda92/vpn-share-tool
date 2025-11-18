@@ -150,9 +150,7 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 			return http.ErrUseLastResponse
 		},
 	}
-	proxy.Transport = &CachingTransport{
-		Transport: client.Transport,
-	}
+	proxy.Transport = NewCachingTransport(client.Transport)
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		if resp.StatusCode >= 300 && resp.StatusCode <= 399 {

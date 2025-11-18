@@ -3,13 +3,21 @@ package core
 import (
 	"log"
 	"net/http"
+	"sync"
 	"time"
 )
 
+var (
+	reachableClient http.Client
+	once            sync.Once
+)
+
 func IsURLReachable(targetURL string) bool {
-	client := http.Client{
-		Timeout: 10 * time.Second,
-	}
+	once.Do(func() {
+		reachableClient = http.Client{
+			Timeout: 10 * time.Second,
+		}
+	})
 	// Use HEAD request for efficiency
 	req, err := http.NewRequest("HEAD", targetURL, nil)
 	if err != nil {
@@ -17,7 +25,7 @@ func IsURLReachable(targetURL string) bool {
 		return false
 	}
 
-	resp, err := client.Do(req)
+	resp, err := reachableClient.Do(req)
 	if err != nil {
 		log.Printf("Discovery: URL %s is not reachable: %v", targetURL, err)
 		return false
