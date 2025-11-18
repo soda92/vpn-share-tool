@@ -6,6 +6,7 @@
 *.aar
 *.txt
 /dist
+/vendor
 
 __debug_bin*
 
