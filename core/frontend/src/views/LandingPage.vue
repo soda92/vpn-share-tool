@@ -1,8 +1,6 @@
 <template>
   <div class="container">
-    <h1>Welcome to the Debugger</h1>
     <div class="top-actions">
-      <router-link to="/live" class="action-btn">Start New Live Session</router-link>
       <button @click="triggerImport" class="action-btn">Import HAR</button>
       <input type="file" ref="fileInput" @change="importHar" accept=".har" style="display: none" />
     </div>
@@ -82,53 +80,6 @@ onMounted(fetchSessions);
 </script>
 
 <style scoped>
-.container {
-  max-width: 800px;
-  margin: 2rem auto;
-  padding: 2rem;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-h1 {
-  color: #0056b3;
-  border-bottom: 2px solid #007bff;
-  padding-bottom: 0.5rem;
-  margin-bottom: 1.5rem;
-}
-
-h2 {
-  color: #333;
-  margin-top: 2rem;
-  margin-bottom: 1rem;
-}
-
-.top-actions {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
-
-.action-btn {
-  display: inline-block;
-  background-color: #007bff;
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border-radius: 5px;
-  text-decoration: none;
-  font-weight: bold;
-  transition: background-color 0.2s;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: inherit;
-}
-
-.action-btn:hover {
-  background-color: #0056b3;
-}
-
 ul {
   list-style: none;
   padding: 0;
@@ -157,13 +108,5 @@ li button {
 
 li button:hover {
   background-color: #5a6268;
-}
-
-.delete-btn {
-  background-color: #dc3545 !important;
-}
-
-.delete-btn:hover {
-  background-color: #c82333 !important;
 }
 </style>
