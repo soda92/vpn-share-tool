@@ -11,8 +11,20 @@ import (
 )
 
 func handleConnection(conn net.Conn) {
-	defer conn.Close()
+	var instanceAddress string
 	remoteAddr := conn.RemoteAddr().(*net.TCPAddr).IP.String()
+
+	defer func() {
+		conn.Close()
+		if instanceAddress != "" {
+			mutex.Lock()
+			delete(instances, instanceAddress)
+			mutex.Unlock()
+			log.Printf("Unregistered instance due to connection close: %s", instanceAddress)
+		}
+		log.Printf("Connection from %s closed", remoteAddr)
+	}()
+
 	log.Printf("Accepted connection from %s", remoteAddr)
 
 	scanner := bufio.NewScanner(conn)
@@ -29,7 +41,7 @@ func handleConnection(conn net.Conn) {
 				break
 			}
 			apiPort := parts[1]
-			instanceAddress := net.JoinHostPort(remoteAddr, apiPort)
+			instanceAddress = net.JoinHostPort(remoteAddr, apiPort)
 			instances[instanceAddress] = Instance{
 				Address:  instanceAddress,
 				LastSeen: time.Now(),
@@ -70,7 +82,7 @@ func handleConnection(conn net.Conn) {
 				break
 			}
 			apiPort := parts[1]
-			instanceAddress := net.JoinHostPort(remoteAddr, apiPort)
+			instanceAddress = net.JoinHostPort(remoteAddr, apiPort)
 			if _, ok := instances[instanceAddress]; ok {
 				instances[instanceAddress] = Instance{
 					Address:  instanceAddress,
@@ -100,5 +112,4 @@ func handleConnection(conn net.Conn) {
 	if err := scanner.Err(); err != nil {
 		log.Printf("Error reading from connection from %s: %v", remoteAddr, err)
 	}
-	log.Printf("Connection from %s closed", remoteAddr)
 }
