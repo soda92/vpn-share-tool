@@ -169,16 +169,14 @@ func putTaggedURL(w http.ResponseWriter, r *http.Request) {
 
 	taggedURLsMutex.Lock()
 	urlToUpdate, ok := taggedURLs[id]
-	if ok {
-		urlToUpdate.Tag = reqBody.Tag
-		taggedURLs[id] = urlToUpdate
-	}
-	taggedURLsMutex.Unlock()
-
 	if !ok {
+		taggedURLsMutex.Unlock()
 		http.NotFound(w, r)
 		return
 	}
+	urlToUpdate.Tag = reqBody.Tag
+	taggedURLs[id] = urlToUpdate
+	taggedURLsMutex.Unlock()
 
 	if err := saveTaggedURLs(); err != nil {
 		log.Printf("Error saving tagged URLs: %v", err)
@@ -194,15 +192,13 @@ func deleteTaggedURL(w http.ResponseWriter, r *http.Request) {
 
 	taggedURLsMutex.Lock()
 	_, ok := taggedURLs[id]
-	if ok {
-		delete(taggedURLs, id)
-	}
-	taggedURLsMutex.Unlock()
-
 	if !ok {
+		taggedURLsMutex.Unlock()
 		http.NotFound(w, r)
 		return
 	}
+	delete(taggedURLs, id)
+	taggedURLsMutex.Unlock()
 
 	if err := saveTaggedURLs(); err != nil {
 		log.Printf("Error saving tagged URLs: %v", err)
