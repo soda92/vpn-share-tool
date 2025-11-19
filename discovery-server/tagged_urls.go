@@ -168,12 +168,14 @@ func putTaggedURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	taggedURLsMutex.Lock()
-	defer taggedURLsMutex.Unlock()
-
-	if urlToUpdate, ok := taggedURLs[id]; ok {
+	urlToUpdate, ok := taggedURLs[id]
+	if ok {
 		urlToUpdate.Tag = reqBody.Tag
 		taggedURLs[id] = urlToUpdate
-	} else {
+	}
+	taggedURLsMutex.Unlock()
+
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
@@ -191,11 +193,13 @@ func deleteTaggedURL(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/tagged-urls/")
 
 	taggedURLsMutex.Lock()
-	defer taggedURLsMutex.Unlock()
-
-	if _, ok := taggedURLs[id]; ok {
+	_, ok := taggedURLs[id]
+	if ok {
 		delete(taggedURLs, id)
-	} else {
+	}
+	taggedURLsMutex.Unlock()
+
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
