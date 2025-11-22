@@ -51,7 +51,13 @@ func runDeploy(target string) error {
 	fmt.Printf("Copying executable to %s...\n", target)
 	binaryPath := filepath.Join(discoveryDir, "discovery-server")
 	if err := execCmd(rootDir, nil, "scp", binaryPath, fmt.Sprintf("%s:~", target)); err != nil {
-		return fmt.Errorf("scp failed: %w", err)
+		return fmt.Errorf("scp binary failed: %w", err)
+	}
+
+	fmt.Printf("Copying service file to %s...\n", target)
+	servicePath := filepath.Join(discoveryDir, "discovery-server.service")
+	if err := execCmd(rootDir, nil, "scp", servicePath, fmt.Sprintf("%s:~", target)); err != nil {
+		return fmt.Errorf("scp service file failed: %w", err)
 	}
 
 	fmt.Printf("Deploying on %s...\n", target)
@@ -59,12 +65,27 @@ func runDeploy(target string) error {
 	remoteScript := `
 set -e
 echo "--> Stopping discovery-server service..."
-sudo systemctl stop discovery-server
+# Ignore error if service doesn't exist yet
+sudo systemctl stop discovery-server || true
+sudo systemctl disable discovery-server || true
 
-echo "--> Replacing executable..."
+echo "--> Creating/Ensuring working directory..."
+sudo mkdir -p /var/lib/discovery-server
+sudo chown nobody:nogroup /var/lib/discovery-server
+
+echo "--> Installing executable..."
 sudo mv -f ~/discovery-server /opt/discovery-server
+sudo chmod +x /opt/discovery-server
+
+echo "--> Installing service file..."
+sudo rm -f /etc/systemd/system/discovery-server.service
+sudo mv -f ~/discovery-server.service /etc/systemd/system/discovery-server.service
+
+echo "--> Reloading systemd..."
+sudo systemctl daemon-reload
 
 echo "--> Starting discovery-server service..."
+sudo systemctl enable discovery-server
 sudo systemctl start discovery-server
 
 echo "--> Waiting for service to settle..."
@@ -82,8 +103,26 @@ else
     systemctl status discovery-server --no-pager
 fi
 `
+	// Write remote script to a temporary file
+	tmpScript, err := os.CreateTemp("", "deploy_script_*.sh")
+	if err != nil {
+		return fmt.Errorf("failed to create temp script: %w", err)
+	}
+	defer os.Remove(tmpScript.Name())
 
-	if err := execCmd(rootDir, nil, "ssh", target, fmt.Sprintf("bash -c '%s'", remoteScript)); err != nil {
+	if _, err := tmpScript.WriteString(remoteScript); err != nil {
+		return fmt.Errorf("failed to write to temp script: %w", err)
+	}
+	tmpScript.Close()
+
+	// SCP the script to the server
+	remoteTmpScript := "/tmp/discovery_deploy.sh"
+	if err := execCmd(rootDir, nil, "scp", tmpScript.Name(), fmt.Sprintf("%s:%s", target, remoteTmpScript)); err != nil {
+		return fmt.Errorf("scp script failed: %w", err)
+	}
+
+	// Execute the script on the server using bash
+	if err := execCmd(rootDir, nil, "ssh", target, fmt.Sprintf("bash %s && rm %s", remoteTmpScript, remoteTmpScript)); err != nil {
 		return fmt.Errorf("ssh deployment failed: %w", err)
 	}
 

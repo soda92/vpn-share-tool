@@ -5,7 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=nobody
-ExecStart=/usr/local/bin/discovery-server
+ExecStart=/opt/discovery-server
+WorkingDirectory=/var/lib/discovery-server
 Restart=on-failure
 RestartSec=5s
 
