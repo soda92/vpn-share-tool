@@ -8,6 +8,9 @@ import urllib.parse
 import urllib.error
 import ipaddress
 import concurrent.futures
+import subprocess
+import re
+import platform
 
 # Fallback addresses if scanning fails
 DISCOVERY_SERVER_HOSTS = ["192.168.0.81", "192.168.1.81"]
@@ -15,7 +18,27 @@ DISCOVERY_SERVER_PORT = 45679
 
 
 def get_local_ip():
-    """Attempts to detect the local IP address by connecting to a public DNS."""
+    """Attempts to detect the local IP address, preferring private networks (192.168.x.x)."""
+    
+    # 1. Try parsing OS commands to find a 192.168.x.x address
+    try:
+        system = platform.system()
+        if system == "Linux":
+            output = subprocess.check_output(["ip", "addr"], text=True)
+            # Look for 'inet 192.168.X.X/XX'
+            matches = re.findall(r"inet\s+(192\.168\.\d+\.\d+)", output)
+            if matches:
+                return matches[0]
+        elif system == "Windows":
+            output = subprocess.check_output(["ipconfig"], text=True)
+            # Look for 'IPv4 Address. . . . . . . . . . . : 192.168.X.X'
+            matches = re.findall(r"IPv4 Address[ .]+:\s+(192\.168\.\d+\.\d+)", output)
+            if matches:
+                return matches[0]
+    except Exception as e:
+        logging.debug(f"Failed to parse OS network config: {e}")
+
+    # 2. Fallback to default route (e.g. 8.8.8.8)
     try:
         # We don't actually send data, just opening the socket is enough to get the local IP
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
