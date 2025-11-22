@@ -41,7 +41,7 @@ func init() {
 	}
 }
 
-func runCmd(dir string, env []string, name string, args ...string) error {
+func execCmd(dir string, env []string, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
 	if env != nil {
@@ -64,7 +64,7 @@ func buildFrontendIn(frontendDir string) error {
 	}
 
 	// Build frontend
-	if err := runCmd(frontendDir, nil, "npm", "run", "build"); err != nil {
+	if err := execCmd(frontendDir, nil, "npm", "run", "build"); err != nil {
 		return fmt.Errorf("frontend build failed: %w", err)
 	}
 	return nil

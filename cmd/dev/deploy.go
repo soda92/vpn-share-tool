@@ -4,7 +4,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/spf13/cobra"
 )
+
+var deployTarget string
+
+var deployCmd = &cobra.Command{
+	Use:   "deploy",
+	Short: "Deploy discovery-server",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runDeploy(deployTarget)
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(deployCmd)
+	deployCmd.Flags().StringVar(&deployTarget, "target", "server", "SSH target (user@host or host alias)")
+}
 
 func runDeploy(target string) error {
 	if err := checkConnection(target); err != nil {
@@ -27,13 +44,13 @@ func runDeploy(target string) error {
 	}
 
 	// Build Go binary
-	if err := runCmd(discoveryDir, nil, "go", "build", "-o", "discovery-server"); err != nil {
+	if err := execCmd(discoveryDir, nil, "go", "build", "-o", "discovery-server"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
 	fmt.Printf("Copying executable to %s...\n", target)
 	binaryPath := filepath.Join(discoveryDir, "discovery-server")
-	if err := runCmd(rootDir, nil, "scp", binaryPath, fmt.Sprintf("%s:~", target)); err != nil {
+	if err := execCmd(rootDir, nil, "scp", binaryPath, fmt.Sprintf("%s:~", target)); err != nil {
 		return fmt.Errorf("scp failed: %w", err)
 	}
 
@@ -66,7 +83,7 @@ else
 fi
 `
 
-	if err := runCmd(rootDir, nil, "ssh", target, fmt.Sprintf("bash -c '%s'", remoteScript)); err != nil {
+	if err := execCmd(rootDir, nil, "ssh", target, fmt.Sprintf("bash -c '%s'", remoteScript)); err != nil {
 		return fmt.Errorf("ssh deployment failed: %w", err)
 	}
 
@@ -79,5 +96,5 @@ func checkConnection(target string) error {
 	// We use -o ConnectTimeout=5 to fail fast if IP is unreachable.
 	// We run 'exit' to just check connectivity/auth.
 	// Stdin is connected via runCmd, so password prompts will work.
-	return runCmd(".", nil, "ssh", "-o", "ConnectTimeout=5", target, "echo '✅ Connection established'")
+	return execCmd(".", nil, "ssh", "-o", "ConnectTimeout=5", target, "echo '✅ Connection established'")
 }

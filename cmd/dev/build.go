@@ -4,7 +4,67 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/spf13/cobra"
 )
+
+var buildCmd = &cobra.Command{
+	Use:   "build",
+	Short: "Build main application (desktop)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildDesktop()
+	},
+}
+
+var buildAndroidCmd = &cobra.Command{
+	Use:   "android",
+	Short: "Build Fyne Android application",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildAndroidFyne()
+	},
+}
+
+var buildAARCmd = &cobra.Command{
+	Use:   "aar",
+	Short: "Build Android AAR for Flutter",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildAAR()
+	},
+}
+
+var buildLinuxCmd = &cobra.Command{
+	Use:   "linux",
+	Short: "Build Linux C-shared library",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildLinux()
+	},
+}
+
+var buildWindowsCmd = &cobra.Command{
+	Use:   "windows",
+	Short: "Build Windows application (fyne-cross)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildWindows()
+	},
+}
+
+var buildTestCmd = &cobra.Command{
+	Use:   "test",
+	Aliases: []string{"test-project"},
+	Short: "Build test project",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildTestProject()
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(buildCmd)
+	buildCmd.AddCommand(buildAndroidCmd)
+	buildCmd.AddCommand(buildAARCmd)
+	buildCmd.AddCommand(buildLinuxCmd)
+	buildCmd.AddCommand(buildWindowsCmd)
+	buildCmd.AddCommand(buildTestCmd)
+}
 
 func runBuildDesktop() error {
 	fmt.Println("Building main application (Desktop)...")
@@ -19,7 +79,7 @@ func runBuildDesktop() error {
 	}
 
 	// Build Go binary
-	if err := runCmd(rootDir, nil, "go", "build"); err != nil {
+	if err := execCmd(rootDir, nil, "go", "build"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
@@ -39,7 +99,7 @@ func runBuildAndroidFyne() error {
 		"ANDROID_NDK_HOME="+androidNdkHome,
 	)
 
-	if err := runCmd(rootDir, env, "fyne", "package", "-os", "android", "-app-id", "com.example.vpnsharetool", "-icon", "Icon.png"); err != nil {
+	if err := execCmd(rootDir, env, "fyne", "package", "-os", "android", "-app-id", "com.example.vpnsharetool", "-icon", "Icon.png"); err != nil {
 		return fmt.Errorf("fyne package failed: %w", err)
 	}
 
@@ -58,8 +118,7 @@ func runBuildAAR() error {
 		"ANDROID_NDK_HOME="+androidNdkHome,
 	)
 
-	// gomobile bind -target=android -androidapi 21 -o flutter_gui/android/libs/core.aar github.com/soda92/vpn-share-tool/mobile
-	if err := runCmd(rootDir, env, "gomobile", "bind", "-target=android", "-androidapi", "21", "-o", "flutter_gui/android/libs/core.aar", "github.com/soda92/vpn-share-tool/mobile"); err != nil {
+	if err := execCmd(rootDir, env, "gomobile", "bind", "-target=android", "-androidapi", "21", "-o", "flutter_gui/android/libs/core.aar", "github.com/soda92/vpn-share-tool/mobile"); err != nil {
 		return fmt.Errorf("gomobile bind failed: %w", err)
 	}
 
@@ -73,8 +132,7 @@ func runBuildLinux() error {
 	if err != nil {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
-	// go build -buildmode=c-shared -o flutter_gui/linux/libcore.so ./linux_bridge
-	if err := runCmd(rootDir, nil, "go", "build", "-buildmode=c-shared", "-o", "flutter_gui/linux/libcore.so", "./linux_bridge"); err != nil {
+	if err := execCmd(rootDir, nil, "go", "build", "-buildmode=c-shared", "-o", "flutter_gui/linux/libcore.so", "./linux_bridge"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 	fmt.Println("✅ Linux build successful.")
@@ -93,8 +151,7 @@ func runBuildWindows() error {
 		return err
 	}
 
-	// fyne-cross windows -arch amd64 --app-id vpn.share.tool
-	if err := runCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool"); err != nil {
+	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool"); err != nil {
 		return fmt.Errorf("fyne-cross failed: %w", err)
 	}
 	fmt.Println("✅ Windows build successful.")
@@ -116,8 +173,7 @@ func runBuildTestProject() error {
 	}
 
 	// Build Go binary
-	// go build main.go
-	if err := runCmd(testProjectDir, nil, "go", "build", "main.go"); err != nil {
+	if err := execCmd(testProjectDir, nil, "go", "build", "main.go"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 

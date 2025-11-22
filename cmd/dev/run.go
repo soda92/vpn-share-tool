@@ -4,7 +4,31 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/spf13/cobra"
 )
+
+var runCmd = &cobra.Command{
+	Use:   "run",
+	Short: "Run main application (desktop)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runRunDesktop()
+	},
+}
+
+var runTestCmd = &cobra.Command{
+	Use:   "test",
+	Aliases: []string{"test-project"},
+	Short: "Run test project",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runRunTestProject()
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(runCmd)
+	runCmd.AddCommand(runTestCmd)
+}
 
 func runRunDesktop() error {
 	fmt.Println("Running application...")
@@ -19,27 +43,8 @@ func runRunDesktop() error {
 	}
 
 	// Run Go app
-	if err := runCmd(rootDir, nil, "go", "run", "main.go"); err != nil {
+	if err := execCmd(rootDir, nil, "go", "run", "main.go"); err != nil {
 		return fmt.Errorf("go run failed: %w", err)
-	}
-	return nil
-}
-
-func runFlutter(args []string) error {
-	fmt.Println("Running Flutter command...")
-	rootDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get cwd: %w", err)
-	}
-	flutterDir := filepath.Join(rootDir, "flutter_gui")
-
-	env := append(os.Environ(),
-		"ANDROID_HOME="+androidHome,
-		"ANDROID_NDK_HOME="+androidNdkHome,
-	)
-
-	if err := runCmd(flutterDir, env, "flutter", args...); err != nil {
-		return fmt.Errorf("flutter command failed: %w", err)
 	}
 	return nil
 }
@@ -59,8 +64,7 @@ func runRunTestProject() error {
 	}
 
 	// Run Go app
-	// go run main.go
-	if err := runCmd(testProjectDir, nil, "go", "run", "main.go"); err != nil {
+	if err := execCmd(testProjectDir, nil, "go", "run", "main.go"); err != nil {
 		return fmt.Errorf("go run failed: %w", err)
 	}
 	return nil
