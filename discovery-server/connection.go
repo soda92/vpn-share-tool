@@ -55,7 +55,7 @@ func handleConnection(conn net.Conn) {
 			}
 
 		case "LIST":
-			var activeInstances []Instance
+			activeInstances := make([]Instance, 0, len(instances))
 			for _, instance := range instances {
 				activeInstances = append(activeInstances, instance)
 			}
