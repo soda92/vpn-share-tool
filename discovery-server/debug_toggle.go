@@ -40,7 +40,11 @@ func handleToggleDebugProxy(w http.ResponseWriter, r *http.Request) {
 	found := false
 	for _, instance := range activeInstances {
 		toggleURL := fmt.Sprintf("http://%s/toggle-debug", instance.Address)
-		reqBody, _ := json.Marshal(req)
+		reqBody, err := json.Marshal(req)
+		if err != nil {
+			log.Printf("Error marshalling toggle request body for %s: %v", instance.Address, err)
+			continue
+		}
 		resp, err := http.Post(toggleURL, "application/json", bytes.NewBuffer(reqBody))
 		if err != nil {
 			log.Printf("Error sending toggle to %s: %v", instance.Address, err)
