@@ -164,7 +164,7 @@ func registerWithDiscoveryServer(apiPort int) {
 			}
 
 			// 2. Heartbeat Loop
-		heartbeatTicker := time.NewTicker(1 * time.Minute)
+			heartbeatTicker := time.NewTicker(5 * time.Second)
 			defer heartbeatTicker.Stop()
 
 			for range heartbeatTicker.C {
@@ -173,7 +173,7 @@ func registerWithDiscoveryServer(apiPort int) {
 					log.Printf("Failed to send HEARTBEAT: %v", err)
 					return // Exit closure, trigger reconnect
 				}
-				log.Println("Sent heartbeat to discovery server.")
+				// log.Println("Sent heartbeat to discovery server.") // Reduce log noise
 
 				// Wait for and process server response
 				if !scanner.Scan() {
@@ -196,6 +196,7 @@ func registerWithDiscoveryServer(apiPort int) {
 		}(conn)
 
 		log.Printf("Connection to discovery server lost. Retrying...")
+		time.Sleep(5 * time.Second)
 	}
 }
 

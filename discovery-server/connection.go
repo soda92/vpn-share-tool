@@ -88,7 +88,7 @@ func handleConnection(conn net.Conn) {
 					Address:  instanceAddress,
 					LastSeen: time.Now(),
 				}
-				log.Printf("Heartbeat from: %s", instanceAddress)
+				// log.Printf("Heartbeat from: %s", instanceAddress)
 				if _, err := conn.Write([]byte("OK\n")); err != nil {
 					log.Printf("Error writing to %s: %v", remoteAddr, err)
 					mutex.Unlock()
