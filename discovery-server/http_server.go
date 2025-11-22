@@ -19,6 +19,7 @@ func startHTTPServer() {
 	mux.HandleFunc("/tagged-urls", handleTaggedURLs)
 	mux.HandleFunc("/tagged-urls/", handleTaggedURLs)
 	mux.HandleFunc("/cluster-proxies", handleClusterProxies)
+	mux.HandleFunc("/toggle-debug-proxy", handleToggleDebugProxy)
 
 	// Serve the Vue frontend
 	fsys, err := fs.Sub(frontendDist, "frontend/dist")

@@ -27,6 +27,20 @@ type SharedProxy struct {
 	Path        string                 `json:"path"`
 	Handler     *httputil.ReverseProxy `json:"-"`
 	Server      *http.Server           `json:"-"`
+	EnableDebug bool                   `json:"enable_debug"`
+	mu          sync.RWMutex
+}
+
+func (p *SharedProxy) SetEnableDebug(enable bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.EnableDebug = enable
+}
+
+func (p *SharedProxy) GetEnableDebug() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.EnableDebug
 }
 
 var (
@@ -150,7 +164,7 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 			return http.ErrUseLastResponse
 		},
 	}
-	proxy.Transport = NewCachingTransport(client.Transport)
+	// proxy.Transport will be assigned later after creating SharedProxy
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		if resp.StatusCode >= 300 && resp.StatusCode <= 399 {
@@ -240,7 +254,11 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 		Path:        target.Path,
 		Handler:     proxy,
 		Server:      server,
+		EnableDebug: true,
 	}
+
+	// Assign transport here to pass the newProxy reference
+	proxy.Transport = NewCachingTransport(client.Transport, newProxy)
 
 	go func() {
 		log.Printf("Starting proxy for %s on port %d", rawURL, remotePort)

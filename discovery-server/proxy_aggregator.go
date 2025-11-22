@@ -15,13 +15,14 @@ type ProxyInfo struct {
 	RemotePort  int    `json:"remote_port"`
 	Path        string `json:"path"`
 	SharedURL   string `json:"shared_url"`
+	EnableDebug bool   `json:"enable_debug"`
 }
 
 // fetchAllClusterProxies queries all registered instances for their active proxies.
 // It returns a map where the key is the normalized Hostname of the OriginalURL,
-// and the value is the full SharedURL.
+// and the value is the ProxyInfo struct.
 // It also returns a raw list of all proxies for display purposes.
-func fetchAllClusterProxies() (map[string]string, []ProxyInfo) {
+func fetchAllClusterProxies() (map[string]ProxyInfo, []ProxyInfo) {
 	mutex.Lock()
 	activeInstances := make([]Instance, 0, len(instances))
 	for _, instance := range instances {
@@ -29,7 +30,7 @@ func fetchAllClusterProxies() (map[string]string, []ProxyInfo) {
 	}
 	mutex.Unlock()
 
-	hostnameMap := make(map[string]string)
+	hostnameMap := make(map[string]ProxyInfo)
 	var rawList []ProxyInfo
 	var wg sync.WaitGroup
 	var resultMutex sync.Mutex
@@ -58,7 +59,7 @@ func fetchAllClusterProxies() (map[string]string, []ProxyInfo) {
 						
 						// Store by normalized host for tagging matching
 						key := normalizeHost(p.OriginalURL)
-						hostnameMap[key] = sharedURL
+						hostnameMap[key] = p
 					}
 					resultMutex.Unlock()
 				}

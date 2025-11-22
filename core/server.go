@@ -277,6 +277,44 @@ func handleGetActiveProxies(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func handleToggleDebug(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		URL    string `json:"url"`
+		Enable bool   `json:"enable"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	ProxiesLock.RLock()
+	var targetProxy *SharedProxy
+	for _, p := range Proxies {
+		if p.OriginalURL == req.URL {
+			targetProxy = p
+			break
+		}
+	}
+	ProxiesLock.RUnlock()
+
+	if targetProxy == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Update the setting using thread-safe method
+	targetProxy.SetEnableDebug(req.Enable)
+	log.Printf("Updated debug for %s to %v", req.URL, req.Enable)
+
+	w.WriteHeader(http.StatusOK)
+}
+
 // StartApiServer starts the HTTP server to provide the API endpoints.
 func StartApiServer(apiPort int) error {
 	ApiPort = apiPort
@@ -304,6 +342,7 @@ func StartApiServer(apiPort int) error {
 	mux.HandleFunc("/proxies", addProxyHandler)
 	mux.HandleFunc("/can-reach", canReachHandler)
 	mux.HandleFunc("/active-proxies", handleGetActiveProxies)
+	mux.HandleFunc("/toggle-debug", handleToggleDebug)
 
 	RegisterDebugRoutes(mux)
 
