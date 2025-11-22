@@ -39,7 +39,32 @@ func runDeploy(target string) error {
 
 	fmt.Printf("Deploying on %s...\n", target)
 
-	remoteScript := "\nset -e\necho \"--> Stopping discovery-server service...\"\nsudo systemctl stop discovery-server\n\necho \"--> Replacing executable...\"\nsudo mv -f ~/discovery-server /opt/discovery-server\n\necho \"--> Starting discovery-server service...\"\nsudo systemctl start discovery-server\n\necho \"--> Waiting for service to settle...\"\nsleep 3\n\necho \"--> Checking service status...\"\nif systemctl is-failed --quiet discovery-server; then\n    echo \"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\"\n    echo \"!!! Service FAILED to start.       !!!\"\n    echo \"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\"\n    journalctl -u discovery-server -n 20 --no-pager\n    exit 1\nelse\n    echo \"Service started successfully.\"\n    systemctl status discovery-server --no-pager\nfi\n"
+	remoteScript := `
+set -e
+echo "--> Stopping discovery-server service..."
+sudo systemctl stop discovery-server
+
+echo "--> Replacing executable..."
+sudo mv -f ~/discovery-server /opt/discovery-server
+
+echo "--> Starting discovery-server service..."
+sudo systemctl start discovery-server
+
+echo "--> Waiting for service to settle..."
+sleep 3
+
+echo "--> Checking service status..."
+if systemctl is-failed --quiet discovery-server; then
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo "!!! Service FAILED to start.       !!!"
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    journalctl -u discovery-server -n 20 --no-pager
+    exit 1
+else
+    echo "Service started successfully."
+    systemctl status discovery-server --no-pager
+fi
+`
 
 	if err := runCmd(rootDir, nil, "ssh", target, fmt.Sprintf("bash -c '%s'", remoteScript)); err != nil {
 		return fmt.Errorf("ssh deployment failed: %w", err)
