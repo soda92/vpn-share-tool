@@ -39,18 +39,6 @@ func handleToggleDebugProxy(w http.ResponseWriter, r *http.Request) {
 
 	found := false
 	for _, instance := range activeInstances {
-		// Check if this instance has the proxy
-		// We can optimize this by caching, but for now let's query
-		// Actually, we can iterate and check reachability or just broadcast the update to all?
-		// Broadcasting is safer if multiple instances proxy the same URL (load balancing?),
-		// but usually it's one.
-		// Let's query active-proxies first or just try to toggle on all.
-		// Trying on all is inefficient but simple.
-		// Better: Check `fetchAllClusterProxies` map? But that's heavy.
-		
-		// Let's try to send the toggle command to the instance.
-		// If the instance doesn't have the proxy, it should return 404.
-		
 		toggleURL := fmt.Sprintf("http://%s/toggle-debug", instance.Address)
 		reqBody, _ := json.Marshal(req)
 		resp, err := http.Post(toggleURL, "application/json", bytes.NewBuffer(reqBody))
