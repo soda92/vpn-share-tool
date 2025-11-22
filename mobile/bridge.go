@@ -123,3 +123,9 @@ func GetIP() string {
 func SetDeviceIP(ip string) {
 	core.SetMyIP(ip)
 }
+
+// SetStoragePath sets the directory where the app should store its files (e.g., database).
+
+func SetStoragePath(path string) {
+	core.DebugStoragePath = path
+}

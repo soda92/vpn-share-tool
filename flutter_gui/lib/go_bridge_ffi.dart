@@ -13,6 +13,7 @@ typedef _SetEventCallbackFunc =
 typedef _GetIPFunc = Pointer<Utf8> Function();
 typedef _StartApiServerWithPortFunc = Void Function(Int32 port);
 typedef _SetDeviceIPFunc = Void Function(Pointer<Utf8>);
+typedef _SetStoragePathFunc = Void Function(Pointer<Utf8>);
 
 // Dart function signatures
 typedef _ShareURL = void Function(Pointer<Utf8>);
@@ -21,6 +22,7 @@ typedef _SetEventCallback =
 typedef _GetIP = Pointer<Utf8> Function();
 typedef _StartApiServerWithPort = void Function(int port);
 typedef _SetDeviceIP = void Function(Pointer<Utf8>);
+typedef _SetStoragePath = void Function(Pointer<Utf8>);
 
 // Callback type for Go to call Dart
 typedef EventCallbackC = Void Function(Pointer<Utf8>);
@@ -53,6 +55,9 @@ class GoBridgeLinux implements GoBridge {
   static final _SetDeviceIP _setDeviceIP = _lib
       .lookup<NativeFunction<_SetDeviceIPFunc>>('SetDeviceIP')
       .asFunction<_SetDeviceIP>();
+  static final _SetStoragePath _setStoragePath = _lib
+      .lookup<NativeFunction<_SetStoragePathFunc>>('SetStoragePath')
+      .asFunction<_SetStoragePath>();
 
   final _eventStreamController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -121,6 +126,13 @@ class GoBridgeLinux implements GoBridge {
     final ipC = ip.toNativeUtf8();
     _setDeviceIP(ipC);
     malloc.free(ipC);
+  }
+
+  @override
+  void setStoragePath(String path) {
+    final pathC = path.toNativeUtf8();
+    _setStoragePath(pathC);
+    malloc.free(pathC);
   }
 
   Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:network_info_plus/network_info_plus.dart'; // Add this import
+import 'package:path_provider/path_provider.dart'; // Add this import
 
 import 'package:vpn_share_tool/go_bridge_interface.dart';
 import 'package:vpn_share_tool/go_bridge.dart'; // Import Android bridge
@@ -70,6 +71,15 @@ class _MyHomePageState extends State<MyHomePage> {
       }
     } catch (e) {
       print("Error detecting WiFi IP: $e");
+    }
+    
+    // Set storage path for debug database
+    try {
+       final directory = await getApplicationDocumentsDirectory();
+       print("Setting storage path to: ${directory.path}");
+       _bridge.setStoragePath(directory.path);
+    } catch (e) {
+       print("Error setting storage path: $e");
     }
 
     _apiPort = await _findAvailablePort(10081); // Start searching from 10081

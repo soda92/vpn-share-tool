@@ -8,4 +8,5 @@ abstract class GoBridge {
   Future<bool> hasNotificationPermission();
   Future<bool> isForegroundServiceRunning();
   void setDeviceIP(String ip);
+  void setStoragePath(String path);
 }
