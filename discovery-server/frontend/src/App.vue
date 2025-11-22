@@ -10,6 +10,17 @@
           </li>
           <li v-if="!servers.length">{{ $t('no_active_servers') }}</li>
         </ul>
+
+        <h2>All Active Proxies</h2>
+        <ul id="proxy-list-ul">
+          <li v-for="proxy in clusterProxies" :key="proxy.shared_url">
+            <div class="url-info">
+              <strong>{{ proxy.original_url }}</strong><br>
+              <small class="proxy-link"><a :href="proxy.shared_url" target="_blank">{{ proxy.shared_url }}</a></small>
+            </div>
+          </li>
+          <li v-if="!clusterProxies.length">No active proxies found.</li>
+        </ul>
       </div>
       <div>
         <h2 v-t="'tagged_urls_title'"></h2>
@@ -24,7 +35,7 @@
               <strong>{{ url.tag }}</strong><br>
               <small>{{ url.url }}</small><br>
               <small v-if="url.proxy_url" class="proxy-link">Proxied at: <a :href="url.proxy_url" target="_blank">{{ url.proxy_url }}</a></small>
-              <small v-else class="no-proxy">Not currently proxied</small>
+              <small v-else class="no-proxy">Not currently proxied (Matched against: {{ url.url.replace('http://', '').replace('https://', '') }})</small>
             </div>
             <div class="url-actions">
               <button @click="createProxy(url.url)" :disabled="!!url.proxy_url">{{ $t('create_proxy_button') }}</button>
@@ -45,6 +56,7 @@ import { ElNotification, ElMessageBox } from 'element-plus';
 
 const servers = ref([]);
 const taggedUrls = ref([]);
+const clusterProxies = ref([]);
 const newTag = ref({ tag: '', url: '' });
 
 const fetchServers = async () => {
@@ -52,6 +64,13 @@ const fetchServers = async () => {
     const response = await axios.get('/instances');
     servers.value = response.data || [];
   } catch (err) { console.error('Error fetching servers:', err); }
+};
+
+const fetchClusterProxies = async () => {
+  try {
+    const response = await axios.get('/cluster-proxies');
+    clusterProxies.value = response.data || [];
+  } catch (err) { console.error('Error fetching cluster proxies:', err); }
 };
 
 const fetchTaggedURLs = async () => {
@@ -77,6 +96,7 @@ const createProxy = async (url) => {
     const response = await axios.post('/create-proxy', { url });
     ElNotification({ title: 'Success', message: `Proxy created: ${response.data.shared_url}`, type: 'success' });
     fetchTaggedURLs(); // Refresh to show new proxy status
+    fetchClusterProxies();
   } catch (err) { 
     ElNotification({ title: 'Error', message: err.response?.data?.error || err.message, type: 'error' });
   }
@@ -129,8 +149,12 @@ onMounted(() => {
   const pollTaggedURLs = () => {
     fetchTaggedURLs().finally(() => setTimeout(pollTaggedURLs, 5000));
   };
+  const pollClusterProxies = () => {
+    fetchClusterProxies().finally(() => setTimeout(pollClusterProxies, 5000));
+  };
   pollServers();
   pollTaggedURLs();
+  pollClusterProxies();
 });
 </script>
 

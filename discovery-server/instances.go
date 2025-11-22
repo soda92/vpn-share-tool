@@ -41,7 +41,7 @@ func cleanupStaleInstances() {
 	for {
 		time.Sleep(cleanupInterval)
 		mutex.Lock()
-		log.Println("Running cleanup of stale instances...")
+		// log.Println("Running cleanup of stale instances...")
 		for addr, instance := range instances {
 			if time.Since(instance.LastSeen) > staleTimeout {
 				log.Printf("Removing stale instance: %s", addr)

@@ -18,6 +18,7 @@ func startHTTPServer() {
 	mux.HandleFunc("/instances", handleGetInstances)
 	mux.HandleFunc("/tagged-urls", handleTaggedURLs)
 	mux.HandleFunc("/tagged-urls/", handleTaggedURLs)
+	mux.HandleFunc("/cluster-proxies", handleClusterProxies)
 
 	// Serve the Vue frontend
 	fsys, err := fs.Sub(frontendDist, "frontend/dist")
