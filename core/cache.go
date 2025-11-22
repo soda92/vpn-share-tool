@@ -49,6 +49,16 @@ func NewCachingTransport(transport http.RoundTripper, proxy *SharedProxy) *Cachi
 	}
 }
 
+func (t *CachingTransport) injectDebugScript(body string, header http.Header) string {
+	if t.Proxy != nil && t.Proxy.GetEnableDebug() && strings.Contains(header.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
+		debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
+		script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
+		injectionHTML := "<script>" + string(script) + "</script>"
+		return strings.Replace(body, "</body>", injectionHTML+"</body>", 1)
+	}
+	return body
+}
+
 // RoundTrip implements the http.RoundTripper interface.
 func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Read the request body for capturing
@@ -81,13 +91,9 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			// We have the clean body. We must re-apply any injections (like the debugger script)
 			// because the EnableDebug flag might have changed.
 			bodyStr := string(entry.Body)
-
-			if t.Proxy != nil && t.Proxy.GetEnableDebug() && strings.Contains(entry.Header.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
-				debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
-				script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
-				injectionHTML := "<script>" + string(script) + "</script>"
-				bodyStr = strings.Replace(bodyStr, "</body>", injectionHTML+"</body>", 1)
-			}
+			
+			bodyStr = t.injectDebugScript(bodyStr, entry.Header)
+			
 			// Convert back to bytes
 			finalBody := []byte(bodyStr)
 
@@ -160,12 +166,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		originalBodyStr := bodyStr
 
 		// 1. Inject script (Only if enabled)
-		if t.Proxy != nil && t.Proxy.GetEnableDebug() && strings.Contains(resp.Header.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
-			debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
-			script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
-			injectionHTML := "<script>" + string(script) + "</script>"
-			bodyStr = strings.Replace(bodyStr, "</body>", injectionHTML+"</body>", 1)
-		}
+		bodyStr = t.injectDebugScript(bodyStr, resp.Header)
 
 		// 2. Handle Http.phis replacement
 		if strings.Contains(req.URL.Path, "showView.jsp") {
