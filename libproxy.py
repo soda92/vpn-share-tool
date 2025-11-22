@@ -7,7 +7,6 @@ from urllib.parse import urlparse
 import urllib.parse
 import urllib.error
 import ipaddress
-import threading
 import concurrent.futures
 
 # Fallback addresses if scanning fails
