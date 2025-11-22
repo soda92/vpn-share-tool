@@ -117,3 +117,9 @@ func GetProxies() string {
 func GetIP() string {
 	return core.MyIP
 }
+
+// SetDeviceIP allows the mobile side to manually set the device IP.
+// This is used because gomobile cannot reliably detect interface IPs on Android/iOS.
+func SetDeviceIP(ip string) {
+	core.SetMyIP(ip)
+}

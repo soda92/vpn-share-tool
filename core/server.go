@@ -21,9 +21,18 @@ const (
 )
 
 var (
+	// Fallback IPs if scanning fails
 	SERVER_IPs = []string{"192.168.0.81", "192.168.1.81"}
 	ApiPort    int
+	MyIP       string
 )
+
+// SetMyIP allows external packages (like mobile bridge) to set the client IP.
+func SetMyIP(ip string) {
+	MyIP = ip
+	log.Printf("Device IP set to: %s", MyIP)
+	// Trigger a signal? For now just logging.
+}
 
 // servicesHandler provides the list of currently shared proxies as a JSON response.
 func servicesHandler(w http.ResponseWriter, r *http.Request) {
@@ -51,22 +60,67 @@ func servicesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-var MyIP string
-
 func registerWithDiscoveryServer(apiPort int) {
 	// This loop ensures we keep trying to register if the connection fails
 	for {
+		// 1. Discover Server IPs
+		var candidateIPs []string
+		
+		// If MyIP is set (Mobile pushed it, or Desktop detected it), use it to scan.
+		if MyIP != "" {
+			log.Printf("MyIP is set to %s. Scanning subnet...", MyIP)
+			found := ScanSubnet(MyIP, discoverySrvPort)
+			if len(found) > 0 {
+				log.Printf("Found servers via scanning: %v", found)
+				candidateIPs = append(candidateIPs, found...)
+			}
+		} else {
+			// If MyIP is not set, try to detect local IPs (Desktop mode)
+			log.Println("MyIP not set. Attempting to detect local IPs...")
+			localIPs, err := GetLocalIPs()
+			if err == nil && len(localIPs) > 0 {
+				for _, ip := range localIPs {
+					// Heuristic: Prefer 192.168.x.x for setting MyIP initially if finding nothing else
+					if strings.HasPrefix(ip, "192.168.") && MyIP == "" {
+						SetMyIP(ip)
+					}
+					
+					log.Printf("Scanning subnet of %s...", ip)
+					found := ScanSubnet(ip, discoverySrvPort)
+					if len(found) > 0 {
+						log.Printf("Found servers via scanning %s: %v", ip, found)
+						candidateIPs = append(candidateIPs, found...)
+					}
+				}
+				// If we still haven't set MyIP but found IPs, just pick the first one
+				if MyIP == "" && len(localIPs) > 0 {
+					SetMyIP(localIPs[0])
+				}
+			}
+		}
+
+		// Append hardcoded fallbacks at the end
+		candidateIPs = append(candidateIPs, SERVER_IPs...)
+
 		var conn net.Conn
 		var err error
 		var serverAddr string
-		for _, ip := range SERVER_IPs {
-			serverAddr = net.JoinHostPort(ip, discoverySrvPort)
-			conn, err = net.DialTimeout("tcp", serverAddr, 5*time.Second)
+		
+		// Try to connect to candidates
+		for _, ip := range candidateIPs {
+			// If ip already has port, don't add it again (ScanSubnet returns generic IPs usually, but let's be safe)
+			if strings.Contains(ip, ":") {
+				serverAddr = ip
+			} else {
+				serverAddr = net.JoinHostPort(ip, discoverySrvPort)
+			}
+			
+			log.Printf("Trying to connect to discovery server at %s...", serverAddr)
+			conn, err = net.DialTimeout("tcp", serverAddr, 2*time.Second)
 			if err == nil {
 				log.Printf("Connected to discovery server at %s", serverAddr)
 				break
 			}
-			log.Printf("Failed to connect to discovery server at %s: %v", serverAddr, err)
 		}
 
 		if err != nil {
@@ -95,7 +149,13 @@ func registerWithDiscoveryServer(apiPort int) {
 			response := scanner.Text()
 			parts := strings.Split(response, " ")
 			if len(parts) == 2 && parts[0] == "OK" {
-				MyIP = parts[1]
+				// Server confirmed our IP. We can trust it, or keep our own.
+				// For now, let's respect the server's view as it's the source of truth for the network.
+				detectedIP := parts[1]
+				if MyIP != detectedIP {
+					log.Printf("Server sees us as %s (Local was %s). Updating.", detectedIP, MyIP)
+					SetMyIP(detectedIP)
+				}
 				log.Printf("Successfully registered with discovery server. My IP is %s", MyIP)
 				IPReadyChan <- MyIP // Signal that the IP is ready
 			} else {
@@ -104,7 +164,7 @@ func registerWithDiscoveryServer(apiPort int) {
 			}
 
 			// 2. Heartbeat Loop
-			heartbeatTicker := time.NewTicker(1 * time.Minute)
+		heartbeatTicker := time.NewTicker(1 * time.Minute)
 			defer heartbeatTicker.Stop()
 
 			for range heartbeatTicker.C {
@@ -219,6 +279,23 @@ func handleGetActiveProxies(w http.ResponseWriter, r *http.Request) {
 // StartApiServer starts the HTTP server to provide the API endpoints.
 func StartApiServer(apiPort int) error {
 	ApiPort = apiPort
+	
+	// Try to auto-detect IP on startup for Desktop/CLI usage
+	if MyIP == "" {
+		ips, err := GetLocalIPs()
+		if err == nil {
+			for _, ip := range ips {
+				if strings.HasPrefix(ip, "192.168.") {
+					SetMyIP(ip)
+					break
+				}
+			}
+			// If no 192.168 found, take first
+			if MyIP == "" && len(ips) > 0 {
+				SetMyIP(ips[0])
+			}
+		}
+	}
 
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()
