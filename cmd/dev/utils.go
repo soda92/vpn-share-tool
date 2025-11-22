@@ -55,8 +55,7 @@ func runCmd(dir string, env []string, name string, args ...string) error {
 	return cmd.Run()
 }
 
-func buildFrontend(rootDir string) error {
-	frontendDir := filepath.Join(rootDir, "core", "frontend")
+func buildFrontendIn(frontendDir string) error {
 	distDir := filepath.Join(frontendDir, "dist")
 
 	// Clean dist

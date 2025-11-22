@@ -20,15 +20,9 @@ func runDeploy(target string) error {
 	}
 	discoveryDir := filepath.Join(rootDir, "discovery-server")
 	frontendDir := filepath.Join(discoveryDir, "frontend")
-	distDir := filepath.Join(frontendDir, "dist")
-
-	// Clean dist
-	if err := os.RemoveAll(distDir); err != nil {
-		return fmt.Errorf("failed to clean dist dir: %w", err)
-	}
 
 	// Build frontend
-	if err := runCmd(frontendDir, nil, "npm", "run", "build"); err != nil {
+	if err := buildFrontendIn(frontendDir); err != nil {
 		return fmt.Errorf("frontend build failed: %w", err)
 	}
 

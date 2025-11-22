@@ -14,7 +14,7 @@ func runRunDesktop() error {
 	}
 
 	// Build frontend
-	if err := buildFrontend(rootDir); err != nil {
+	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
 		return err
 	}
 
@@ -54,7 +54,7 @@ func runRunTestProject() error {
 	frontendDir := filepath.Join(testProjectDir, "frontend")
 
 	// Build frontend
-	if err := runCmd(frontendDir, nil, "npm", "run", "build"); err != nil {
+	if err := buildFrontendIn(frontendDir); err != nil {
 		return fmt.Errorf("frontend build failed: %w", err)
 	}
 

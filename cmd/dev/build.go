@@ -14,7 +14,7 @@ func runBuildDesktop() error {
 	}
 
 	// Build frontend
-	if err := buildFrontend(rootDir); err != nil {
+	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
 		return err
 	}
 
@@ -89,7 +89,7 @@ func runBuildWindows() error {
 	}
 
 	// Build frontend
-	if err := buildFrontend(rootDir); err != nil {
+	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
 		return err
 	}
 
@@ -109,15 +109,9 @@ func runBuildTestProject() error {
 	}
 	testProjectDir := filepath.Join(rootDir, "test_project")
 	frontendDir := filepath.Join(testProjectDir, "frontend")
-	distDir := filepath.Join(frontendDir, "dist")
-
-	// Clean dist
-	if err := os.RemoveAll(distDir); err != nil {
-		return fmt.Errorf("failed to clean dist dir: %w", err)
-	}
 
 	// Build frontend
-	if err := runCmd(frontendDir, nil, "npm", "run", "build"); err != nil {
+	if err := buildFrontendIn(frontendDir); err != nil {
 		return fmt.Errorf("frontend build failed: %w", err)
 	}
 
