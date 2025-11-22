@@ -43,3 +43,25 @@ func runFlutter(args []string) error {
 	}
 	return nil
 }
+
+func runRunTestProject() error {
+	fmt.Println("Running Test Project...")
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get cwd: %w", err)
+	}
+	testProjectDir := filepath.Join(rootDir, "test_project")
+	frontendDir := filepath.Join(testProjectDir, "frontend")
+
+	// Build frontend
+	if err := runCmd(frontendDir, nil, "npm", "run", "build"); err != nil {
+		return fmt.Errorf("frontend build failed: %w", err)
+	}
+
+	// Run Go app
+	// go run main.go
+	if err := runCmd(testProjectDir, nil, "go", "run", "main.go"); err != nil {
+		return fmt.Errorf("go run failed: %w", err)
+	}
+	return nil
+}

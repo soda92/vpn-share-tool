@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 func runBuildDesktop() error {
@@ -97,5 +98,35 @@ func runBuildWindows() error {
 		return fmt.Errorf("fyne-cross failed: %w", err)
 	}
 	fmt.Println("✅ Windows build successful.")
+	return nil
+}
+
+func runBuildTestProject() error {
+	fmt.Println("Building Test Project...")
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get cwd: %w", err)
+	}
+	testProjectDir := filepath.Join(rootDir, "test_project")
+	frontendDir := filepath.Join(testProjectDir, "frontend")
+	distDir := filepath.Join(frontendDir, "dist")
+
+	// Clean dist
+	if err := os.RemoveAll(distDir); err != nil {
+		return fmt.Errorf("failed to clean dist dir: %w", err)
+	}
+
+	// Build frontend
+	if err := runCmd(frontendDir, nil, "npm", "run", "build"); err != nil {
+		return fmt.Errorf("frontend build failed: %w", err)
+	}
+
+	// Build Go binary
+	// go build main.go
+	if err := runCmd(testProjectDir, nil, "go", "build", "main.go"); err != nil {
+		return fmt.Errorf("go build failed: %w", err)
+	}
+
+	fmt.Println("✅ Test project build successful.")
 	return nil
 }

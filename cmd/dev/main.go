@@ -51,6 +51,11 @@ func main() {
 					fmt.Printf("❌ Error: %v\n", err)
 					os.Exit(1)
 				}
+			case "test", "test-project":
+				if err := runBuildTestProject(); err != nil {
+					fmt.Printf("❌ Error: %v\n", err)
+					os.Exit(1)
+				}
 			default:
 				fmt.Printf("Unknown build target: %s\n", args[0])
 				printUsage()
@@ -64,9 +69,17 @@ func main() {
 			}
 		}
 	case "run":
-		if err := runRunDesktop(); err != nil {
-			fmt.Printf("❌ Error: %v\n", err)
-			os.Exit(1)
+		args := os.Args[2:]
+		if len(args) > 0 && (args[0] == "test" || args[0] == "test-project") {
+			if err := runRunTestProject(); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			if err := runRunDesktop(); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+				os.Exit(1)
+			}
 		}
 	case "flutter":
 		if len(os.Args) < 3 {
@@ -94,6 +107,8 @@ func printUsage() {
 	fmt.Println("  build aar      Build Android AAR for Flutter")
 	fmt.Println("  build linux    Build Linux C-shared library")
 	fmt.Println("  build windows  Build Windows application (fyne-cross)")
+	fmt.Println("  build test     Build test project")
 	fmt.Println("  run            Run main application (desktop)")
+	fmt.Println("  run test       Run test project")
 	fmt.Println("  flutter        Run flutter commands (e.g., dev flutter run)")
 }
