@@ -7,4 +7,5 @@ abstract class GoBridge {
   void startGoBackendWithPort(int port);
   Future<bool> hasNotificationPermission();
   Future<bool> isForegroundServiceRunning();
+  void setDeviceIP(String ip);
 }
