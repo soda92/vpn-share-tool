@@ -33,9 +33,10 @@ type cacheEntry struct {
 type CachingTransport struct {
 	Transport http.RoundTripper
 	Cache     *lru.Cache[string, cacheEntry]
+	Proxy     *SharedProxy
 }
 
-func NewCachingTransport(transport http.RoundTripper) *CachingTransport {
+func NewCachingTransport(transport http.RoundTripper, proxy *SharedProxy) *CachingTransport {
 	cache, err := lru.New[string, cacheEntry](2560)
 	if err != nil {
 		// This should not happen with a static size
@@ -44,6 +45,7 @@ func NewCachingTransport(transport http.RoundTripper) *CachingTransport {
 	return &CachingTransport{
 		Transport: transport,
 		Cache:     cache,
+		Proxy:     proxy,
 	}
 }
 
@@ -75,13 +77,34 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	if isCacheable {
 		if entry, ok := t.Cache.Get(req.URL.String()); ok {
 			log.Printf("Cache HIT for: %s", req.URL.String())
+
+			// We have the clean body. We must re-apply any injections (like the debugger script)
+			// because the EnableDebug flag might have changed.
+			bodyStr := string(entry.Body)
+
+			if t.Proxy != nil && t.Proxy.EnableDebug && strings.Contains(entry.Header.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
+				debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
+				script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
+				injectionHTML := "<script>" + string(script) + "</script>"
+				bodyStr = strings.Replace(bodyStr, "</body>", injectionHTML+"</body>", 1)
+			}
+
+			// Convert back to bytes
+			finalBody := []byte(bodyStr)
+
 			resp := &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     entry.Header,
-				Body:       io.NopCloser(bytes.NewReader(entry.Body)),
+				Body:       io.NopCloser(bytes.NewReader(finalBody)),
 				Request:    req,
 			}
-			// Capture the cached response
+
+			// Update Content-Length if changed (though for chunked/compressed it might not matter, but good practice)
+			if len(finalBody) != len(entry.Body) {
+				resp.Header.Del("Content-Length")
+			}
+
+			// Capture the cached response (using clean body)
 			CaptureRequest(req, resp, reqBody, entry.Body)
 			return resp, nil
 		}
@@ -100,6 +123,8 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 
 	// Read the response body for capturing and caching
 	var respBody []byte
+	var decompressedBody []byte // Declare here for scope access
+
 	if resp.Body != nil {
 		var err error
 		respBody, err = io.ReadAll(resp.Body)
@@ -125,7 +150,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			reader = io.NopCloser(bytes.NewReader(respBody))
 		}
 
-		decompressedBody, err := io.ReadAll(reader)
+		decompressedBody, err = io.ReadAll(reader)
 		if err != nil {
 			log.Printf("Error decompressing response body: %v", err)
 			return nil, err
@@ -135,8 +160,8 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		bodyStr := string(decompressedBody)
 		originalBodyStr := bodyStr
 
-		// 1. Inject script
-		if strings.Contains(resp.Header.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
+		// 1. Inject script (Only if enabled)
+		if t.Proxy != nil && t.Proxy.EnableDebug && strings.Contains(resp.Header.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
 			debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
 			script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
 			injectionHTML := "<script>" + string(script) + "</script>"
@@ -198,8 +223,8 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		// Restore the body for the client
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
 
-		// Capture the request and the final (potentially modified and decompressed) response
-		CaptureRequest(req, resp, reqBody, respBody)
+		// Capture the request and the clean (decompressed) response body
+		CaptureRequest(req, resp, reqBody, decompressedBody)
 	} else {
 		// If there was no body, capture the request anyway
 		CaptureRequest(req, resp, reqBody, nil)
@@ -209,7 +234,8 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	if isCacheable && resp.StatusCode == http.StatusOK {
 		entry := cacheEntry{
 			Header: resp.Header,
-			Body:   respBody, // This is the final, correct body
+			// Store the clean body in cache so we can re-inject (or not) on next hit
+			Body: decompressedBody,
 		}
 		t.Cache.Add(req.URL.String(), entry)
 	}
