@@ -37,17 +37,19 @@ func handleToggleDebugProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	mutex.Unlock()
 
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		http.Error(w, "Failed to marshal request", http.StatusInternalServerError)
+		return
+	}
+
 	found := false
 	for _, instance := range activeInstances {
 		toggleURL := fmt.Sprintf("http://%s/toggle-debug", instance.Address)
-		reqBody, err := json.Marshal(req)
-		if err != nil {
-			log.Printf("Error marshalling toggle request body for %s: %v", instance.Address, err)
-			continue
-		}
 		resp, err := http.Post(toggleURL, "application/json", bytes.NewBuffer(reqBody))
 		if err != nil {
-			log.Printf("Error sending toggle to %s: %v", instance.Address, err)
+			// Log but continue to other instances
+			// It's possible an instance is down or just doesn't have this proxy
 			continue
 		}
 		resp.Body.Close()
@@ -55,15 +57,15 @@ func handleToggleDebugProxy(w http.ResponseWriter, r *http.Request) {
 		if resp.StatusCode == http.StatusOK {
 			found = true
 			log.Printf("Successfully toggled debug for %s on %s", req.URL, instance.Address)
-			// We continue in case multiple instances have it?
-			// Usually only one.
-			break
 		}
 	}
 
 	if found {
 		w.WriteHeader(http.StatusOK)
 	} else {
-		http.Error(w, "Proxy not found on any instance", http.StatusNotFound)
+		// If we iterated all and found none, return 404. 
+		// Note: If connection failed to the *only* instance hosting it, we technically return 404 here
+		// which might be misleading ("Not found" vs "Found but unreachable"), but acceptable for now.
+		http.Error(w, "Proxy not found on any reachable instance", http.StatusNotFound)
 	}
 }
