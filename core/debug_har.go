@@ -50,12 +50,12 @@ func importHar(w http.ResponseWriter, r *http.Request) {
 			requestIDLock.Lock()
 			nextRequestID++
 			cr := &CapturedRequest{
-				ID:             nextRequestID,
-				Timestamp:      entry.StartedDateTime,
-				Method:         entry.Request.Method,
-				URL:            entry.Request.URL,
-				RequestHeaders: make(http.Header),
-				ResponseStatus: entry.Response.Status,
+				ID:              nextRequestID,
+				Timestamp:       entry.StartedDateTime,
+				Method:          entry.Request.Method,
+				URL:             entry.Request.URL,
+				RequestHeaders:  make(http.Header),
+				ResponseStatus:  entry.Response.Status,
 				ResponseHeaders: make(http.Header),
 			}
 			requestIDLock.Unlock()
@@ -189,7 +189,7 @@ func toHAR(requests []*CapturedRequest) HAR {
 				},
 				BodySize: int64(len(req.ResponseBody)),
 			},
-			Cache: make(map[string]interface{}),
+			Cache:   make(map[string]interface{}),
 			Timings: Timings{Send: -1, Wait: -1, Receive: -1}, // Not available
 		}
 

@@ -91,9 +91,9 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			// We have the clean body. We must re-apply any injections (like the debugger script)
 			// because the EnableDebug flag might have changed.
 			bodyStr := string(entry.Body)
-			
+
 			bodyStr = t.injectDebugScript(bodyStr, entry.Header)
-			
+
 			// Convert back to bytes
 			finalBody := []byte(bodyStr)
 

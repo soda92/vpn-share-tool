@@ -10,7 +10,6 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-
 func handleSingleRequest(w http.ResponseWriter, r *http.Request) {
 	// New path: /api/debug/requests/{sessionID}/{requestID}
 	path := strings.TrimPrefix(r.URL.Path, "/api/debug/requests/")

@@ -65,7 +65,7 @@ func registerWithDiscoveryServer(apiPort int) {
 	for {
 		// 1. Discover Server IPs
 		var candidateIPs []string
-		
+
 		// If MyIP is set (Mobile pushed it, or Desktop detected it), use it to scan.
 		if MyIP != "" {
 			log.Printf("MyIP is set to %s. Scanning subnet...", MyIP)
@@ -84,7 +84,7 @@ func registerWithDiscoveryServer(apiPort int) {
 					if strings.HasPrefix(ip, "192.168.") && MyIP == "" {
 						SetMyIP(ip)
 					}
-					
+
 					log.Printf("Scanning subnet of %s...", ip)
 					found := ScanSubnet(ip, discoverySrvPort)
 					if len(found) > 0 {
@@ -105,7 +105,7 @@ func registerWithDiscoveryServer(apiPort int) {
 		var conn net.Conn
 		var err error
 		var serverAddr string
-		
+
 		// Try to connect to candidates
 		for _, ip := range candidateIPs {
 			// If ip already has port, don't add it again (ScanSubnet returns generic IPs usually, but let's be safe)
@@ -114,7 +114,7 @@ func registerWithDiscoveryServer(apiPort int) {
 			} else {
 				serverAddr = net.JoinHostPort(ip, discoverySrvPort)
 			}
-			
+
 			log.Printf("Trying to connect to discovery server at %s...", serverAddr)
 			conn, err = net.DialTimeout("tcp", serverAddr, 2*time.Second)
 			if err == nil {
@@ -318,7 +318,7 @@ func handleToggleDebug(w http.ResponseWriter, r *http.Request) {
 // StartApiServer starts the HTTP server to provide the API endpoints.
 func StartApiServer(apiPort int) error {
 	ApiPort = apiPort
-	
+
 	// Try to auto-detect IP on startup for Desktop/CLI usage
 	if MyIP == "" {
 		ips, err := GetLocalIPs()

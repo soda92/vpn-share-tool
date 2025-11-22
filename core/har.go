@@ -39,27 +39,27 @@ type Entry struct {
 }
 
 type Request struct {
-	Method      string      `json:"method"`
-	URL         string      `json:"url"`
-	HTTPVersion string      `json:"httpVersion"`
-	Cookies     []Cookie    `json:"cookies"`
+	Method      string          `json:"method"`
+	URL         string          `json:"url"`
+	HTTPVersion string          `json:"httpVersion"`
+	Cookies     []Cookie        `json:"cookies"`
 	Headers     []NameValuePair `json:"headers"`
 	QueryString []NameValuePair `json:"queryString"`
-	PostData    *PostData   `json:"postData,omitempty"`
-	HeadersSize int64       `json:"headersSize"`
-	BodySize    int64       `json:"bodySize"`
+	PostData    *PostData       `json:"postData,omitempty"`
+	HeadersSize int64           `json:"headersSize"`
+	BodySize    int64           `json:"bodySize"`
 }
 
 type Response struct {
-	Status      int         `json:"status"`
-	StatusText  string      `json:"statusText"`
-	HTTPVersion string      `json:"httpVersion"`
-	Cookies     []Cookie    `json:"cookies"`
+	Status      int             `json:"status"`
+	StatusText  string          `json:"statusText"`
+	HTTPVersion string          `json:"httpVersion"`
+	Cookies     []Cookie        `json:"cookies"`
 	Headers     []NameValuePair `json:"headers"`
-	Content     Content     `json:"content"`
-	RedirectURL string      `json:"redirectURL"`
-	HeadersSize int64       `json:"headersSize"`
-	BodySize    int64       `json:"bodySize"`
+	Content     Content         `json:"content"`
+	RedirectURL string          `json:"redirectURL"`
+	HeadersSize int64           `json:"headersSize"`
+	BodySize    int64           `json:"bodySize"`
 }
 
 type NameValuePair struct {

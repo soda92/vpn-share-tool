@@ -63,7 +63,7 @@ func handleToggleDebugProxy(w http.ResponseWriter, r *http.Request) {
 	if found {
 		w.WriteHeader(http.StatusOK)
 	} else {
-		// If we iterated all and found none, return 404. 
+		// If we iterated all and found none, return 404.
 		// Note: If connection failed to the *only* instance hosting it, we technically return 404 here
 		// which might be misleading ("Not found" vs "Found but unreachable"), but acceptable for now.
 		http.Error(w, "Proxy not found on any reachable instance", http.StatusNotFound)

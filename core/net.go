@@ -115,7 +115,7 @@ func ScanSubnet(localIP string, port string) []string {
 		wg.Add(1)
 		go func(target string) {
 			defer wg.Done()
-			semaphore <- struct{}{} // Acquire
+			semaphore <- struct{}{}        // Acquire
 			defer func() { <-semaphore }() // Release
 
 			address := net.JoinHostPort(target, port)

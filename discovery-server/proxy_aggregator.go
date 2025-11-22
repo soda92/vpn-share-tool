@@ -54,9 +54,9 @@ func fetchAllClusterProxies() (map[string]ProxyInfo, []ProxyInfo) {
 					for _, p := range proxies {
 						sharedURL := fmt.Sprintf("http://%s:%d%s", host, p.RemotePort, p.Path)
 						p.SharedURL = sharedURL // Enrich struct
-						
+
 						rawList = append(rawList, p)
-						
+
 						// Store by normalized host for tagging matching
 						key := normalizeHost(p.OriginalURL)
 						hostnameMap[key] = p
