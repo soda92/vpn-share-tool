@@ -28,6 +28,19 @@ type SharedProxy struct {
 	Handler     *httputil.ReverseProxy `json:"-"`
 	Server      *http.Server           `json:"-"`
 	EnableDebug bool                   `json:"enable_debug"`
+	mu          sync.RWMutex
+}
+
+func (p *SharedProxy) SetEnableDebug(enable bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.EnableDebug = enable
+}
+
+func (p *SharedProxy) GetEnableDebug() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.EnableDebug
 }
 
 var (

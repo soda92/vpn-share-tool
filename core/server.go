@@ -308,10 +308,8 @@ func handleToggleDebug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update the setting
-	// We don't need a lock here for a simple bool write, but strictly speaking we might.
-	// However, SharedProxy struct doesn't have a mutex. Given it's a bool, it's mostly fine.
-	targetProxy.EnableDebug = req.Enable
+	// Update the setting using thread-safe method
+	targetProxy.SetEnableDebug(req.Enable)
 	log.Printf("Updated debug for %s to %v", req.URL, req.Enable)
 
 	w.WriteHeader(http.StatusOK)
