@@ -208,7 +208,6 @@ body {
 
 <style scoped>
 .container {
-
   max-width: 1400px;
   /* Increased max-width */
   width: 100%;
@@ -235,7 +234,6 @@ body {
 }
 
 .main-grid {
-
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
@@ -249,7 +247,6 @@ body {
 }
 
 .section {
-
   display: flex;
   flex-direction: column;
   border: 1px solid #ebeef5;
@@ -310,7 +307,6 @@ h2 {
 }
 
 .dense-list {
-
   list-style: none;
   padding: 0;
   margin: 0;
@@ -477,5 +473,53 @@ h2 {
 
 .server-item {
   font-family: monospace;
+}
+
+@media (max-width: 768px) {
+  .container {
+    height: auto;
+    /* Let content grow on mobile */
+
+    min-height: 100vh;
+    padding: 0.5rem;
+  }
+
+  .main-grid {
+    grid-template-columns: 1fr;
+    /* Single column */
+
+    overflow: visible;
+    /* Allow page scroll */
+
+  }
+
+  .section {
+    height: auto;
+    /* Auto height for sections */
+
+    max-height: 60vh;
+    /* Cap height if you want scrolling within sections, or remove for full page scroll */
+
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dense-list {
+    max-height: 400px;
+    /* Specific limit for lists on mobile */
+
+  }
+
+  .url-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .url-actions {
+    margin-top: 0.5rem;
+    justify-content: flex-end;
+    align-self: flex-end;
+  }
 }
 </style>
