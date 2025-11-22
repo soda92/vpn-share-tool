@@ -21,6 +21,10 @@
                 <div class="url-sub">{{ url.url }}</div>
                 <div v-if="url.proxy_url" class="proxy-status active">
                   <a :href="url.proxy_url" target="_blank">➤ {{ url.proxy_url }}</a>
+                  <label class="debug-toggle" title="Toggle Debugger">
+                    <input type="checkbox" :checked="url.enable_debug" @change="toggleDebug(url.url, $event.target.checked)">
+                    🐞
+                  </label>
                 </div>
                 <div v-else class="proxy-status inactive">
                   Not proxied ({{ url.url.replace('http://', '').replace('https://', '') }})
@@ -46,6 +50,10 @@
                 <div class="tag-name">{{ proxy.original_url }}</div>
                 <div class="proxy-status active">
                   <a :href="proxy.shared_url" target="_blank">➤ {{ proxy.shared_url }}</a>
+                  <label class="debug-toggle" title="Toggle Debugger">
+                    <input type="checkbox" :checked="proxy.enable_debug" @change="toggleDebug(proxy.original_url, $event.target.checked)">
+                    🐞
+                  </label>
                 </div>
               </div>
             </div>
@@ -116,6 +124,18 @@ const createProxy = async (url) => {
     fetchClusterProxies();
   } catch (err) { 
     ElNotification({ title: 'Error', message: err.response?.data?.error || err.message, type: 'error' });
+  }
+};
+
+const toggleDebug = async (url, enable) => {
+  try {
+    await axios.post('/toggle-debug-proxy', { url, enable });
+    ElNotification({ title: 'Success', message: `Debugger ${enable ? 'enabled' : 'disabled'}`, type: 'success' });
+    // Refresh to show new status
+    fetchTaggedURLs();
+    fetchClusterProxies();
+  } catch (err) {
+    ElNotification({ title: 'Error', message: 'Failed to toggle debugger', type: 'error' });
   }
 };
 
