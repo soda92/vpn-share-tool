@@ -117,3 +117,15 @@ func GetProxies() string {
 func GetIP() string {
 	return core.MyIP
 }
+
+// SetDeviceIP allows the mobile side to manually set the device IP.
+// This is used because gomobile cannot reliably detect interface IPs on Android/iOS.
+func SetDeviceIP(ip string) {
+	core.SetMyIP(ip)
+}
+
+// SetStoragePath sets the directory where the app should store its files (e.g., database).
+
+func SetStoragePath(path string) {
+	core.DebugStoragePath = path
+}

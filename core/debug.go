@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +21,8 @@ const (
 	maxCapturedRequests   = 1000
 	liveSessionBucketName = "live_session"
 )
+
+var DebugStoragePath string
 
 //go:embed frontend/dist
 var debugFrontend embed.FS
@@ -46,8 +50,21 @@ var (
 
 // RegisterDebugRoutes registers the debug UI and API routes.
 func RegisterDebugRoutes(mux *http.ServeMux) {
-	if err := InitDB("debug_requests.db"); err != nil {
-		log.Fatalf("Failed to initialize debug database: %v", err)
+	dbPath := "debug_requests.db"
+	if DebugStoragePath != "" {
+		dbPath = filepath.Join(DebugStoragePath, "debug_requests.db")
+	} else if home, err := os.UserHomeDir(); err == nil {
+		// Fallback to a safer location if no path provided (e.g., on Desktop)
+		// but avoid root directory writes.
+		dbPath = filepath.Join(home, ".vpn-share-tool", "debug_requests.db")
+		os.MkdirAll(filepath.Dir(dbPath), 0755)
+	}
+
+	log.Printf("Initializing debug database at: %s", dbPath)
+
+	if err := InitDB(dbPath); err != nil {
+		log.Printf("Failed to initialize debug database: %v", err)
+		// Don't fatal, just continue without debug DB
 	}
 
 	// Serve the embedded frontend for the /debug/ path
@@ -110,35 +127,37 @@ func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []
 	}
 	requestIDLock.Unlock()
 
-	err := db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(liveSessionBucketName))
+	if db != nil {
+		err := db.Update(func(tx *bbolt.Tx) error {
+			b := tx.Bucket([]byte(liveSessionBucketName))
 
-		// Enforce request limit
-		if b.Stats().KeyN >= maxCapturedRequests {
-			c := b.Cursor()
-			// Iterate and delete the oldest non-essential requests
-			for k, v := c.First(); k != nil; k, v = c.Next() {
-				var tempReq CapturedRequest
-				if json.Unmarshal(v, &tempReq) == nil {
-					if !tempReq.Bookmarked && tempReq.Note == "" {
-						b.Delete(k)
-						// Check if we are now under the limit
-						if b.Stats().KeyN < maxCapturedRequests {
-							break
+			// Enforce request limit
+			if b.Stats().KeyN >= maxCapturedRequests {
+				c := b.Cursor()
+				// Iterate and delete the oldest non-essential requests
+				for k, v := c.First(); k != nil; k, v = c.Next() {
+					var tempReq CapturedRequest
+					if json.Unmarshal(v, &tempReq) == nil {
+						if !tempReq.Bookmarked && tempReq.Note == "" {
+							b.Delete(k)
+							// Check if we are now under the limit
+							if b.Stats().KeyN < maxCapturedRequests {
+								break
+							}
 						}
 					}
 				}
 			}
+
+			// Save the new request
+			jsonReq, _ := json.Marshal(cr)
+			return b.Put([]byte(strconv.FormatInt(cr.ID, 10)), jsonReq)
+		})
+
+		if err != nil {
+			log.Printf("Error capturing request to DB: %v", err)
+			return
 		}
-
-		// Save the new request
-		jsonReq, _ := json.Marshal(cr)
-		return b.Put([]byte(strconv.FormatInt(cr.ID, 10)), jsonReq)
-	})
-
-	if err != nil {
-		log.Printf("Error capturing request to DB: %v", err)
-		return
 	}
 
 	wsBroadCast(cr)
@@ -150,24 +169,26 @@ func handleClearLiveRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(liveSessionBucketName))
-		c := b.Cursor()
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			var req CapturedRequest
-			if json.Unmarshal(v, &req) == nil {
-				if !req.Bookmarked && req.Note == "" {
-					b.Delete(k)
+	if db != nil {
+		err := db.Update(func(tx *bbolt.Tx) error {
+			b := tx.Bucket([]byte(liveSessionBucketName))
+			c := b.Cursor()
+			for k, v := c.First(); k != nil; k, v = c.Next() {
+				var req CapturedRequest
+				if json.Unmarshal(v, &req) == nil {
+					if !req.Bookmarked && req.Note == "" {
+						b.Delete(k)
+					}
 				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
 
-	if err != nil {
-		log.Printf("Error clearing live requests: %v", err)
-		http.Error(w, "Failed to clear requests", http.StatusInternalServerError)
-		return
+		if err != nil {
+			log.Printf("Error clearing live requests: %v", err)
+			http.Error(w, "Failed to clear requests", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)

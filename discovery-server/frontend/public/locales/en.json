@@ -9,5 +9,7 @@
   "save_tagged_url_button": "Save Tagged URL",
   "create_proxy_button": "Create Proxy",
   "rename_button": "Rename",
-  "delete_button": "Delete"
+  "delete_button": "Delete",
+  "active_proxies_title": "All Active Proxies",
+  "no_active_proxies": "No active proxies found."
 }

@@ -118,6 +118,24 @@ class MainActivity: FlutterActivity() {
                         result.error("INVALID_ARGUMENT", "Port argument is missing or not an integer", null)
                     }
                 }
+                "setDeviceIP" -> {
+                    val ip = call.argument<String>("ip")
+                    if (ip != null) {
+                        mobile.Mobile.setDeviceIP(ip)
+                        result.success(null)
+                    } else {
+                        result.error("INVALID_ARGUMENT", "IP argument is missing", null)
+                    }
+                }
+                "setStoragePath" -> {
+                    val path = call.argument<String>("path")
+                    if (path != null) {
+                        mobile.Mobile.setStoragePath(path)
+                        result.success(null)
+                    } else {
+                        result.error("INVALID_ARGUMENT", "Path argument is missing", null)
+                    }
+                }
                 "hasNotificationPermission" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         result.success(ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)

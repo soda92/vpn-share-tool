@@ -67,5 +67,15 @@ class GoBridgeAndroid implements GoBridge {
     return await _methodChannel.invokeMethod('isForegroundServiceRunning') ?? false;
   }
 
+  @override
+  void setDeviceIP(String ip) {
+    _methodChannel.invokeMethod('setDeviceIP', {'ip': ip});
+  }
+
+  @override
+  void setStoragePath(String path) {
+    _methodChannel.invokeMethod('setStoragePath', {'path': path});
+  }
+
   Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;
 }

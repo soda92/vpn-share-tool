@@ -2,10 +2,9 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
-	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +39,24 @@ func handleTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func normalizeURL(u string) string {
+	u = strings.TrimPrefix(u, "http://")
+	u = strings.TrimPrefix(u, "https://")
+	u = strings.TrimRight(u, "/")
+	return u
+}
+
+func normalizeHost(u string) string {
+	if !strings.HasPrefix(u, "http") {
+		u = "http://" + u
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return u
+	}
+	return parsed.Hostname()
+}
+
 func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	taggedURLsMutex.Lock()
 	urls := make([]TaggedURL, 0, len(taggedURLs))
@@ -48,50 +65,8 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	}
 	taggedURLsMutex.Unlock()
 
-	// Concurrently fetch all active proxies to enrich the response
-	mutex.Lock()
-	activeInstances := make([]Instance, 0, len(instances))
-	for _, instance := range instances {
-		activeInstances = append(activeInstances, instance)
-	}
-	mutex.Unlock()
-
-	type ProxyInfo struct {
-		OriginalURL string `json:"original_url"`
-		RemotePort  int    `json:"remote_port"`
-		Path        string `json:"path"`
-		SharedURL   string `json:"shared_url"`
-	}
-
-	allProxies := make(map[string]string)
-	var wg sync.WaitGroup
-	var proxyMutex sync.Mutex
-
-	for _, instance := range activeInstances {
-		wg.Add(1)
-		go func(instance Instance) {
-			defer wg.Done()
-			client := &http.Client{Timeout: 10 * time.Second}
-			resp, err := client.Get(fmt.Sprintf("http://%s/active-proxies", instance.Address))
-			if err != nil {
-				return
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode == http.StatusOK {
-				var proxies []ProxyInfo
-				if err := json.NewDecoder(resp.Body).Decode(&proxies); err == nil {
-					proxyMutex.Lock()
-					for _, p := range proxies {
-						host, _, _ := net.SplitHostPort(instance.Address)
-						allProxies[p.OriginalURL] = fmt.Sprintf("http://%s:%d%s", host, p.RemotePort, p.Path)
-					}
-					proxyMutex.Unlock()
-				}
-			}
-		}(instance)
-	}
-	wg.Wait()
+	// Use shared aggregator to fetch proxies from all instances
+	allProxies, _ := fetchAllClusterProxies()
 
 	// Enrich the tagged URLs with their proxy status
 	type EnrichedTaggedURL struct {
@@ -102,7 +77,8 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	enrichedUrls := make([]EnrichedTaggedURL, len(urls))
 	for i, u := range urls {
 		enrichedUrls[i] = EnrichedTaggedURL{TaggedURL: u}
-		if proxyURL, ok := allProxies[u.URL]; ok {
+		// Check against Hostname (keys in allProxies are normalized hostnames)
+		if proxyURL, ok := allProxies[normalizeHost(u.URL)]; ok {
 			enrichedUrls[i].ProxyURL = proxyURL
 		}
 	}

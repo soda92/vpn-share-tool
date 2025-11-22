@@ -6,36 +6,132 @@ import urllib.request
 from urllib.parse import urlparse
 import urllib.parse
 import urllib.error
+import ipaddress
+import concurrent.futures
+import subprocess
+import re
+import platform
 
-# Address of the central discovery server
+# Fallback addresses if scanning fails
 DISCOVERY_SERVER_HOSTS = ["192.168.0.81", "192.168.1.81"]
 DISCOVERY_SERVER_PORT = 45679
 
 
-def get_instance_list(timeout: int = 5):
-    """Gets the list of active vpn-share-tool instances from the central server."""
-    for host in DISCOVERY_SERVER_HOSTS:
+def get_local_ip():
+    """Attempts to detect the local IP address, preferring private networks (192.168.x.x)."""
+    
+    # 1. Try parsing OS commands to find a 192.168.x.x address
+    try:
+        system = platform.system()
+        if system == "Linux":
+            output = subprocess.check_output(["ip", "addr"], text=True)
+            # Look for 'inet 192.168.X.X/XX'
+            matches = re.findall(r"inet\s+(192\.168\.\d+\.\d+)", output)
+            if matches:
+                return matches[0]
+        elif system == "Windows":
+            output = subprocess.check_output(["ipconfig"], text=True)
+            # Look for 'IPv4 Address. . . . . . . . . . . : 192.168.X.X'
+            matches = re.findall(r"IPv4 Address[ .]+:\s+(192\.168\.\d+\.\d+)", output)
+            if matches:
+                return matches[0]
+    except Exception as e:
+        logging.debug(f"Failed to parse OS network config: {e}")
+
+    # 2. Fallback to default route (e.g. 8.8.8.8)
+    try:
+        # We don't actually send data, just opening the socket is enough to get the local IP
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        return None
+
+
+def scan_subnet(local_ip, port):
+    """Scans the /24 subnet of the given IP for the specified TCP port."""
+    if not local_ip:
+        return []
+
+    try:
+        # Calculate the network
+        ip_net = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
+    except ValueError:
+        return []
+
+    # Skip 10.x.x.x networks as requested
+    if str(ip_net.network_address).startswith("10."):
+        logging.debug(f"Skipping scan for 10.x.x.x network: {ip_net}")
+        return []
+
+    found_hosts = []
+
+    def check_host(ip):
+        ip_str = str(ip)
+        # Skip self if needed, but sometimes helpful
         try:
+            with socket.create_connection((ip_str, port), timeout=0.2):
+                return ip_str
+        except (socket.timeout, ConnectionRefusedError, OSError):
+            return None
+
+    # Use a thread pool to scan quickly
+    with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+        futures = [executor.submit(check_host, ip) for ip in ip_net.hosts()]
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            if result:
+                found_hosts.append(result)
+
+    return found_hosts
+
+
+def get_instance_list(timeout: int = 5):
+    """Gets the list of active vpn-share-tool instances using scanning and fallbacks."""
+    
+    # 1. Scan local subnet first
+    local_ip = get_local_ip()
+    candidate_hosts = []
+    
+    if local_ip:
+        logging.debug(f"Detected local IP: {local_ip}. Scanning subnet...")
+        scanned_hosts = scan_subnet(local_ip, DISCOVERY_SERVER_PORT)
+        if scanned_hosts:
+            logging.info(f"Found discovery servers via scanning: {scanned_hosts}")
+            candidate_hosts.extend(scanned_hosts)
+        else:
+            logging.debug("No servers found via scanning.")
+    else:
+        logging.warning("Could not detect local IP for scanning.")
+
+    # 2. Add fallbacks
+    candidate_hosts.extend(DISCOVERY_SERVER_HOSTS)
+
+    # 3. Try to connect to candidates
+    for host in candidate_hosts:
+        try:
+            logging.debug(f"Trying discovery server at {host}...")
             with socket.create_connection(
                 (host, DISCOVERY_SERVER_PORT), timeout=1
             ) as sock:
                 sock.sendall(b"LIST\n")
                 response = sock.makefile().readline()
                 if not response:
-                    logging.error(
+                    logging.warning(
                         f"Did not receive a response from discovery server at {host}"
                     )
                     continue
                 instances_raw = json.loads(response)
                 # The server gives us a list of objects with an "address" field
+                logging.info(f"Successfully retrieved instances from {host}")
                 return [item["address"] for item in instances_raw]
         except socket.timeout:
-            logging.error(
+            logging.debug(
                 f"Timeout connecting to discovery server at {host}:{DISCOVERY_SERVER_PORT}"
             )
             continue
         except ConnectionRefusedError:
-            logging.error(
+            logging.debug(
                 f"Connection refused by discovery server at {host}:{DISCOVERY_SERVER_PORT}"
             )
             continue
