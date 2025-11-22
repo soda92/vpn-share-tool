@@ -8,6 +8,8 @@
 /dist
 /vendor
 
+/dev
+
 __debug_bin*
 
 *_log_*
