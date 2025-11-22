@@ -7,6 +7,10 @@ import (
 )
 
 func runDeploy(target string) error {
+	if err := checkConnection(target); err != nil {
+		return fmt.Errorf("connection check failed: %w", err)
+	}
+
 	fmt.Println("Building executable...")
 
 	// Build paths
@@ -49,4 +53,12 @@ func runDeploy(target string) error {
 
 	fmt.Println("\n✅ Deployment successful.")
 	return nil
+}
+
+func checkConnection(target string) error {
+	fmt.Printf("Checking SSH connection to %s...\n", target)
+	// We use -o ConnectTimeout=5 to fail fast if IP is unreachable.
+	// We run 'exit' to just check connectivity/auth.
+	// Stdin is connected via runCmd, so password prompts will work.
+	return runCmd(".", nil, "ssh", "-o", "ConnectTimeout=5", target, "echo '✅ Connection established'")
 }
