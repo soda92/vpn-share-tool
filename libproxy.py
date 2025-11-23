@@ -19,7 +19,7 @@ DISCOVERY_SERVER_PORT = 45679
 
 def get_local_ip():
     """Attempts to detect the local IP address, preferring private networks (192.168.x.x)."""
-    
+
     # 1. Try parsing OS commands to find a 192.168.x.x address
     try:
         system = platform.system()
@@ -35,7 +35,7 @@ def get_local_ip():
             matches = re.findall(r"IPv4 Address[ .]+:\s+(192\.168\.\d+\.\d+)", output)
             if matches:
                 return matches[0]
-    except Exception as e:
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
         logging.debug(f"Failed to parse OS network config: {e}")
 
     # 2. Fallback to default route (e.g. 8.8.8.8)
@@ -44,7 +44,7 @@ def get_local_ip():
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
-    except Exception:
+    except socket.error:
         return None
 
 
@@ -88,11 +88,11 @@ def scan_subnet(local_ip, port):
 
 def get_instance_list(timeout: int = 5):
     """Gets the list of active vpn-share-tool instances using scanning and fallbacks."""
-    
+
     # 1. Scan local subnet first
     local_ip = get_local_ip()
     candidate_hosts = []
-    
+
     if local_ip:
         logging.debug(f"Detected local IP: {local_ip}. Scanning subnet...")
         scanned_hosts = scan_subnet(local_ip, DISCOVERY_SERVER_PORT)
