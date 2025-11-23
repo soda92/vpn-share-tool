@@ -27,10 +27,12 @@
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
 import { useRouter } from 'vue-router';
+import { useToast } from 'vue-toastification';
 
 const sessions = ref([]);
 const fileInput = ref(null);
 const router = useRouter();
+const toast = useToast();
 
 const fetchSessions = async () => {
   try {
@@ -74,11 +76,11 @@ const importHar = async (event) => {
     try {
       const har = JSON.parse(e.target?.result);
       await axios.post(`/debug/har/import?name=${file.name}`, har);
-      alert('HAR file imported successfully!');
+      toast.success('HAR file imported successfully!');
       fetchSessions();
     } catch (error) {
       console.error('Failed to import HAR file', error);
-      alert('Failed to import HAR file. See console for details.');
+      toast.error('Failed to import HAR file. See console for details.');
     }
   };
   reader.readAsText(file);

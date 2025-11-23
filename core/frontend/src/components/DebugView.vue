@@ -40,6 +40,7 @@ import type { CapturedRequest } from '../types';
 import RequestList from './RequestList.vue';
 import RequestDetails from './RequestDetails.vue';
 import ContextMenu from './ContextMenu.vue';
+import { useToast } from 'vue-toastification';
 
 const props = defineProps<{
   isLive?: boolean;
@@ -60,6 +61,7 @@ const contextMenu = ref({
 const selectedRequestNote = ref('');
 const showMobileDetails = ref(false); // Mobile view state
 let noteUpdateTimeout: number | undefined;
+const toast = useToast();
 
 const activeSessionId = computed(() => props.isLive ? 'live_session' : props.sessionId);
 
@@ -104,7 +106,7 @@ const clearHistory = async () => {
       console.error('Error clearing history:', error);
     }
   } else {
-    alert('Cannot clear history for a saved session.');
+    toast.warning('Cannot clear history for a saved session.');
   }
 };
 
@@ -170,7 +172,7 @@ const deleteRequest = async () => {
       }
     } catch (error) {
       console.error('Error deleting request:', error);
-      alert('Failed to delete request.');
+      toast.error('Failed to delete request.');
     }
   }
   hideContextMenu();

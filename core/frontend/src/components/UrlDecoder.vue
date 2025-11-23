@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
 import { ref, computed, defineProps } from 'vue';
+import { useToast } from 'vue-toastification';
 
 const props = defineProps<{
   encodedData: string;
@@ -36,6 +37,7 @@ const props = defineProps<{
 
 const searchTerm = ref('');
 const showJson = ref(false);
+const toast = useToast();
 
 const decodedData = computed(() => {
   if (!props.encodedData) {
@@ -84,11 +86,11 @@ const jsonOutput = computed(() => {
 const copyJson = () => {
   navigator.clipboard.writeText(jsonOutput.value)
     .then(() => {
-      alert('JSON copied to clipboard!');
+      toast.success('JSON copied to clipboard!');
     })
     .catch(err => {
       console.error('Failed to copy JSON: ', err);
-      alert('Failed to copy JSON.');
+      toast.error('Failed to copy JSON.');
     });
 };
 </script>

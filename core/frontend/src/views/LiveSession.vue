@@ -14,19 +14,21 @@
 import { useRouter } from 'vue-router';
 import DebugView from '../components/DebugView.vue';
 import axios from 'axios';
+import { useToast } from 'vue-toastification';
 
 const router = useRouter();
+const toast = useToast();
 
 const saveSession = async () => {
   const name = prompt('Enter a name for this session:');
   if (name) {
     try {
       const response = await axios.post('/debug/sessions', { name });
-      alert(`Session saved as '${name}'.`);
+      toast.success(`Session saved as '${name}'.`);
       router.push(`/session/${response.data.id}`);
     } catch (error) {
       console.error('Error saving session:', error);
-      alert('Failed to save session.');
+      toast.error('Failed to save session.');
     }
   }
 };
