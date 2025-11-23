@@ -303,21 +303,18 @@ const filteredRequests = computed(() => {
   return props.requests.filter(req => {
     const searchMatch = req.url.toLowerCase().includes(props.searchQuery.toLowerCase());
 
-    // Resource Type Filter
-    if (resourceTypeFilter.value !== 'ALL') {
-      const type = getResourceType(req);
-      if (type === 'XHR' && (getResourceType(req) !== 'XHR' && getResourceType(req) !== 'OTHER')) return false; // Loose XHR? No, let's be strict.
-
-      if (resourceTypeFilter.value === 'XHR') {
-        // Special case: XHR often implies JSON/API calls not covered by others
-        const t = getResourceType(req);
-        if (t !== 'XHR') return false;
-      } else if (getResourceType(req) !== resourceTypeFilter.value) {
-        return false;
-      }
-    }
-
-    return searchMatch;
+        // Resource Type Filter
+        if (resourceTypeFilter.value !== 'ALL') {
+          const type = getResourceType(req);
+          
+          if (resourceTypeFilter.value === 'XHR') {
+             // Special case: XHR often implies JSON/API calls not covered by others
+             if (type !== 'XHR') return false;
+          } else if (type !== resourceTypeFilter.value) {
+            return false;
+          }
+        }
+        return searchMatch;
   });
 });
 
