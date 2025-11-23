@@ -45,6 +45,17 @@
   display: flex;
   flex-direction: column;
   background-color: #fff;
+  height: 100%; /* Ensure full height in flex container */
+}
+
+@media (max-width: 768px) {
+  .request-list-pane {
+    width: 100%;
+    height: 40%; /* Take up top part of screen */
+    min-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid #ddd;
+  }
 }
 
 .request-list-header {

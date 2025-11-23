@@ -80,9 +80,23 @@ const formattedResponseBody = computed(() => {
 
 <style scoped>
 .request-details-pane {
-  width: 65%;
+  flex-grow: 1; /* Take remaining space */
+  width: auto; /* Reset width */
   padding: 1.5rem;
   overflow-y: auto;
+  background-color: #f5f5f5;
+}
+
+@media (max-width: 768px) {
+  .request-details-pane {
+    width: 100%;
+    padding: 1rem;
+  }
+  
+  .details-grid {
+    grid-template-columns: 100px 1fr; /* Slightly smaller label col */
+    gap: 0.5rem;
+  }
 }
 
 .details-grid {

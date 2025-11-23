@@ -207,6 +207,13 @@ onMounted(() => {
 .main-layout {
   display: flex;
   height: 100%;
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .main-layout {
+    flex-direction: column;
+  }
 }
 
 button {
