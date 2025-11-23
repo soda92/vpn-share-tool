@@ -23,7 +23,7 @@ body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background-color: #f4f7f6;
   height: 100vh;
-  width: 100vw; /* Explicit width */
+  width: 100%; /* Safer than 100vw */
   overflow: hidden; /* Default desktop */
   overflow-x: hidden; /* Never horizontal scroll body */
 }
@@ -33,7 +33,7 @@ body {
   flex-direction: column;
   height: 100vh;
   width: 100%;
-  max-width: 100vw; /* Prevent growth */
+  max-width: 100%; /* Prevent growth beyond parent */
   overflow-x: hidden;
 }
 

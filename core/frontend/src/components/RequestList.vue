@@ -132,7 +132,7 @@
 }
 
 .request-list li {
-  padding: 0.5rem;
+  padding: 0.5rem 0.8rem 0.5rem 0.5rem; /* More right padding */
   cursor: pointer;
   border-bottom: 1px solid #eee;
   display: flex;
