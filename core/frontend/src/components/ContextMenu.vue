@@ -41,7 +41,7 @@ defineEmits<{
 
 <style scoped>
 .context-menu {
-  position: absolute;
+  position: fixed; /* Changed from absolute to fixed */
   background-color: white;
   border: 1px solid #ccc;
   box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.15);
