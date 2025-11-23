@@ -33,7 +33,10 @@
       <pre>{{ request.response_headers }}</pre>
 
       <h3>Response Body</h3>
-      <pre v-if="isJsonResponse">{{ formattedResponseBody }}</pre>
+      <div v-if="isImage && request.is_base64" class="image-preview">
+        <img :src="imageSrc" alt="Response Image" style="max-width: 100%; border: 1px solid #ddd; border-radius: 4px;">
+      </div>
+      <pre v-else-if="isJsonResponse">{{ formattedResponseBody }}</pre>
       <pre v-else>{{ request.response_body }}</pre>
     </div>
     <div v-else class="no-selection">
@@ -67,6 +70,18 @@ const isJsonResponse = computed(() => {
   if (!props.request) return false;
   const contentType = props.request.response_headers['Content-Type']?.[0] || '';
   return contentType.includes('application/json');
+});
+
+const isImage = computed(() => {
+  if (!props.request) return false;
+  const contentType = props.request.response_headers['Content-Type']?.[0] || '';
+  return contentType.startsWith('image/');
+});
+
+const imageSrc = computed(() => {
+  if (!props.request || !isImage.value) return '';
+  const contentType = props.request.response_headers['Content-Type']?.[0] || 'image/png';
+  return `data:${contentType};base64,${props.request.response_body}`;
 });
 
 const formattedResponseBody = computed(() => {

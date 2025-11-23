@@ -2,6 +2,7 @@ package core
 
 import (
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"io/fs"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"go.etcd.io/bbolt"
 )
@@ -38,6 +40,7 @@ type CapturedRequest struct {
 	ResponseStatus   int         `json:"response_status"`
 	ResponseHeaders  http.Header `json:"response_headers"`
 	ResponseBody     string      `json:"response_body"`
+	IsBase64         bool        `json:"is_base64"`
 	Bookmarked       bool        `json:"bookmarked"`
 	Note             string      `json:"note"`
 	VpnShareToolMeta string      `json:"_vpnShareToolMetadata,omitempty"` // Field for HAR metadata
@@ -114,6 +117,18 @@ func handleSessionOrHar(w http.ResponseWriter, r *http.Request) {
 func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []byte) {
 	requestIDLock.Lock()
 	nextRequestID++
+
+	isBase64 := false
+	var responseBody string
+
+	contentType := resp.Header.Get("Content-Type")
+	if strings.HasPrefix(contentType, "image/") || !utf8.Valid(respBody) {
+		responseBody = base64.StdEncoding.EncodeToString(respBody)
+		isBase64 = true
+	} else {
+		responseBody = string(respBody)
+	}
+
 	cr := &CapturedRequest{
 		ID:              nextRequestID,
 		Timestamp:       time.Now(),
@@ -123,7 +138,8 @@ func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []
 		RequestBody:     string(reqBody),
 		ResponseStatus:  resp.StatusCode,
 		ResponseHeaders: resp.Header,
-		ResponseBody:    string(respBody),
+		ResponseBody:    responseBody,
+		IsBase64:        isBase64,
 	}
 	requestIDLock.Unlock()
 
