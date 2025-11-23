@@ -1,5 +1,5 @@
 <template>
-  <div id="app" @click="hideContextMenu">
+  <div class="debug-view" @click="hideContextMenu">
     <div class="main-layout">
       <div class="pane-container list-pane" :class="{ 'hidden-on-mobile': showMobileDetails }">
         <RequestList
@@ -208,12 +208,20 @@ onMounted(() => {
 </script>
 
 <style scoped>
-#app {
+.debug-view {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   height: 100vh;
   margin: 0;
   background-color: #f5f5f5;
   color: #333;
+  overflow: hidden; /* Default desktop */
+}
+
+@media (max-width: 768px) {
+  .debug-view {
+    height: auto;
+    overflow: visible;
+  }
 }
 
 .main-layout {
@@ -256,6 +264,17 @@ button:hover {
 }
 
 @media (max-width: 768px) {
+  .main-layout {
+    flex-direction: column;
+    height: auto; /* Allow growth */
+    overflow: visible; /* Allow spillover to body scroll */
+  }
+
+  .pane-container {
+    height: auto; /* Allow growth */
+    overflow: visible;
+  }
+
   .list-pane {
     width: 100%; /* Full width on mobile */
     border-right: none;

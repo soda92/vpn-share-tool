@@ -84,13 +84,12 @@ const formattedResponseBody = computed(() => {
 
 <style scoped>
 .request-details-pane {
-  flex-grow: 1; /* Take remaining space */
-  width: auto; /* Reset width */
+  width: 100%; /* Fill parent width */
+  height: 100%; /* Fill parent height (desktop) */
   padding: 1.5rem;
   overflow-y: auto;
   background-color: #f5f5f5;
-  display: flex;
-  flex-direction: column;
+  display: block; /* Use block layout for simple scrolling */
 }
 
 .mobile-header {
