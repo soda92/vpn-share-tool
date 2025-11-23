@@ -1,9 +1,10 @@
 <template>
   <div class="container">
     <!-- Header removed, title handled by toolbar/view context -->
-    <DebugView :sessionId="'live_session'" :isLive="true" @save-session="saveSession" />
-
+    <DebugView :sessionId="'live_session'" :isLive="true" />
+    
     <!-- Floating Action Button for Saving -->
+
     <button class="fab" @click="saveSession" title="Save Session">
       💾
     </button>
