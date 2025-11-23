@@ -6,6 +6,7 @@
     @click.stop
   >
     <ul>
+      <li @click="$emit('toggle-bookmark')">{{ menuData.request?.bookmarked ? 'Remove Bookmark' : 'Bookmark' }}</li>
       <li @click="$emit('select-for-compare')">Select for Compare</li>
       <li @click="$emit('compare-with-selected')" :class="{ disabled: !isCompareEnabled }">Compare with Selected</li>
       <li @click="$emit('share-request')">Open in New Tab</li>
@@ -36,12 +37,13 @@ defineEmits<{
   (e: 'compare-with-selected'): void;
   (e: 'share-request'): void;
   (e: 'delete-request'): void;
+  (e: 'toggle-bookmark'): void;
 }>();
 </script>
 
 <style scoped>
 .context-menu {
-  position: absolute;
+  position: fixed; /* Changed from absolute to fixed */
   background-color: white;
   border: 1px solid #ccc;
   box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.15);

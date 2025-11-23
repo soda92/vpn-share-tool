@@ -1,5 +1,8 @@
 <template>
   <div class="request-details-pane">
+    <div class="mobile-header">
+      <button class="back-btn" @click="$emit('close')">← Back</button>
+    </div>
     <div v-if="request">
       <h2>Request Details</h2>
       <div class="details-grid">
@@ -30,7 +33,10 @@
       <pre>{{ request.response_headers }}</pre>
 
       <h3>Response Body</h3>
-      <pre v-if="isJsonResponse">{{ formattedResponseBody }}</pre>
+      <div v-if="isImage && request.is_base64" class="image-preview">
+        <img :src="imageSrc" alt="Response Image" style="max-width: 100%; border: 1px solid #ddd; border-radius: 4px;">
+      </div>
+      <pre v-else-if="isJsonResponse">{{ formattedResponseBody }}</pre>
       <pre v-else>{{ request.response_body }}</pre>
     </div>
     <div v-else class="no-selection">
@@ -51,6 +57,7 @@ const props = defineProps<{
 
 defineEmits<{
   (e: 'update:note', value: string): void;
+  (e: 'close'): void;
 }>();
 
 const isWwwFormUrlEncoded = computed(() => {
@@ -63,6 +70,18 @@ const isJsonResponse = computed(() => {
   if (!props.request) return false;
   const contentType = props.request.response_headers['Content-Type']?.[0] || '';
   return contentType.includes('application/json');
+});
+
+const isImage = computed(() => {
+  if (!props.request) return false;
+  const contentType = props.request.response_headers['Content-Type']?.[0] || '';
+  return contentType.startsWith('image/');
+});
+
+const imageSrc = computed(() => {
+  if (!props.request || !isImage.value) return '';
+  const contentType = props.request.response_headers['Content-Type']?.[0] || 'image/png';
+  return `data:${contentType};base64,${props.request.response_body}`;
 });
 
 const formattedResponseBody = computed(() => {
@@ -80,9 +99,50 @@ const formattedResponseBody = computed(() => {
 
 <style scoped>
 .request-details-pane {
-  width: 65%;
+  width: 100%; /* Fill parent width */
+  height: 100%; /* Fill parent height (desktop) */
   padding: 1.5rem;
   overflow-y: auto;
+  background-color: #f5f5f5;
+  display: block; /* Use block layout for simple scrolling */
+}
+
+.mobile-header {
+  display: none;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: #007bff;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0;
+  font-weight: bold;
+}
+
+@media (max-width: 768px) {
+  .request-details-pane {
+    width: 100%;
+    padding: 0.5rem;
+    overflow: visible; /* Let window scroll */
+    height: auto;
+  }
+  
+  .mobile-header {
+    display: block;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+  
+  .details-grid {
+    grid-template-columns: 80px 1fr; /* Even smaller label col */
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
 }
 
 .details-grid {

@@ -27,10 +27,12 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useToast } from 'vue-toastification';
 
 const encodedData = ref('');
 const searchTerm = ref('');
 const showJson = ref(false);
+const toast = useToast();
 
 const decodedData = computed(() => {
   if (!encodedData.value) {
@@ -68,11 +70,11 @@ const jsonOutput = computed(() => {
 const copyJson = () => {
   navigator.clipboard.writeText(jsonOutput.value)
     .then(() => {
-      alert('JSON copied to clipboard!');
+      toast.success('JSON copied to clipboard!');
     })
     .catch(err => {
       console.error('Failed to copy JSON: ', err);
-      alert('Failed to copy JSON. See console for details.');
+      toast.error('Failed to copy JSON. See console for details.');
     });
 };
 
@@ -87,6 +89,54 @@ const filteredDecodedData = computed(() => {
 </script>
 
 <style scoped>
+.container {
+  padding: 1.5rem;
+  max-width: 800px;
+  margin: 0 auto;
+  height: 100%;
+  overflow-y: auto;
+}
+
+h1 {
+  color: #0056b3;
+  margin-bottom: 1.5rem;
+}
+
+textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 0.75rem;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ced4da;
+  border-radius: 5px;
+  font-family: inherit;
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ced4da;
+  border-radius: 5px;
+}
+
+button {
+  background-color: #007bff;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 5px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
 .button-container {
   margin-bottom: 1rem;
   display: flex;
@@ -94,11 +144,31 @@ const filteredDecodedData = computed(() => {
 }
 
 pre {
-  background-color: #f2f2f2;
+  background-color: #f8f9fa;
   padding: 1rem;
-  border: 1px solid #ddd;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
   white-space: pre-wrap;
   word-wrap: break-word;
   margin-bottom: 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+  background-color: #fff;
+  border: 1px solid #dee2e6;
+}
+
+th, td {
+  border: 1px solid #dee2e6;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+th {
+  background-color: #e9ecef;
+  font-weight: 600;
 }
 </style>

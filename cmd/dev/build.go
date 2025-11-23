@@ -49,9 +49,9 @@ var buildWindowsCmd = &cobra.Command{
 }
 
 var buildTestCmd = &cobra.Command{
-	Use:   "test",
+	Use:     "test",
 	Aliases: []string{"test-project"},
-	Short: "Build test project",
+	Short:   "Build test project",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runBuildTestProject()
 	},
@@ -112,6 +112,10 @@ func runBuildAAR() error {
 	rootDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get cwd: %w", err)
+	}
+	// Build frontend
+	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
+		return fmt.Errorf("failed to build frontend for AAR: %w", err)
 	}
 
 	env := append(os.Environ(),

@@ -189,26 +189,35 @@ onMounted(() => {
 </script>
 
 <style>
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: #f4f7f6;
-  margin: 0;
-  padding: 0.5rem;
-  height: 100vh;
-  box-sizing: border-box;
-  overflow: hidden;
+
+html, body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; height: 100%; box-sizing: border-box; }
+
+body { padding: 0.5rem; overflow: hidden; } /* Desktop default */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+
+
+@media (max-width: 768px) {
+
+  html, body {
+
+    height: auto !important;
+
+    overflow: visible !important; /* Ensure document scroll */
+
+    padding: 0; /* Reset padding on body, handle in container */
+
+  }
+
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
 </style>
+
+
 
 <style scoped>
 .container {
-
   max-width: 1400px;
   /* Increased max-width */
   width: 100%;
@@ -235,7 +244,6 @@ body {
 }
 
 .main-grid {
-
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
@@ -249,7 +257,6 @@ body {
 }
 
 .section {
-
   display: flex;
   flex-direction: column;
   border: 1px solid #ebeef5;
@@ -310,7 +317,6 @@ h2 {
 }
 
 .dense-list {
-
   list-style: none;
   padding: 0;
   margin: 0;
@@ -478,4 +484,97 @@ h2 {
 .server-item {
   font-family: monospace;
 }
+
+@media (max-width: 768px) {
+
+  .container {
+
+    height: auto; /* Grow with content */
+
+    min-height: 100vh;
+
+    padding: 1rem; /* Move padding here */
+
+    overflow: visible;
+
+    border-radius: 0; /* Full width look */
+
+    box-shadow: none;
+
+  }
+
+  
+
+  .main-grid {
+
+    grid-template-columns: 1fr; /* Single column */
+
+    overflow: visible; /* Allow page scroll */
+
+    display: flex;
+
+    flex-direction: column;
+
+  }
+
+
+
+  .section {
+
+    height: auto; /* Auto height for sections */
+
+    max-height: none; /* Remove max-height to allow full content display */
+
+    overflow: visible;
+
+    margin-bottom: 1rem;
+
+  }
+
+
+
+  .dense-list {
+
+    max-height: 400px; /* Keep internal scroll for very long lists to save vertical space */
+
+    overflow-y: auto; 
+
+  }
+
+  
+
+  .url-row {
+
+    flex-direction: column;
+
+    align-items: stretch;
+
+  }
+
+  
+
+  .url-actions {
+
+    margin-top: 0.5rem;
+
+    justify-content: flex-end;
+
+    align-self: flex-end;
+
+  }
+
+
+
+  .server-info-bar {
+
+    white-space: normal; /* Allow wrapping */
+
+    overflow: visible;
+
+    text-align: left;
+
+  }
+
+}
+
 </style>

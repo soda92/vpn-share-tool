@@ -1,20 +1,25 @@
 <template>
-  <div id="app" @click="hideContextMenu">
+  <div class="debug-view" @click="hideContextMenu">
     <div class="main-layout">
-      <RequestList
-        :requests="requests"
-        :selectedRequest="selectedRequest"
-        v-model:searchQuery="searchQuery"
-        v-model:methodFilter="methodFilter"
-        @select-request="selectRequest"
-        @show-context-menu="showContextMenu"
-        @toggle-bookmark="toggleBookmark"
-        @clear="clearHistory"
-      />
-      <RequestDetails
-        :request="selectedRequest"
-        v-model:note="selectedRequestNote"
-      />
+      <div class="pane-container list-pane" :class="{ 'hidden-on-mobile': showMobileDetails }">
+        <RequestList
+          :requests="requests"
+          :selectedRequest="selectedRequest"
+          v-model:searchQuery="searchQuery"
+          v-model:methodFilter="methodFilter"
+          @select-request="selectRequest"
+          @show-context-menu="showContextMenu"
+          @toggle-bookmark="toggleBookmark"
+          @clear="clearHistory"
+        />
+      </div>
+      <div class="pane-container details-pane" :class="{ 'active-on-mobile': showMobileDetails }">
+        <RequestDetails
+          :request="selectedRequest"
+          v-model:note="selectedRequestNote"
+          @close="closeMobileDetails"
+        />
+      </div>
       <ContextMenu
         :menuData="contextMenu"
         :isCompareEnabled="!!selectedForCompare"
@@ -23,6 +28,7 @@
         @compare-with-selected="compareWithSelected"
         @share-request="shareRequest"
         @delete-request="deleteRequest"
+        @toggle-bookmark="toggleBookmarkFromContext"
       />
     </div>
   </div>
@@ -35,6 +41,7 @@ import type { CapturedRequest } from '../types';
 import RequestList from './RequestList.vue';
 import RequestDetails from './RequestDetails.vue';
 import ContextMenu from './ContextMenu.vue';
+import { useToast } from 'vue-toastification';
 
 const props = defineProps<{
   isLive?: boolean;
@@ -53,7 +60,9 @@ const contextMenu = ref({
   request: null as CapturedRequest | null,
 });
 const selectedRequestNote = ref('');
+const showMobileDetails = ref(false); // Mobile view state
 let noteUpdateTimeout: number | undefined;
+const toast = useToast();
 
 const activeSessionId = computed(() => props.isLive ? 'live_session' : props.sessionId);
 
@@ -98,12 +107,18 @@ const clearHistory = async () => {
       console.error('Error clearing history:', error);
     }
   } else {
-    alert('Cannot clear history for a saved session.');
+    toast.warning('Cannot clear history for a saved session.');
   }
 };
 
 const selectRequest = (request: CapturedRequest) => {
   selectedRequest.value = request;
+  showMobileDetails.value = true; // Show details on mobile
+};
+
+const closeMobileDetails = () => {
+  showMobileDetails.value = false;
+  // Optional: deselect request? maybe not, keeping state is fine.
 };
 
 const showContextMenu = (event: MouseEvent, request: CapturedRequest) => {
@@ -144,6 +159,13 @@ const toggleBookmark = async (request: CapturedRequest) => {
   }
 };
 
+const toggleBookmarkFromContext = () => {
+  if (contextMenu.value.request) {
+    toggleBookmark(contextMenu.value.request);
+  }
+  hideContextMenu();
+};
+
 const deleteRequest = async () => {
   if (!contextMenu.value.request) return;
   if (confirm('Are you sure you want to permanently delete this request?')) {
@@ -158,7 +180,7 @@ const deleteRequest = async () => {
       }
     } catch (error) {
       console.error('Error deleting request:', error);
-      alert('Failed to delete request.');
+      toast.error('Failed to delete request.');
     }
   }
   hideContextMenu();
@@ -196,17 +218,45 @@ onMounted(() => {
 </script>
 
 <style scoped>
-#app {
+.debug-view {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   height: 100vh;
   margin: 0;
   background-color: #f5f5f5;
   color: #333;
+  overflow: hidden; /* Default desktop */
+}
+
+@media (max-width: 768px) {
+  .debug-view {
+    height: auto;
+    overflow: visible;
+  }
 }
 
 .main-layout {
   display: flex;
   height: 100%;
+  overflow: hidden;
+  position: relative; /* Context for absolute positioning if needed */
+}
+
+.pane-container {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.list-pane {
+  width: 35%;
+  min-width: 300px;
+  /* border-right: 1px solid #ddd; Removed per user request */
+}
+
+.details-pane {
+  flex-grow: 1;
+  width: 65%; /* Default desktop width */
 }
 
 button {
@@ -221,6 +271,37 @@ button {
 
 button:hover {
   background-color: #0056b3;
+}
+
+@media (max-width: 768px) {
+  .main-layout {
+    flex-direction: column;
+    height: auto; /* Allow growth */
+    overflow: visible; /* Allow spillover to body scroll */
+  }
+
+  .pane-container {
+    height: auto; /* Allow growth */
+    overflow: visible;
+  }
+
+  .list-pane {
+    width: 100%; /* Full width on mobile */
+    border-right: none;
+  }
+
+  .details-pane {
+    width: 100%;
+    display: none; /* Hidden by default on mobile */
+  }
+
+  .list-pane.hidden-on-mobile {
+    display: none;
+  }
+
+  .details-pane.active-on-mobile {
+    display: flex; /* Show when active */
+  }
 }
 </style>
 

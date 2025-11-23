@@ -8,6 +8,7 @@ export interface CapturedRequest {
   response_status: number;
   response_headers: Record<string, string[]>;
   response_body: string;
-  bookmarked?: boolean;
-  note?: string;
+  is_base64?: boolean;
+  bookmarked: boolean;
+  note: string;
 }
