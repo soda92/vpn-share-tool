@@ -62,7 +62,7 @@
     border-bottom: none;
     overflow: visible; /* Let window scroll */
   }
-  
+
   .request-list {
     overflow-y: visible; /* Let window scroll */
     height: auto;
@@ -102,12 +102,16 @@
   display: flex;
   gap: 0.2rem;
   overflow-x: auto;
-  /* Scrollable filters on mobile */
   padding-bottom: 2px;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;  /* IE 10+ */
+}
+.type-filters::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
 }
 
 .type-filters button {
-  padding: 0.2rem 0.5rem;
+  padding: 0.2rem 0.4rem; /* Slightly reduced horizontal padding */
   font-size: 0.75rem;
   border: 1px solid #ccc;
   background-color: #fff;

@@ -14,7 +14,7 @@ const routes = [
     component: Main,
     beforeEnter: async (to, from, next) => {
       try {
-        const response = await fetch('/check-auth');
+        const response = await fetch('/api/check-auth');
         if (response.ok) {
           next();
         } else {

@@ -33,7 +33,7 @@ func main() {
 		http.FileServer(http.FS(fs)).ServeHTTP(w, r)
 	}))
 
-	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 			return
@@ -44,12 +44,13 @@ func main() {
 			Value:    "loggedin",
 			Expires:  time.Now().Add(24 * time.Hour),
 			HttpOnly: true,
+			Path:     "/",
 		}
 		http.SetCookie(w, &cookie)
 		w.WriteHeader(http.StatusOK)
 	})
 
-	http.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/logout", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 			return
@@ -60,18 +61,35 @@ func main() {
 			Value:    "",
 			Expires:  time.Now().Add(-1 * time.Hour),
 			HttpOnly: true,
+			Path:     "/",
 		}
 		http.SetCookie(w, &cookie)
 		w.WriteHeader(http.StatusOK)
 	})
 
-	http.HandleFunc("/check-auth", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/check-auth", func(w http.ResponseWriter, r *http.Request) {
 		_, err := r.Cookie("session")
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
+	})
+
+	http.HandleFunc("/api/submit", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+			return
+		}
+		
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Failed to parse form", http.StatusBadRequest)
+			return
+		}
+		
+		log.Printf("Received form submission: %v", r.PostForm)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Form received"))
 	})
 
 	log.Println("Starting server on :8888")

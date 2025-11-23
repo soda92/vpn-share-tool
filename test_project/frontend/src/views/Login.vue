@@ -20,7 +20,7 @@ export default {
   methods: {
     async login() {
       try {
-        const response = await fetch('/login', { method: 'POST' });
+        const response = await fetch('/api/login', { method: 'POST' });
         if (response.ok) {
           this.$router.push('/');
         } else {
