@@ -1,5 +1,8 @@
 <template>
   <div class="request-details-pane">
+    <div class="mobile-header">
+      <button class="back-btn" @click="$emit('close')">← Back</button>
+    </div>
     <div v-if="request">
       <h2>Request Details</h2>
       <div class="details-grid">
@@ -51,6 +54,7 @@ const props = defineProps<{
 
 defineEmits<{
   (e: 'update:note', value: string): void;
+  (e: 'close'): void;
 }>();
 
 const isWwwFormUrlEncoded = computed(() => {
@@ -85,17 +89,43 @@ const formattedResponseBody = computed(() => {
   padding: 1.5rem;
   overflow-y: auto;
   background-color: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-header {
+  display: none;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: #007bff;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0;
+  font-weight: bold;
 }
 
 @media (max-width: 768px) {
   .request-details-pane {
     width: 100%;
-    padding: 1rem;
+    padding: 0.5rem;
+  }
+  
+  .mobile-header {
+    display: block;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
   }
   
   .details-grid {
-    grid-template-columns: 100px 1fr; /* Slightly smaller label col */
+    grid-template-columns: 80px 1fr; /* Even smaller label col */
     gap: 0.5rem;
+    padding: 0.5rem;
   }
 }
 

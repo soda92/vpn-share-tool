@@ -1,20 +1,25 @@
 <template>
   <div id="app" @click="hideContextMenu">
     <div class="main-layout">
-      <RequestList
-        :requests="requests"
-        :selectedRequest="selectedRequest"
-        v-model:searchQuery="searchQuery"
-        v-model:methodFilter="methodFilter"
-        @select-request="selectRequest"
-        @show-context-menu="showContextMenu"
-        @toggle-bookmark="toggleBookmark"
-        @clear="clearHistory"
-      />
-      <RequestDetails
-        :request="selectedRequest"
-        v-model:note="selectedRequestNote"
-      />
+      <div class="pane-container list-pane" :class="{ 'hidden-on-mobile': showMobileDetails }">
+        <RequestList
+          :requests="requests"
+          :selectedRequest="selectedRequest"
+          v-model:searchQuery="searchQuery"
+          v-model:methodFilter="methodFilter"
+          @select-request="selectRequest"
+          @show-context-menu="showContextMenu"
+          @toggle-bookmark="toggleBookmark"
+          @clear="clearHistory"
+        />
+      </div>
+      <div class="pane-container details-pane" :class="{ 'active-on-mobile': showMobileDetails }">
+        <RequestDetails
+          :request="selectedRequest"
+          v-model:note="selectedRequestNote"
+          @close="closeMobileDetails"
+        />
+      </div>
       <ContextMenu
         :menuData="contextMenu"
         :isCompareEnabled="!!selectedForCompare"
@@ -53,6 +58,7 @@ const contextMenu = ref({
   request: null as CapturedRequest | null,
 });
 const selectedRequestNote = ref('');
+const showMobileDetails = ref(false); // Mobile view state
 let noteUpdateTimeout: number | undefined;
 
 const activeSessionId = computed(() => props.isLive ? 'live_session' : props.sessionId);
@@ -104,6 +110,12 @@ const clearHistory = async () => {
 
 const selectRequest = (request: CapturedRequest) => {
   selectedRequest.value = request;
+  showMobileDetails.value = true; // Show details on mobile
+};
+
+const closeMobileDetails = () => {
+  showMobileDetails.value = false;
+  // Optional: deselect request? maybe not, keeping state is fine.
 };
 
 const showContextMenu = (event: MouseEvent, request: CapturedRequest) => {
@@ -208,12 +220,25 @@ onMounted(() => {
   display: flex;
   height: 100%;
   overflow: hidden;
+  position: relative; /* Context for absolute positioning if needed */
 }
 
-@media (max-width: 768px) {
-  .main-layout {
-    flex-direction: column;
-  }
+.pane-container {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.list-pane {
+  width: 35%;
+  min-width: 300px;
+  /* border-right: 1px solid #ddd; Removed per user request */
+}
+
+.details-pane {
+  flex-grow: 1;
+  width: 65%; /* Default desktop width */
 }
 
 button {
@@ -228,6 +253,26 @@ button {
 
 button:hover {
   background-color: #0056b3;
+}
+
+@media (max-width: 768px) {
+  .list-pane {
+    width: 100%; /* Full width on mobile */
+    border-right: none;
+  }
+
+  .details-pane {
+    width: 100%;
+    display: none; /* Hidden by default on mobile */
+  }
+
+  .list-pane.hidden-on-mobile {
+    display: none;
+  }
+
+  .details-pane.active-on-mobile {
+    display: flex; /* Show when active */
+  }
 }
 </style>
 

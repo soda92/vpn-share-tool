@@ -41,7 +41,7 @@
 .request-list-pane {
   width: 35%;
   min-width: 300px;
-  border-right: 1px solid #ddd;
+  /* border-right: 1px solid #ddd; Removed */
   display: flex;
   flex-direction: column;
   background-color: #fff;
@@ -51,10 +51,10 @@
 @media (max-width: 768px) {
   .request-list-pane {
     width: 100%;
-    height: 40%; /* Take up top part of screen */
-    min-height: 200px;
+    height: 100%; /* Take full height in toggle mode */
+    min-height: 0;
     border-right: none;
-    border-bottom: 1px solid #ddd;
+    border-bottom: none;
   }
 }
 

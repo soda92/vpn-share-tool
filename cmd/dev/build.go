@@ -113,6 +113,10 @@ func runBuildAAR() error {
 	if err != nil {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
+	// Build frontend
+	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
+		return err
+	}
 
 	env := append(os.Environ(),
 		"ANDROID_NDK_HOME="+androidNdkHome,
