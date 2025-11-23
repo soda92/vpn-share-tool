@@ -28,6 +28,7 @@
         @compare-with-selected="compareWithSelected"
         @share-request="shareRequest"
         @delete-request="deleteRequest"
+        @toggle-bookmark="toggleBookmarkFromContext"
       />
     </div>
   </div>
@@ -156,6 +157,13 @@ const toggleBookmark = async (request: CapturedRequest) => {
   } catch (error) {
     console.error('Error updating bookmark:', error);
   }
+};
+
+const toggleBookmarkFromContext = () => {
+  if (contextMenu.value.request) {
+    toggleBookmark(contextMenu.value.request);
+  }
+  hideContextMenu();
 };
 
 const deleteRequest = async () => {
