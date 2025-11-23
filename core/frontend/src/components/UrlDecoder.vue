@@ -1,6 +1,15 @@
 <template>
   <div class="url-decoder">
-    <input type="text" v-model="searchTerm" placeholder="Search by field name" />
+    <div class="decoder-controls">
+      <input type="text" v-model="searchTerm" placeholder="Search field..." class="search-input" />
+      <div class="action-buttons">
+        <button @click="showJson = !showJson" class="secondary-btn">{{ showJson ? 'Hide JSON' : 'View JSON' }}</button>
+        <button v-if="showJson" @click="copyJson" class="secondary-btn">Copy</button>
+      </div>
+    </div>
+    
+    <pre v-if="showJson" class="json-output">{{ jsonOutput }}</pre>
+    
     <table>
       <thead>
         <tr>
@@ -26,6 +35,7 @@ const props = defineProps<{
 }>();
 
 const searchTerm = ref('');
+const showJson = ref(false);
 
 const decodedData = computed(() => {
   if (!props.encodedData) {
@@ -54,6 +64,33 @@ const filteredDecodedData = computed(() => {
     item.key.toLowerCase().includes(searchTerm.value.toLowerCase())
   );
 });
+
+const jsonOutput = computed(() => {
+  const obj: { [key: string]: string | string[] } = {};
+  for (const { key, value } of decodedData.value) {
+    if (obj.hasOwnProperty(key)) {
+      if (Array.isArray(obj[key])) {
+        (obj[key] as string[]).push(value);
+      } else {
+        obj[key] = [obj[key] as string, value];
+      }
+    } else {
+      obj[key] = value;
+    }
+  }
+  return JSON.stringify(obj, null, 2);
+});
+
+const copyJson = () => {
+  navigator.clipboard.writeText(jsonOutput.value)
+    .then(() => {
+      alert('JSON copied to clipboard!');
+    })
+    .catch(err => {
+      console.error('Failed to copy JSON: ', err);
+      alert('Failed to copy JSON.');
+    });
+};
 </script>
 
 <style scoped>
@@ -65,13 +102,51 @@ const filteredDecodedData = computed(() => {
   padding: 1rem;
 }
 
-input {
-  width: 100%;
-  padding: 0.5rem;
-  font-size: 0.9rem;
+.decoder-controls {
+  display: flex;
+  gap: 0.5rem;
   margin-bottom: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  flex-grow: 1;
+  padding: 0.4rem;
+  font-size: 0.9rem;
   border: 1px solid #ccc;
   border-radius: 4px;
+  min-width: 150px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.secondary-btn {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.secondary-btn:hover {
+  background-color: #5a6268;
+}
+
+.json-output {
+  background-color: #f8f9fa;
+  padding: 0.8rem;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
 }
 
 table {
