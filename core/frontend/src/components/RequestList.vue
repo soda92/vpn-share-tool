@@ -3,13 +3,19 @@
     <div class="request-list-header">
       <h2>Requests</h2>
       <div class="filter-controls">
-        <input type="text" :value="searchQuery" @input="$emit('update:searchQuery', ($event.target as HTMLInputElement).value)" placeholder="Search URL..." />
-        <select :value="methodFilter" @change="$emit('update:methodFilter', ($event.target as HTMLSelectElement).value)">
-          <option value="ALL">All</option>
-          <option value="GET">GET</option>
-          <option value="POST">POST</option>
-        </select>
-        <button @click="$emit('clear')">Clear</button>
+        <input type="text" :value="searchQuery"
+          @input="$emit('update:searchQuery', ($event.target as HTMLInputElement).value)" placeholder="Filter..."
+          class="search-input" />
+        <button @click="$emit('clear')" title="Clear">🚫</button>
+      </div>
+      <div class="type-filters">
+        <button :class="{ active: resourceTypeFilter === 'ALL' }" @click="resourceTypeFilter = 'ALL'">All</button>
+        <button :class="{ active: resourceTypeFilter === 'XHR' }" @click="resourceTypeFilter = 'XHR'">XHR</button>
+        <button :class="{ active: resourceTypeFilter === 'JS' }" @click="resourceTypeFilter = 'JS'">JS</button>
+        <button :class="{ active: resourceTypeFilter === 'CSS' }" @click="resourceTypeFilter = 'CSS'">CSS</button>
+        <button :class="{ active: resourceTypeFilter === 'IMG' }" @click="resourceTypeFilter = 'IMG'">Img</button>
+        <button :class="{ active: resourceTypeFilter === 'DOC' }" @click="resourceTypeFilter = 'DOC'">Doc</button>
+        <button :class="{ active: resourceTypeFilter === 'OTHER' }" @click="resourceTypeFilter = 'OTHER'">Other</button>
       </div>
     </div>
     <div v-if="filteredRequests.length === 0" class="no-requests">
@@ -18,19 +24,17 @@
     <ul v-else class="request-list">
       <template v-for="(group, groupName) in groupedRequests" :key="groupName">
         <li class="group-header">{{ groupName }}</li>
-        <li
-          v-for="request in group"
-          :key="request.id"
-          :class="{ selected: selectedRequest?.id === request.id }"
-          @click="$emit('select-request', request)"
-          @contextmenu.prevent="$emit('show-context-menu', $event, request)"
-        >
-          <span class="bookmark-star" @click.stop="$emit('toggle-bookmark', request)">
-            {{ request.bookmarked ? '★' : '☆' }}
-          </span>
-          <span class="timestamp">{{ new Date(request.timestamp).toLocaleTimeString() }}</span>
-          <span class="method">{{ request.method }}</span>
-          <span class="url">{{ getUrlPath(request.url) }}</span>
+        <li v-for="request in group" :key="request.id"
+          :class="{ selected: selectedRequest?.id === request.id, error: request.response_status >= 400 }"
+          @click="$emit('select-request', request)" @contextmenu.prevent="$emit('show-context-menu', $event, request)">
+          <div class="req-main">
+            <div class="req-name" :title="request.url">{{ getRequestName(request.url) }}</div>
+            <div class="req-path">{{ getUrlPath(request.url) }}</div>
+          </div>
+          <div class="req-meta">
+            <span class="method" :class="request.method">{{ request.method }}</span>
+            <span class="status" :class="getStatusClass(request.response_status)">{{ request.response_status }}</span>
+          </div>
         </li>
       </template>
     </ul>
@@ -45,55 +49,77 @@
   display: flex;
   flex-direction: column;
   background-color: #fff;
-  height: 100%; /* Ensure full height in flex container */
+  height: 100%;
+  /* Ensure full height in flex container */
 }
 
 @media (max-width: 768px) {
   .request-list-pane {
     width: 100%;
-    height: 100%; /* Take full height in toggle mode */
+    height: auto; /* Grow with content */
     min-height: 0;
     border-right: none;
     border-bottom: none;
+    overflow: visible; /* Let window scroll */
+  }
+  
+  .request-list {
+    overflow-y: visible; /* Let window scroll */
+    height: auto;
   }
 }
 
 .request-list-header {
-  padding: 1rem;
+  padding: 0.5rem;
   border-bottom: 1px solid #ddd;
+  background-color: #f8f9fa;
 }
 
 .request-list-header h2 {
-  margin: 0 0 1rem 0;
-  font-size: 1.25rem;
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  display: none;
+  /* Hide title to save space */
 }
 
 .filter-controls {
   display: flex;
   gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
-.filter-controls input,
-.filter-controls select,
-.filter-controls button {
-  padding: 0.5rem;
+.search-input {
+  flex-grow: 1;
+  padding: 0.4rem;
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 0.9rem;
+  min-width: 0;
+  /* Prevent overflow */
 }
 
-.filter-controls input {
-  flex-grow: 1;
+.type-filters {
+  display: flex;
+  gap: 0.2rem;
+  overflow-x: auto;
+  /* Scrollable filters on mobile */
+  padding-bottom: 2px;
 }
 
-.filter-controls button {
+.type-filters button {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  border-radius: 10px;
   cursor: pointer;
-  background-color: #e0e0e0;
-  transition: background-color 0.2s;
+  white-space: nowrap;
 }
 
-.filter-controls button:hover {
-  background-color: #d0d0d0;
+.type-filters button.active {
+  background-color: #007bff;
+  color: white;
+  border-color: #007bff;
 }
 
 .request-list {
@@ -105,12 +131,13 @@
 }
 
 .request-list li {
-  padding: 0.75rem 1rem;
+  padding: 0.5rem;
   cursor: pointer;
   border-bottom: 1px solid #eee;
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   transition: background-color 0.2s;
 }
 
@@ -120,24 +147,74 @@
 
 .request-list li.selected {
   background-color: #d5e5f5;
-  border-left: 4px solid #007bff;
-  padding-left: calc(1rem - 4px);
 }
 
-.method {
+.request-list li.error .req-name {
+  color: #d32f2f;
+}
+
+.req-main {
+  flex-grow: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.req-name {
   font-weight: 600;
-  padding: 0.2rem 0.4rem;
-  border-radius: 4px;
-  background-color: #e0e0e0;
-  font-size: 0.8rem;
-  min-width: 40px;
-  text-align: center;
-}
-
-.url {
+  font-size: 0.9rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: #333;
+}
+
+.req-path {
+  font-size: 0.75rem;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.req-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.status {
+  font-weight: bold;
+}
+
+.status.ok {
+  color: #28a745;
+}
+
+.status.error {
+  color: #dc3545;
+}
+
+.status.redirect {
+  color: #ffc107;
+}
+
+.method {
+  color: #555;
+  font-weight: bold;
+}
+
+.request-list li.group-header {
+  background-color: #e9ecef;
+  color: #495057;
+  font-weight: bold;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .no-requests {
@@ -145,35 +222,9 @@
   text-align: center;
   color: #777;
 }
-
-.request-list li.group-header {
-  background-color: #f8f9fa;
-  color: #6c757d;
-  font-weight: bold;
-  padding: 0.5rem 1rem;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  cursor: default;
-  white-space: normal; /* Allow multiline */
-  word-break: break-all; /* Break long words */
-}
-
-.timestamp {
-  font-family: monospace;
-  font-size: 0.8rem;
-  color: #6c757d;
-  min-width: 80px;
-}
-
-.bookmark-star {
-  color: #ffc107;
-  font-size: 1.2rem;
-  cursor: pointer;
-}
 </style>
 <script setup lang="ts">
-import { computed, defineProps, defineEmits } from 'vue';
+import { computed, defineProps, defineEmits, ref } from 'vue';
 import type { CapturedRequest } from '../types';
 
 const props = defineProps<{
@@ -192,32 +243,75 @@ defineEmits<{
   (e: 'clear'): void;
 }>();
 
+const resourceTypeFilter = ref('ALL');
+
 const getUrlOrigin = (url: string) => {
   try {
     return new URL(url).origin;
   } catch (e) {
-    const parts = url.split('/');
-    if (parts.length >= 3) {
-      return parts.slice(0, 3).join('/');
-    }
-    return 'Invalid URL';
+    return 'Unknown';
   }
 };
 
 const getUrlPath = (url: string) => {
   try {
-    return new URL(url).pathname;
-  } catch (e) {
-    const origin = getUrlOrigin(url);
-    return url.substring(origin.length);
+    return new URL(url).pathname + new URL(url).search;
   }
+  catch (e) {
+    return url;
+  }
+};
+
+const getRequestName = (url: string) => {
+  try {
+    const u = new URL(url);
+    const segments = u.pathname.split('/').filter(Boolean);
+    let name = segments.pop() || '/';
+    if (u.search) name += u.search;
+    return name;
+  } catch (e) {
+    return url;
+  }
+};
+
+const getStatusClass = (status: number) => {
+  if (status >= 200 && status < 300) return 'ok';
+  if (status >= 300 && status < 400) return 'redirect';
+  return 'error';
+};
+
+const getResourceType = (req: CapturedRequest): string => {
+  const contentType = (req.response_headers['Content-Type']?.[0] || '').toLowerCase();
+  const url = req.url.toLowerCase();
+
+  if (contentType.includes('text/html')) return 'DOC';
+  if (contentType.includes('javascript') || contentType.includes('application/x-javascript') || url.endsWith('.js')) return 'JS';
+  if (contentType.includes('css') || url.endsWith('.css')) return 'CSS';
+  if (contentType.includes('image') || url.match(/\.(png|jpg|jpeg|gif|ico|svg|webp)$/)) return 'IMG';
+  if (contentType.includes('json') || contentType.includes('xml') || req.request_headers['X-Requested-With']) return 'XHR';
+
+  return 'OTHER';
 };
 
 const filteredRequests = computed(() => {
   return props.requests.filter(req => {
-    const methodMatch = props.methodFilter === 'ALL' || req.method === props.methodFilter;
     const searchMatch = req.url.toLowerCase().includes(props.searchQuery.toLowerCase());
-    return methodMatch && searchMatch;
+
+    // Resource Type Filter
+    if (resourceTypeFilter.value !== 'ALL') {
+      const type = getResourceType(req);
+      if (type === 'XHR' && (getResourceType(req) !== 'XHR' && getResourceType(req) !== 'OTHER')) return false; // Loose XHR? No, let's be strict.
+
+      if (resourceTypeFilter.value === 'XHR') {
+        // Special case: XHR often implies JSON/API calls not covered by others
+        const t = getResourceType(req);
+        if (t !== 'XHR') return false;
+      } else if (getResourceType(req) !== resourceTypeFilter.value) {
+        return false;
+      }
+    }
+
+    return searchMatch;
   });
 });
 

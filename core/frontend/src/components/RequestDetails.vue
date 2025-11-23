@@ -114,6 +114,8 @@ const formattedResponseBody = computed(() => {
   .request-details-pane {
     width: 100%;
     padding: 0.5rem;
+    overflow: visible; /* Let window scroll */
+    height: auto;
   }
   
   .mobile-header {

@@ -30,10 +30,18 @@ const saveSession = async () => {
 </script>
 
 <style scoped>
+.container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 .session-header {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  padding: 1rem 0;
+  padding: 0.5rem 1rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #ddd;
 }
 </style>

@@ -26,6 +26,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  width: 100%;
 }
 
 .app-header {
@@ -40,10 +41,19 @@ body {
   flex-direction: column;
 }
 
-/* Responsive tweaks if needed globally */
+/* Responsive tweaks */
 @media (max-width: 768px) {
+  body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .app-container {
+    height: auto !important;
+    overflow: visible !important;
+  }
   .app-content {
-    overflow-y: auto; /* On mobile, maybe full scroll is better if views aren't complex flexboxes */
+    overflow: visible !important;
+    height: auto !important;
   }
 }
 </style>
