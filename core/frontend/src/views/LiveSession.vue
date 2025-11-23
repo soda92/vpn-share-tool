@@ -1,9 +1,12 @@
 <template>
   <div class="container">
-    <div class="session-header">
-      <button @click="saveSession">Save as New Session</button>
-    </div>
-    <DebugView :sessionId="'live_session'" :isLive="true" />
+    <!-- Header removed, title handled by toolbar/view context -->
+    <DebugView :sessionId="'live_session'" :isLive="true" @save-session="saveSession" />
+
+    <!-- Floating Action Button for Saving -->
+    <button class="fab" @click="saveSession" title="Save Session">
+      💾
+    </button>
   </div>
 </template>
 
@@ -34,14 +37,38 @@ const saveSession = async () => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
+  /* For FAB positioning */
 }
 
-.session-header {
+/* Removed session-header styles */
+
+.fab {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  font-size: 24px;
   display: flex;
-  justify-content: flex-end;
   align-items: center;
-  padding: 0.5rem 1rem;
-  background: #f8f9fa;
-  border-bottom: 1px solid #ddd;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  z-index: 1000;
+  transition: transform 0.2s, background-color 0.2s;
+}
+
+.fab:hover {
+  background-color: #218838;
+  transform: scale(1.05);
+}
+
+.fab:active {
+  transform: scale(0.95);
 }
 </style>

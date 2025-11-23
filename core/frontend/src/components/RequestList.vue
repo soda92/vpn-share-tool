@@ -111,6 +111,7 @@
   font-size: 0.75rem;
   border: 1px solid #ccc;
   background-color: #fff;
+  color: #333; /* Explicitly set text color */
   border-radius: 10px;
   cursor: pointer;
   white-space: nowrap;
@@ -139,6 +140,7 @@
   align-items: center;
   gap: 0.5rem;
   transition: background-color 0.2s;
+  min-width: 0; /* Allow flex children to shrink */
 }
 
 .request-list li:hover {
