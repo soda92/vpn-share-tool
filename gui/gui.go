@@ -30,6 +30,7 @@ func Run() {
 	flag.Parse()
 
 	initI18n()
+	SetAutostart(true)
 
 	myApp := app.New()
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
@@ -192,19 +193,10 @@ func Run() {
 
 	// Setup system tray
 	if desk, ok := myApp.(desktop.App); ok {
-		autostartMenuItem := fyne.NewMenuItem(l("setupAutostartMenuItem"), func() {
-			SetAutostart(true)
-			fyne.CurrentApp().SendNotification(&fyne.Notification{
-				Title:   l("autostartEnabledTitle"),
-				Content: l("autostartEnabledContent"),
-			})
-		})
-
 		menu := fyne.NewMenu("VPN Share Tool",
 			fyne.NewMenuItem(l("showMenuItem"), func() {
 				myWindow.Show()
 			}),
-			autostartMenuItem,
 			fyne.NewMenuItem(l("exitMenuItem"), func() {
 				myApp.Quit()
 			}),

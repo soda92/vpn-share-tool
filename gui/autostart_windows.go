@@ -5,6 +5,7 @@ package gui
 import (
 	"log"
 	"os"
+	"strings"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -22,11 +23,20 @@ func SetAutostart(enable bool) {
 	}
 	defer key.Close()
 
-	if !enable {
-		err = key.DeleteValue(appName)
-		if err != nil && err != registry.ErrNotExist {
-			log.Printf("Failed to delete autostart registry value: %v", err)
+	// Clear old or existing entries
+	names, err := key.ReadValueNames(0)
+	if err == nil {
+		for _, name := range names {
+			if strings.Contains(strings.ToLower(name), "vpn-share-tool") || name == appName {
+				err = key.DeleteValue(name)
+				if err != nil && err != registry.ErrNotExist {
+					log.Printf("Failed to delete autostart registry value %s: %v", name, err)
+				}
+			}
 		}
+	}
+
+	if !enable {
 		return
 	}
 
