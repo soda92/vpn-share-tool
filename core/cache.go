@@ -20,8 +20,15 @@ import (
 //go:embed injector.js
 var injectorScript []byte
 
+//go:embed calendar.unpacked.js
+var calendarScript []byte
+
 var rePhisUrl = regexp.MustCompile(`phisUrl\s*:\s*['"](.*?)['"]`)
 var reHttpPhis = regexp.MustCompile(`Http\.phis\s*=\s*['"](.*?)['"]`)
+var reStopItBlock = regexp.MustCompile(`function\s+_stopIt\(e\)\s*\{[\s\S]*?return\s+false;\s*\}`)
+var reShowModalCheck = regexp.MustCompile(`if\s*\(\s*window\.showModalDialog\s*==\s*undefined\s*\)`)
+var reWindowOpenFallback = regexp.MustCompile(`window\.open\(url,obj,"width="\+w\+",height="\+h\+",modal=yes,toolbar=no,menubar=no,scrollbars=yes,resizeable=no,location=no,status=no"\);`)
+var reEhrOpenChrome = regexp.MustCompile(`Ehr\.openChrome\s*=\s*function\s*\(url\)\s*\{`)
 
 // cacheEntry holds the cached response data and headers.
 type cacheEntry struct {
@@ -71,6 +78,22 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			return nil, err
 		}
 		req.Body = io.NopCloser(bytes.NewBuffer(reqBody)) // Restore body for the actual request
+	}
+
+	// Intercept calendar.js
+	if strings.HasSuffix(req.URL.Path, "/calendar.js") {
+		log.Printf("Intercepting calendar.js request: %s", req.URL.String())
+		resp := &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(calendarScript)),
+			Request:    req,
+		}
+		resp.Header.Set("Content-Type", "application/javascript")
+		resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(calendarScript)))
+
+		CaptureRequest(req, resp, reqBody, calendarScript)
+		return resp, nil
 	}
 
 	// We only cache GET requests for static assets.
@@ -167,6 +190,14 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 
 		// 1. Inject script (Only if enabled)
 		bodyStr = t.injectDebugScript(bodyStr, resp.Header)
+
+		// Remove disable_backspace script using regex
+		bodyStr = reStopItBlock.ReplaceAllString(bodyStr, "")
+
+		// Replace openModalDialog logic
+		bodyStr = reShowModalCheck.ReplaceAllString(bodyStr, "if(true)")
+		bodyStr = reWindowOpenFallback.ReplaceAllString(bodyStr, `window.open(url, "_blank");`)
+		bodyStr = reEhrOpenChrome.ReplaceAllString(bodyStr, `Ehr.openChrome = function(url){ window.open(url, "_blank"); return;`)
 
 		// 2. Handle Http.phis replacement
 		if strings.Contains(req.URL.Path, "showView.jsp") {
