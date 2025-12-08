@@ -81,7 +81,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 
 	// Intercept calendar.js
-	if strings.HasSuffix(req.URL.Path, "/calendar.js") {
+	if strings.Contains(req.URL.Path, "calendar.js") {
 		log.Printf("Intercepting calendar.js request: %s", req.URL.String())
 		resp := &http.Response{
 			StatusCode: http.StatusOK,
