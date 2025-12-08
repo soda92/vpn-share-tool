@@ -28,7 +28,8 @@ var reHttpPhis = regexp.MustCompile(`Http\.phis\s*=\s*['"](.*?)['"]`)
 var reStopItBlock = regexp.MustCompile(`function\s+_stopIt\(e\)\s*\{[\s\S]*?return\s+false;\s*\}`)
 var reShowModalCheck = regexp.MustCompile(`if\s*\(\s*window\.showModalDialog\s*==\s*undefined\s*\)`)
 var reWindowOpenFallback = regexp.MustCompile(`window\.open\(url,obj,"width="\+w\+",height="\+h\+",modal=yes,toolbar=no,menubar=no,scrollbars=yes,resizeable=no,location=no,status=no"\);`)
-var reEhrOpenChrome = regexp.MustCompile(`Ehr\.openChrome\s*=\s*function\s*\(url\)\s*\{`)
+var reEhrOpenChrome = regexp.MustCompile(`Ehr\.openChrome\s*=\s*function\s*\(\s*url\s*\)\s*\{`)
+var reEhrWindowOpen = regexp.MustCompile(`window\.open\(\s*url\s*,\s*""\s*,\s*"[^"]*"\s*\);`)
 
 // cacheEntry holds the cached response data and headers.
 type cacheEntry struct {
@@ -198,6 +199,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		bodyStr = reShowModalCheck.ReplaceAllString(bodyStr, "if(true)")
 		bodyStr = reWindowOpenFallback.ReplaceAllString(bodyStr, `window.open(url, "_blank");`)
 		bodyStr = reEhrOpenChrome.ReplaceAllString(bodyStr, `Ehr.openChrome = function(url){ window.open(url, "_blank"); return;`)
+		bodyStr = reEhrWindowOpen.ReplaceAllString(bodyStr, `window.open(url, "_blank");`)
 
 		// 2. Handle Http.phis replacement
 		if strings.Contains(req.URL.Path, "showView.jsp") {
