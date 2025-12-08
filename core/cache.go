@@ -29,7 +29,7 @@ var reStopItBlock = regexp.MustCompile(`function\s+_stopIt\(e\)\s*\{[\s\S]*?retu
 var reShowModalCheck = regexp.MustCompile(`if\s*\(\s*window\.showModalDialog\s*==\s*undefined\s*\)`)
 var reWindowOpenFallback = regexp.MustCompile(`window\.open\(url,obj,"width="\+w\+",height="\+h\+",modal=yes,toolbar=no,menubar=no,scrollbars=yes,resizeable=no,location=no,status=no"\);`)
 var reEhrOpenChrome = regexp.MustCompile(`Ehr\.openChrome\s*=\s*function\s*\(\s*url\s*\)\s*\{`)
-var reEhrWindowOpen = regexp.MustCompile(`window\.open\(\s*url\s*,\s*""\s*,\s*"[^"]*"\s*\);`)
+var reEhrWindowOpen = regexp.MustCompile(`window\.open\(\s*url\s*,\s*""\s*,\s*[^;]+\);`)
 
 // cacheEntry holds the cached response data and headers.
 type cacheEntry struct {
