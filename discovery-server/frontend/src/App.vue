@@ -4,22 +4,12 @@
 
     <div class="main-grid">
       <!-- Left Column: Tagged URLs (Primary Action) -->
-      <TaggedList
-        :tagged-urls="taggedUrls"
-        :add-form="newTag"
-        :creating-proxy-url="creatingProxyUrl"
-        @save-tag="saveTaggedUrl"
-        @create-proxy="createProxy"
-        @toggle-debug="toggleDebug"
-        @rename-tag="renameTag"
-        @delete-tag="deleteTag"
-      />
+      <TaggedList :tagged-urls="taggedUrls" :add-form="newTag" :creating-proxy-url="creatingProxyUrl"
+        @save-tag="saveTaggedUrl" @create-proxy="createProxy" @toggle-debug="toggleDebug" @rename-tag="renameTag"
+        @delete-tag="deleteTag" />
 
       <!-- Right Column: All Active Proxies (Quick Access) -->
-      <ProxyList
-        :cluster-proxies="clusterProxies"
-        @toggle-debug="toggleDebug"
-      />
+      <ProxyList :cluster-proxies="clusterProxies" @toggle-debug="toggleDebug" />
     </div>
 
     <!-- Bottom Section: Active Servers (Info) -->
@@ -99,7 +89,7 @@ const renameTag = async (id, newTagValue) => {
     fetchTaggedURLs();
     ElNotification({ title: 'Success', message: 'Tag renamed.', type: 'success' });
   } catch (err) {
-     ElNotification({ title: 'Error', message: 'Error renaming tag.', type: 'error' });
+    ElNotification({ title: 'Error', message: err.response?.data?.error || 'Error renaming tag.', type: 'error' });
   }
 };
 const deleteTag = async (id) => {
@@ -108,7 +98,7 @@ const deleteTag = async (id) => {
     fetchTaggedURLs();
     ElNotification({ title: 'Success', message: 'Tag deleted.', type: 'success' });
   } catch (err) {
-     ElNotification({ title: 'Error', message: 'Error deleting tag.', type: 'error' });
+    ElNotification({ title: 'Error', message: err.response?.data?.error || 'Error deleting tag.', type: 'error' });
   }
 };
 onMounted(() => {
@@ -128,39 +118,48 @@ onMounted(() => {
 </script>
 
 <style>
-
-html, body { 
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-  background-color: #f4f7f6; 
-  margin: 0; 
-  padding: 0; 
-  height: 100%; 
-  box-sizing: border-box; 
-  overflow: hidden; /* Desktop default */
+html,
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f4f7f6;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  /* Desktop default */
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
 }
 
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
 @media (max-width: 768px) {
-  html, body {
+
+  html,
+  body {
     height: auto !important;
-    overflow: visible !important; /* Ensure document scroll */
+    overflow: visible !important;
+    /* Ensure document scroll */
     display: block;
   }
 }
 
 @media (max-height: 600px) {
-  html, body {
+
+  html,
+  body {
     height: auto !important;
     overflow: auto !important;
     display: block;
   }
 }
-
 </style>
 
 
@@ -204,18 +203,22 @@ html, body {
 
 @media (max-width: 768px) {
   .container {
-    height: auto; /* Grow with content */
+    height: auto;
+    /* Grow with content */
     min-height: 100vh;
     padding: 1rem;
     overflow: visible;
-    border-radius: 0; /* Full width look */
+    border-radius: 0;
+    /* Full width look */
     box-shadow: none;
     width: 100%;
   }
-  
+
   .main-grid {
-    grid-template-columns: 1fr; /* Single column */
-    overflow: visible; /* Allow page scroll */
+    grid-template-columns: 1fr;
+    /* Single column */
+    overflow: visible;
+    /* Allow page scroll */
     display: flex;
     flex-direction: column;
   }
@@ -226,6 +229,7 @@ html, body {
     height: auto;
     overflow: visible;
   }
+
   .main-grid {
     overflow: visible;
   }
