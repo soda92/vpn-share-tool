@@ -27,8 +27,15 @@
             </div>
           </div>
           <div class="url-actions compact-actions">
-            <button @click="$emit('create-proxy', url.url)" :disabled="!!url.proxy_url" class="action-btn create"
-              title="Create Proxy">⚡</button>
+            <button 
+              @click="$emit('create-proxy', url.url)" 
+              :disabled="!!url.proxy_url || creatingProxyUrl === url.url" 
+              class="action-btn create"
+              title="Create Proxy"
+            >
+              <span v-if="creatingProxyUrl === url.url" class="spinner"></span>
+              <span v-else>⚡</span>
+            </button>
             <button @click="handleRename(url.id, url.tag)" class="action-btn rename" title="Rename">✎</button>
             <button @click="handleDelete(url.id)" class="action-btn delete" title="Delete">✕</button>
           </div>
@@ -49,6 +56,10 @@ defineProps({
   addForm: {
     type: Object,
     required: true
+  },
+  creatingProxyUrl: {
+    type: String,
+    default: null
   }
 });
 
@@ -150,7 +161,12 @@ h2 {
   margin: 0;
   overflow-y: auto;
   flex-grow: 1;
-  height: 100%;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dense-list::-webkit-scrollbar {
+  display: none;
 }
 
 .dense-list li {
@@ -276,6 +292,22 @@ h2 {
 .delete {
   background-color: #f56c6c;
   color: white;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #ffffff;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  box-sizing: border-box;
+  animation: rotation 1s linear infinite;
+}
+
+@keyframes rotation {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 @media (max-width: 768px) {

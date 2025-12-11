@@ -7,6 +7,7 @@
       <TaggedList
         :tagged-urls="taggedUrls"
         :add-form="newTag"
+        :creating-proxy-url="creatingProxyUrl"
         @save-tag="saveTaggedUrl"
         @create-proxy="createProxy"
         @toggle-debug="toggleDebug"
@@ -38,6 +39,7 @@ const servers = ref([]);
 const taggedUrls = ref([]);
 const clusterProxies = ref([]);
 const newTag = ref({ tag: '', url: '' });
+const creatingProxyUrl = ref(null);
 
 const fetchServers = async () => {
   try {
@@ -48,7 +50,7 @@ const fetchServers = async () => {
 const fetchClusterProxies = async () => {
   try {
     const response = await axios.get('/cluster-proxies');
-    clusterProxies.value = response.data || [];
+    clusterProxies.value = (response.data || []).sort((a, b) => a.original_url.localeCompare(b.original_url));
   } catch (err) { console.error('Error fetching cluster proxies:', err); }
 };
 const fetchTaggedURLs = async () => {
@@ -68,6 +70,7 @@ const saveTaggedUrl = async () => {
   }
 };
 const createProxy = async (url) => {
+  creatingProxyUrl.value = url;
   try {
     const response = await axios.post('/create-proxy', { url });
     ElNotification({ title: 'Success', message: `Proxy created: ${response.data.shared_url}`, type: 'success' });
@@ -75,6 +78,8 @@ const createProxy = async (url) => {
     fetchClusterProxies();
   } catch (err) {
     ElNotification({ title: 'Error', message: err.response?.data?.error || err.message, type: 'error' });
+  } finally {
+    creatingProxyUrl.value = null;
   }
 };
 const toggleDebug = async (url, enable) => {
@@ -124,26 +129,36 @@ onMounted(() => {
 
 <style>
 
-html, body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; height: 100%; box-sizing: border-box; }
-
-body { padding: 0.5rem; overflow: hidden; } /* Desktop default */
+html, body { 
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+  background-color: #f4f7f6; 
+  margin: 0; 
+  padding: 0; 
+  height: 100%; 
+  box-sizing: border-box; 
+  overflow: hidden; /* Desktop default */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
 
 *, *::before, *::after { box-sizing: border-box; }
 
-
-
 @media (max-width: 768px) {
-
   html, body {
-
     height: auto !important;
-
     overflow: visible !important; /* Ensure document scroll */
-
-    padding: 0; /* Reset padding on body, handle in container */
-
+    display: block;
   }
+}
 
+@media (max-height: 600px) {
+  html, body {
+    height: auto !important;
+    overflow: auto !important;
+    display: block;
+  }
 }
 
 </style>
@@ -153,17 +168,14 @@ body { padding: 0.5rem; overflow: hidden; } /* Desktop default */
 <style scoped>
 .container {
   max-width: 1400px;
-  /* Increased max-width */
-  width: 100%;
-  margin: auto;
+  width: calc(100% - 1rem);
+  height: calc(100% - 1rem);
   background-color: #ffffff;
   padding: 1rem;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
-  height: 100%;
-  /* Fill available body height (minus body padding) */
   overflow: hidden;
   /* Prevent container scroll */
 }
@@ -191,35 +203,31 @@ body { padding: 0.5rem; overflow: hidden; } /* Desktop default */
 }
 
 @media (max-width: 768px) {
-
   .container {
-
     height: auto; /* Grow with content */
-
     min-height: 100vh;
-
-    padding: 1rem; /* Move padding here */
-
+    padding: 1rem;
     overflow: visible;
-
     border-radius: 0; /* Full width look */
-
     box-shadow: none;
-
+    width: 100%;
   }
-
   
-
   .main-grid {
-
     grid-template-columns: 1fr; /* Single column */
-
     overflow: visible; /* Allow page scroll */
-
     display: flex;
-
     flex-direction: column;
+  }
+}
 
+@media (max-height: 600px) {
+  .container {
+    height: auto;
+    overflow: visible;
+  }
+  .main-grid {
+    overflow: visible;
   }
 }
 </style>
