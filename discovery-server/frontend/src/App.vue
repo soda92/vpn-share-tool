@@ -6,6 +6,7 @@
       <!-- Left Column: Tagged URLs (Primary Action) -->
       <TaggedList
         :tagged-urls="taggedUrls"
+        :add-form="newTag"
         @save-tag="saveTaggedUrl"
         @create-proxy="createProxy"
         @toggle-debug="toggleDebug"
@@ -36,6 +37,7 @@ import ServerInfo from './components/ServerInfo.vue';
 const servers = ref([]);
 const taggedUrls = ref([]);
 const clusterProxies = ref([]);
+const newTag = ref({ tag: '', url: '' });
 
 const fetchServers = async () => {
   try {
@@ -55,9 +57,10 @@ const fetchTaggedURLs = async () => {
     taggedUrls.value = (response.data || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   } catch (err) { console.error('Error fetching tagged URLs:', err); }
 };
-const saveTaggedUrl = async (tagData) => {
+const saveTaggedUrl = async () => {
   try {
-    await axios.post('/tagged-urls', tagData);
+    await axios.post('/tagged-urls', newTag.value);
+    newTag.value = { tag: '', url: '' };
     fetchTaggedURLs();
     ElNotification({ title: 'Success', message: 'Tagged URL saved.', type: 'success' });
   } catch (err) {

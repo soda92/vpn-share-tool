@@ -2,9 +2,9 @@
   <div class="section tagged-section">
     <div class="section-header">
       <h2 v-t="'tagged_urls_title'"></h2>
-      <form @submit.prevent="handleSave" class="inline-form">
-        <input type="text" v-model="newTag.tag" :placeholder="$t('tag_placeholder')" required class="compact-input">
-        <input type="text" v-model="newTag.url" :placeholder="$t('url_placeholder')" required class="compact-input">
+      <form @submit.prevent="$emit('save-tag')" class="inline-form">
+        <input type="text" v-model="addForm.tag" :placeholder="$t('tag_placeholder')" required class="compact-input">
+        <input type="text" v-model="addForm.url" :placeholder="$t('url_placeholder')" required class="compact-input">
         <button type="submit" class="compact-btn">{{ $t('save_tagged_url_button') }}</button>
       </form>
     </div>
@@ -39,24 +39,20 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
 import { ElMessageBox } from 'element-plus';
 
-const props = defineProps({
+defineProps({
   taggedUrls: {
     type: Array,
     default: () => []
+  },
+  addForm: {
+    type: Object,
+    required: true
   }
 });
 
 const emit = defineEmits(['save-tag', 'create-proxy', 'toggle-debug', 'rename-tag', 'delete-tag']);
-
-const newTag = ref({ tag: '', url: '' });
-
-const handleSave = () => {
-  emit('save-tag', { ...newTag.value });
-  newTag.value = { tag: '', url: '' };
-};
 
 const handleRename = async (id, oldTag) => {
   try {
