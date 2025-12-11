@@ -161,12 +161,6 @@ h2 {
   margin: 0;
   overflow-y: auto;
   flex-grow: 1;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.dense-list::-webkit-scrollbar {
-  display: none;
 }
 
 .dense-list li {
