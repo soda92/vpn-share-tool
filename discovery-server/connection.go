@@ -37,7 +37,7 @@ func handleConnection(conn net.Conn) {
 		switch command {
 		case "REGISTER":
 			if len(parts) < 2 {
-				log.Printf("Invalid REGISTER command from %s", remoteAddr)
+				log.Printf("Invalid REGISTER command from %s: %v", remoteAddr, parts)
 				break
 			}
 			apiPort := parts[1]

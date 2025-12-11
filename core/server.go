@@ -124,8 +124,8 @@ func registerWithDiscoveryServer(apiPort int) {
 		}
 
 		if err != nil {
-			log.Printf("Failed to connect to any discovery server. Retrying in 1 minute.")
-			time.Sleep(1 * time.Minute)
+			log.Printf("Failed to connect to any discovery server. Retrying in 5 seconds.")
+			time.Sleep(5 * time.Second)
 			continue
 		}
 
