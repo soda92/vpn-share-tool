@@ -97,8 +97,8 @@ func saveReleaseConfig(config *ReleaseConfig) error {
 	return encoder.Encode(config)
 }
 
-// incrementSuffix handles 'a' -> 'b', 'z' -> 'aa', 'aa' -> 'ab'
-func incrementSuffix(s string) string {
+// IncrementSuffix handles 'a' -> 'b', 'z' -> 'aa', 'aa' -> 'ab'
+func IncrementSuffix(s string) string {
 	if s == "" {
 		return "a"
 	}
@@ -113,14 +113,20 @@ func incrementSuffix(s string) string {
 	// If last char is 'z', reset it to 'a' and increment previous
 	runes[last] = 'a'
 	if last > 0 {
-		return incrementSuffix(string(runes[:last])) + "a"
+		return IncrementSuffix(string(runes[:last])) + "a"
 	}
 	
 	// If it was just "z", return "aa"
 	return "aa"
 }
 
-func incrementVersion(config *ReleaseConfig) string {
+// BumpVersion calculates the next version, updates the config file, and returns the new version string and config.
+func BumpVersion() (string, *ReleaseConfig, error) {
+	config, err := loadReleaseConfig()
+	if err != nil {
+		return "", nil, err
+	}
+	
 	today := time.Now().Format("2006-01-02")
 
 	if config.Version.CurrentDate != today {
@@ -130,9 +136,31 @@ func incrementVersion(config *ReleaseConfig) string {
 		config.Version.CurrentDate = today
 	} else {
 		// Same day, increment suffix
-		config.Version.Suffix = incrementSuffix(config.Version.Suffix)
+		config.Version.Suffix = IncrementSuffix(config.Version.Suffix)
 	}
-	return fmt.Sprintf("v%d%s", config.Version.Counter, config.Version.Suffix)
+	
+	if err := saveReleaseConfig(config); err != nil {
+		return "", nil, fmt.Errorf("failed to save bumped version: %w", err)
+	}
+
+	versionStr := fmt.Sprintf("v%d%s", config.Version.Counter, config.Version.Suffix)
+	return versionStr, config, nil
+}
+
+// GetCurrentVersion returns the current version string and config without modification.
+func GetCurrentVersion() (string, *ReleaseConfig, error) {
+	config, err := loadReleaseConfig()
+	if err != nil {
+		return "", nil, err
+	}
+	versionStr := fmt.Sprintf("v%d%s", config.Version.Counter, config.Version.Suffix)
+	return versionStr, config, nil
+}
+
+func incrementVersion(config *ReleaseConfig) string {
+	// Deprecated in favor of BumpVersion logic, but keeping for compatibility if needed internally
+	v, _, _ := BumpVersion()
+	return v
 }
 
 func copyFile(src, dst string) error {
@@ -170,13 +198,11 @@ func runRelease() error {
 		return fmt.Errorf("source file not found: %s. Please run 'go run ./cmd/dev build windows' first", srcPath)
 	}
 
-	config, err := loadReleaseConfig()
+	// Get CURRENT version (bumped during build)
+	versionStr, config, err := GetCurrentVersion()
 	if err != nil {
-		return fmt.Errorf("failed to load release config: %w", err)
+		return fmt.Errorf("failed to get current version: %w", err)
 	}
-
-	// Calculate new version
-	versionStr := incrementVersion(config)
 	
 	// Determine share path
 	var sharePath string
@@ -205,11 +231,6 @@ func runRelease() error {
 
 	if err := copyFile(srcPath, destPath); err != nil {
 		return fmt.Errorf("failed to copy file: %w", err)
-	}
-
-	// Save updated config ONLY after successful copy
-	if err := saveReleaseConfig(config); err != nil {
-		return fmt.Errorf("failed to save updated release config: %w", err)
 	}
 
 	fmt.Println("✅ Published successfully.")

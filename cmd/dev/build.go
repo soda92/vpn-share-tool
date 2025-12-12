@@ -151,12 +151,21 @@ func runBuildWindows() error {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
 
+	// Bump version before building
+	version, _, err := BumpVersion()
+	if err != nil {
+		return fmt.Errorf("failed to bump version: %w", err)
+	}
+	fmt.Printf("Build Version: %s\n", version)
+
 	// Build frontend
 	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
 		return err
 	}
 
-	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool"); err != nil {
+	ldflags := fmt.Sprintf("-X github.com/soda92/vpn-share-tool/gui.Version=%s", version)
+
+	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool", "-ldflags", ldflags); err != nil {
 		return fmt.Errorf("fyne-cross failed: %w", err)
 	}
 	fmt.Println("✅ Windows build successful.")
