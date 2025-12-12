@@ -109,11 +109,42 @@ func runBuildServer() error {
 	return nil
 }
 
+func copyCertsToCore() error {
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	src := filepath.Join(rootDir, "certs", "ca.crt")
+	dst := filepath.Join(rootDir, "core", "ca.crt")
+	
+	data, err := os.ReadFile(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("⚠️ CA cert not found. Running 'dev certs' to generate...")
+			if err := runGenCerts(); err != nil {
+				return err
+			}
+			data, err = os.ReadFile(src)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	
+	return os.WriteFile(dst, data, 0644)
+}
+
 func runBuildDesktop() error {
 	fmt.Println("Building main application (Desktop)...")
 	rootDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get cwd: %w", err)
+	}
+
+	if err := copyCertsToCore(); err != nil {
+		return fmt.Errorf("failed to copy certs: %w", err)
 	}
 
 	// Build frontend
@@ -192,6 +223,10 @@ func runBuildWindows() error {
 	rootDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("failed to get cwd: %w", err)
+	}
+
+	if err := copyCertsToCore(); err != nil {
+		return fmt.Errorf("failed to copy certs: %w", err)
 	}
 
 	// Bump version before building
