@@ -159,7 +159,11 @@ func GetCurrentVersion() (string, *ReleaseConfig, error) {
 
 func incrementVersion(config *ReleaseConfig) string {
 	// Deprecated in favor of BumpVersion logic, but keeping for compatibility if needed internally
-	v, _, _ := BumpVersion()
+v, _, err := BumpVersion()
+if err != nil {
+    // Or handle more gracefully depending on expected usage.
+    panic(fmt.Sprintf("failed to bump version in incrementVersion: %v", err))
+}
 	return v
 }
 
