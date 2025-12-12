@@ -6,6 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 )
 
 // TriggerUpdate checks for updates and performs a silent update if available.
@@ -20,70 +23,101 @@ func TriggerUpdate() (bool, error) {
 		return false, nil // No update
 	}
 
-	log.Printf("Update available: %s -> %s. Downloading...", Version, info.Version)
-
-	currentExe, err := os.Executable()
-	if err != nil {
+	log.Printf("Update available: %s -> %s. Applying update...", Version, info.Version)
+	
+	if err := ApplyUpdate(info); err != nil {
 		return false, err
 	}
 
-	newExe := currentExe + ".new"
-	oldExe := currentExe + ".old"
+	return true, nil
+}
+
+// ApplyUpdate downloads and applies the update, then restarts the application.
+// This function should terminate the process on success.
+func ApplyUpdate(info *UpdateInfo) error {
+	currentExe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	
+	exeDir := filepath.Dir(currentExe)
+	exeName := filepath.Base(currentExe)
+	newExe := filepath.Join(exeDir, exeName+".new")
 
 	// Download
+	log.Printf("Downloading %s to %s...", info.URL, newExe)
 	resp, err := http.Get(DiscoveryServerURL + info.URL)
 	if err != nil {
-		return false, err
+		return err
 	}
 	defer resp.Body.Close()
 
 	out, err := os.Create(newExe)
 	if err != nil {
-		return false, err
+		return err
 	}
 	
-	_, err = io.Copy(out, resp.Body)
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		out.Close()
+		return err
+	}
 	out.Close()
-	if err != nil {
-		return false, err
+
+	// Make executable
+	os.Chmod(newExe, 0755)
+
+	if runtime.GOOS == "windows" {
+		// Windows: Use batch script to handle file locking
+		batPath := filepath.Join(exeDir, "update.bat")
+		batContent := fmt.Sprintf(`@echo off
+:loop
+timeout /t 1 >nul
+move /y "%s" "%s"
+if errorlevel 1 goto loop
+start "" "%s"
+del "%%~f0"
+`, filepath.Base(newExe), exeName, exeName)
+
+		if err := os.WriteFile(batPath, []byte(batContent), 0755); err != nil {
+			return fmt.Errorf("failed to create update script: %w", err)
+		}
+
+		log.Printf("Starting update script and exiting...")
+		// Run batch script detached
+		cmd := exec.Command("cmd", "/c", "start", "/min", "update.bat")
+		cmd.Dir = exeDir
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("failed to start update script: %w", err)
+		}
+		
+		os.Exit(0)
+		return nil
 	}
 
-	log.Printf("Download complete. Replacing binary...")
-
+	// Linux/Unix: Rename running file and restart
+	oldExe := currentExe + ".old"
+	
 	// Rename current to old
 	if err := os.Rename(currentExe, oldExe); err != nil {
-		return false, fmt.Errorf("failed to rename current exe: %w", err)
+		return fmt.Errorf("failed to rename current exe: %w", err)
 	}
 
 	// Rename new to current
 	if err := os.Rename(newExe, currentExe); err != nil {
 		// Try to rollback
 		os.Rename(oldExe, currentExe)
-		return false, fmt.Errorf("failed to rename new exe: %w", err)
+		return fmt.Errorf("failed to rename new exe: %w", err)
 	}
 	
-	// Make executable
-	os.Chmod(currentExe, 0755)
-
-	log.Printf("Update applied successfully. Restarting...")
-	
-	// Prepare restart (using a bat script or just exiting if we assume service manager/user restarts)
-	// User mentioned "bat script... loop".
-	// For now, let's just exit. If it's a dev tool, maybe user restarts manually?
-	// But "auto update" implies restart.
-	// Implementing the restart logic here is complex cross-platform.
-	// Since the user focused on "silent self update", exiting with a special code might be enough if wrapped?
-	// Or we can try to exec.Command(currentExe).Start() and then os.Exit(0).
-	
+	log.Printf("Restarting process...")
 	startNewProcess(currentExe)
 	os.Exit(0)
 	
-	return true, nil
+	return nil
 }
 
 func startNewProcess(exePath string) {
 	// Simple restart logic: start independent process
-	// TODO: Add platform specific robust restart if needed
 	var attr os.ProcAttr
 	attr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
 	_, err := os.StartProcess(exePath, os.Args, &attr)

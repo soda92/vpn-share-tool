@@ -4,10 +4,7 @@ import (
 	"embed"
 	"flag"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
-	"os"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -46,56 +43,11 @@ func checkUpdate(w fyne.Window) {
 			l("updateAvailableContent", map[string]interface{}{"version": info.Version}),
 			func(b bool) {
 				if b {
-					// Perform update
-					currentExe, err := os.Executable()
-					if err != nil {
+					// Perform update via core logic
+					if err := core.ApplyUpdate(info); err != nil {
 						dialog.ShowError(err, w)
-						return
 					}
-
-					newExe := currentExe + ".new"
-					oldExe := currentExe + ".old"
-
-					// Download
-					resp, err := http.Get(core.DiscoveryServerURL + info.URL)
-					if err != nil {
-						dialog.ShowError(err, w)
-						return
-					}
-					defer resp.Body.Close()
-
-					out, err := os.Create(newExe)
-					if err != nil {
-						dialog.ShowError(err, w)
-						return
-					}
-					
-					_, err = io.Copy(out, resp.Body)
-					out.Close()
-					if err != nil {
-						dialog.ShowError(err, w)
-						return
-					}
-
-					// Rename current to old
-					if err := os.Rename(currentExe, oldExe); err != nil {
-						dialog.ShowError(err, w)
-						return
-					}
-
-					// Rename new to current
-					if err := os.Rename(newExe, currentExe); err != nil {
-						// Try to rollback
-						os.Rename(oldExe, currentExe)
-						dialog.ShowError(err, w)
-						return
-					}
-					
-					// Make executable on Linux/Mac
-					os.Chmod(currentExe, 0755)
-
-					dialog.ShowInformation(l("updateSuccessTitle"), l("updateSuccessContent"), w)
-					fyne.CurrentApp().Quit()
+					// ApplyUpdate exits on success, so we only reach here on error
 				}
 			},
 			w,
