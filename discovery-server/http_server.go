@@ -15,7 +15,7 @@ import (
 
 const (
 	httpListenPort = "8080"
-	SharePath      = "/mnt/samba_share/VPN共享工具"
+	SharePath      = "/sambashare/VPN共享工具"
 )
 
 type updateInfo struct {
