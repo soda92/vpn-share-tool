@@ -1,0 +1,8 @@
+[Share]
+  WindowsPath = "Z:\\VPN共享工具"
+  LinuxPath = "/mnt/samba_share/VPN共享工具"
+
+[Version]
+  CurrentDate = "2025-12-12"
+  Counter = 22
+  Suffix = "c"
