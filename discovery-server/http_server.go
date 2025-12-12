@@ -90,76 +90,62 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func handleTriggerUpdateRemote(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+func BasicAuth(next http.Handler) http.Handler {
+	user := os.Getenv("BASIC_AUTH_USER")
+	pass := os.Getenv("BASIC_AUTH_PASS")
+
+	if user == "" || pass == "" {
+		log.Println("Warning: BASIC_AUTH_USER/PASS not set. Web UI is unsecured.")
+		return next
 	}
 
-	var req struct {
-		Address string `json:"address"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if req.Address == "" {
-		http.Error(w, "Address is required", http.StatusBadRequest)
-		return
-	}
-
-	// Proxy the request to the client instance
-	targetURL := fmt.Sprintf("http://%s/trigger-update", req.Address)
-	log.Printf("Triggering update for %s", targetURL)
-
-	resp, err := http.Post(targetURL, "application/json", nil)
-	if err != nil {
-		log.Printf("Failed to trigger update on %s: %v", targetURL, err)
-		http.Error(w, fmt.Sprintf("Failed to trigger update: %v", err), http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		http.Error(w, fmt.Sprintf("Instance returned status %d", resp.StatusCode), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != user || p != pass {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func startHTTPServer() {
-	mux := http.NewServeMux()
-
-	// API routes
-	mux.HandleFunc("/create-proxy", handleCreateProxy)
-	mux.HandleFunc("/instances", handleGetInstances)
-	mux.HandleFunc("/tagged-urls", handleTaggedURLs)
-	mux.HandleFunc("/tagged-urls/", handleTaggedURLs)
-	mux.HandleFunc("/cluster-proxies", handleClusterProxies)
-	mux.HandleFunc("/toggle-debug-proxy", handleToggleDebugProxy)
+	// Protected Mux for Dashboard and Management APIs
+	protectedMux := http.NewServeMux()
 	
-	// Update routes
-	mux.HandleFunc("/latest-version", handleLatestVersion)
-	mux.HandleFunc("/trigger-update-remote", handleTriggerUpdateRemote)
-	mux.Handle("/download/", http.StripPrefix("/download/", http.FileServer(http.Dir(SharePath))))
+	// API routes (Protected)
+	protectedMux.HandleFunc("/create-proxy", handleCreateProxy)
+	protectedMux.HandleFunc("/instances", handleGetInstances)
+	protectedMux.HandleFunc("/tagged-urls", handleTaggedURLs)
+	protectedMux.HandleFunc("/tagged-urls/", handleTaggedURLs)
+	protectedMux.HandleFunc("/cluster-proxies", handleClusterProxies)
+	protectedMux.HandleFunc("/toggle-debug-proxy", handleToggleDebugProxy)
+	protectedMux.HandleFunc("/trigger-update-remote", handleTriggerUpdateRemote)
 
-	// Serve the Vue frontend
+	// Serve the Vue frontend (Protected)
 	fsys, err := fs.Sub(frontendDist, "frontend/dist")
 	if err != nil {
 		log.Fatal(err)
 	}
 	fileServer := http.FileServer(http.FS(fsys))
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check if the requested file exists
+	protectedMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := fsys.Open(strings.TrimPrefix(r.URL.Path, "/"))
 		if os.IsNotExist(err) {
-			// If not, serve index.html for SPA routing
 			r.URL.Path = "/"
 		}
 		fileServer.ServeHTTP(w, r)
 	}))
+
+	// Root Mux
+	rootMux := http.NewServeMux()
+	
+	// Public Routes (for Auto-Update)
+	rootMux.HandleFunc("/latest-version", handleLatestVersion)
+	rootMux.Handle("/download/", http.StripPrefix("/download/", http.FileServer(http.Dir(SharePath))))
+	
+	// Delegate everything else to Protected Mux
+	rootMux.Handle("/", BasicAuth(protectedMux))
 
 	log.Printf("Starting discovery HTTP server on port %s", httpListenPort)
 	
@@ -169,7 +155,7 @@ func startHTTPServer() {
 	if _, err := os.Stat(certFile); err == nil {
 		if _, err := os.Stat(keyFile); err == nil {
 			log.Printf("TLS certificates found. Serving HTTPS.")
-			if err := http.ListenAndServeTLS(":"+httpListenPort, certFile, keyFile, mux); err != nil {
+			if err := http.ListenAndServeTLS(":"+httpListenPort, certFile, keyFile, rootMux); err != nil {
 				log.Fatalf("Failed to start HTTPS server: %v", err)
 			}
 			return
@@ -177,7 +163,7 @@ func startHTTPServer() {
 	}
 
 	log.Printf("No certificates found. Serving HTTP (Insecure).")
-	if err := http.ListenAndServe(":"+httpListenPort, mux); err != nil {
+	if err := http.ListenAndServe(":"+httpListenPort, rootMux); err != nil {
 		log.Fatalf("Failed to start HTTP server: %v", err)
 	}
 }
