@@ -48,7 +48,11 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 		}
 		matches := reVersion.FindStringSubmatch(e.Name())
 		if len(matches) == 3 {
-			counter, _ := strconv.Atoi(matches[1])
+			counter, err := strconv.Atoi(matches[1])
+			if err != nil {
+				log.Printf("Failed to parse version counter from %s: %v", e.Name(), err)
+				continue
+			}
 			suffix := matches[2]
 			versions = append(versions, version{
 				Counter: counter,
