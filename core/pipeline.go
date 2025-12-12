@@ -18,7 +18,10 @@ var (
 	reWindowOpenFallback = regexp.MustCompile(`window\.open\(url,obj,"width="\+w\+",height="\+h\+",modal=yes,toolbar=no,menubar=no,scrollbars=yes,resizeable=no,location=no,status=no"\);`)
 	reEhrOpenChrome      = regexp.MustCompile(`Ehr\.openChrome\s*=\s*function\s*\(\s*url\s*\)\s*\{`)
 	reEhrWindowOpen      = regexp.MustCompile(`window\.open\(\s*url\s*,\s*""\s*,\s*[^;]+\);`)
-	reInternalURL        = regexp.MustCompile(`(https?://)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|localhost)(:\d+)?`)
+	reLocalhost          = regexp.MustCompile(`(https?://)(localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?`)
+	rePrivate10          = regexp.MustCompile(`(https?://)(10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?`)
+	rePrivate172         = regexp.MustCompile(`(https?://)(172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?`)
+	rePrivate192         = regexp.MustCompile(`(https?://)(192\.168\.\d{1,3}\.\d{1,3})(:\d+)?`)
 )
 
 var DefaultProcessors = []ContentProcessor{
@@ -73,12 +76,21 @@ func RewriteInternalURLs(ctx *ProcessingContext, body string) string {
 		strings.Contains(contentType, "application/json") ||
 		strings.Contains(ctx.ReqURL.Path, ".jsp") {
 
-		matches := reInternalURL.FindAllString(body, -1)
-		if len(matches) > 0 {
+		regexes := []*regexp.Regexp{reLocalhost, rePrivate10, rePrivate172, rePrivate192}
+		
+		uniqueMatches := make(map[string]bool)
+		for _, re := range regexes {
+			matches := re.FindAllString(body, -1)
+			for _, match := range matches {
+				uniqueMatches[match] = true
+			}
+		}
+
+		if len(uniqueMatches) > 0 {
 			replacements := make(map[string]string)
 			originalHost, ctxOk := ctx.ReqContext.Value(originalHostKey).(string)
 
-			for _, match := range matches {
+			for match := range uniqueMatches {
 				if _, processed := replacements[match]; processed {
 					continue
 				}
