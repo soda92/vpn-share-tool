@@ -112,7 +112,7 @@ def get_instance_list(timeout: int = 5):
         try:
             logging.debug(f"Trying discovery server at {host}...")
             with socket.create_connection(
-                (host, DISCOVERY_SERVER_PORT), timeout=1
+                (host, DISCOVERY_SERVER_PORT), timeout=timeout
             ) as sock:
                 sock.sendall(b"LIST\n")
                 response = sock.makefile().readline()
@@ -182,7 +182,7 @@ def discover_proxy(target_url, timeout=10):
     if not urlparse(schemed_target_url).scheme:
         schemed_target_url = f"http://{schemed_target_url}"
 
-    if is_url_reachable_locally(schemed_target_url, timeout=3):
+    if is_url_reachable_locally(schemed_target_url, timeout=timeout):
         logging.info(f"URL {target_url} is directly reachable. No proxy needed.")
         return target_url  # Return the original URL
 

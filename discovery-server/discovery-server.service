@@ -9,6 +9,8 @@ ExecStart=/opt/discovery-server
 WorkingDirectory=/var/lib/discovery-server
 Restart=on-failure
 RestartSec=5s
+Environment="BASIC_AUTH_USER=admin"
+Environment="BASIC_AUTH_PASS=admin"
 
 [Install]
 WantedBy=multi-user.target
