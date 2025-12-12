@@ -10,7 +10,6 @@ import (
 	"log"
 	// "mime"
 	"net/http"
-	"path/filepath"
 	"strings"
 
 	lru "github.com/hashicorp/golang-lru/v2"
