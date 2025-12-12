@@ -140,13 +140,13 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 	defer ProxiesLock.Unlock()
 
 	// Prevent adding duplicate Proxies by checking inside the lock
-	hostname := target.Hostname()
+	host := target.Host
 	for _, p := range Proxies {
 		existingURL, err := url.Parse(p.OriginalURL)
 		if err != nil {
 			continue // Skip invalid stored URL
 		}
-		if existingURL.Hostname() == hostname {
+		if existingURL.Host == host {
 			log.Printf("Proxy for %s already exists, returning existing one.", rawURL)
 			return p, nil
 		}

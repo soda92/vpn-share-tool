@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
+	"context"
 	_ "embed"
 	"fmt"
 	"io"
@@ -30,6 +31,7 @@ var reShowModalCheck = regexp.MustCompile(`if\s*\(\s*window\.showModalDialog\s*=
 var reWindowOpenFallback = regexp.MustCompile(`window\.open\(url,obj,"width="\+w\+",height="\+h\+",modal=yes,toolbar=no,menubar=no,scrollbars=yes,resizeable=no,location=no,status=no"\);`)
 var reEhrOpenChrome = regexp.MustCompile(`Ehr\.openChrome\s*=\s*function\s*\(\s*url\s*\)\s*\{`)
 var reEhrWindowOpen = regexp.MustCompile(`window\.open\(\s*url\s*,\s*""\s*,\s*[^;]+\);`)
+var reInternalURL = regexp.MustCompile(`(https?://)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|localhost)(:\d+)?`)
 
 // cacheEntry holds the cached response data and headers.
 type cacheEntry struct {
@@ -200,6 +202,58 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		bodyStr = reWindowOpenFallback.ReplaceAllString(bodyStr, `window.open(url, "_blank");`)
 		bodyStr = reEhrOpenChrome.ReplaceAllString(bodyStr, `Ehr.openChrome = function(url){ window.open(url, "_blank"); return;`)
 		bodyStr = reEhrWindowOpen.ReplaceAllString(bodyStr, `window.open(url, "_blank");`)
+
+		// 1.5. General URL rewriting for internal IPs
+		// Check content type to avoid processing unnecessary files (like images, though images usually don't have text bodies we decompress as text)
+		contentType := resp.Header.Get("Content-Type")
+		if strings.Contains(contentType, "text/") ||
+			strings.Contains(contentType, "application/javascript") ||
+			strings.Contains(contentType, "application/json") ||
+			strings.Contains(req.URL.Path, ".jsp") {
+
+			matches := reInternalURL.FindAllString(bodyStr, -1)
+			if len(matches) > 0 {
+				replacements := make(map[string]string)
+				originalHost, ctxOk := req.Context().Value(originalHostKey).(string)
+
+				for _, match := range matches {
+					if _, processed := replacements[match]; processed {
+						continue
+					}
+
+					// Don't replace if it's already pointing to our proxy IP (avoid loops)
+					// Simple check: if MyIP is set and match contains it.
+					// Note: MyIP is global in core package.
+					if MyIP != "" && strings.Contains(match, MyIP) {
+						continue
+					}
+
+					newProxy, err := ShareUrlAndGetProxy(match)
+					if err != nil {
+						log.Printf("Error creating proxy for internal URL %s: %v", match, err)
+						continue
+					}
+
+					if !ctxOk {
+						// Attempt to get from MyIP/ApiPort if context missing (fallback)
+						if MyIP != "" {
+							replacements[match] = fmt.Sprintf("http://%s:%d", MyIP, newProxy.RemotePort)
+						}
+					} else {
+						hostParts := strings.Split(originalHost, ":")
+						proxyHost := hostParts[0]
+						replacements[match] = fmt.Sprintf("http://%s:%d", proxyHost, newProxy.RemotePort)
+					}
+				}
+
+				for oldURL, newURL := range replacements {
+					if oldURL != newURL {
+						log.Printf("Rewriting body URL: %s -> %s", oldURL, newURL)
+						bodyStr = strings.ReplaceAll(bodyStr, oldURL, newURL)
+					}
+				}
+			}
+		}
 
 		// 2. Handle Http.phis replacement
 		if strings.Contains(req.URL.Path, "showView.jsp") {
