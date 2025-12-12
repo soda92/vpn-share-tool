@@ -84,11 +84,19 @@ func ApplyUpdate(info *UpdateInfo) error {
 		// Windows: Use batch script to handle file locking
 		batPath := filepath.Join(exeDir, "update.bat")
 		batContent := fmt.Sprintf(`@echo off
+set /a retries=0
 :loop
+set /a retries+=1
+if %%retries%% geq 30 goto fail
 timeout /t 1 >nul
 move /y "%s" "%s"
 if errorlevel 1 goto loop
 start "" "%s" %s
+exit
+
+:fail
+echo Failed to update after 30 retries.
+pause
 `, filepath.Base(newExe), exeName, exeName, argsStr)
 
 		if err := os.WriteFile(batPath, []byte(batContent), 0755); err != nil {
