@@ -89,11 +89,12 @@ func handleConnection(conn net.Conn) {
 			}
 			apiPort := parts[1]
 			instanceAddress = net.JoinHostPort(remoteAddr, apiPort)
-			if _, ok := instances[instanceAddress]; ok {
-				instances[instanceAddress] = Instance{
-					Address:  instanceAddress,
-					LastSeen: time.Now(),
-				}
+			if existingInstance, ok := instances[instanceAddress]; ok {
+				// Preserve existing fields like Version
+				updatedInstance := existingInstance
+				updatedInstance.LastSeen = time.Now()
+				instances[instanceAddress] = updatedInstance
+				
 				// log.Printf("Heartbeat from: %s", instanceAddress)
 				if _, err := conn.Write([]byte("OK\n")); err != nil {
 					log.Printf("Error writing to %s: %v", remoteAddr, err)

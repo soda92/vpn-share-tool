@@ -75,6 +75,15 @@ func Run() {
 
 	myApp := app.New()
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle") + " " + Version)
+	isVisible := !*startMinimized // Track visibility state
+
+	// Setup restart args provider for updates
+	core.SetRestartArgsProvider(func() []string {
+		if !isVisible {
+			return []string{"--minimized"}
+		}
+		return nil
+	})
 
 	// Find an available port for the API server
 	apiPort, err := findAvailablePort(startPort)
@@ -238,6 +247,7 @@ func Run() {
 	if desk, ok := myApp.(desktop.App); ok {
 		menu := fyne.NewMenu("VPN Share Tool",
 			fyne.NewMenuItem(l("showMenuItem"), func() {
+				isVisible = true
 				myWindow.Show()
 			}),
 			fyne.NewMenuItem(l("exitMenuItem"), func() {
@@ -264,6 +274,7 @@ func Run() {
 	})
 	// Intercept close to hide window instead of quitting
 	myWindow.SetCloseIntercept(func() {
+		isVisible = false
 		myWindow.Hide()
 	})
 	myWindow.SetOnClosed(func() {
@@ -272,6 +283,7 @@ func Run() {
 
 	myWindow.Resize(fyne.NewSize(600, 400))
 	if !*startMinimized && *proxyURL == "" {
+		isVisible = true // Explicitly set true (redundant but safe)
 		myWindow.Show()
 	}
 	myApp.Run()

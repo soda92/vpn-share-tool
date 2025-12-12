@@ -9,7 +9,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
+
+var RestartArgsProvider func() []string
+
+func SetRestartArgsProvider(f func() []string) {
+	RestartArgsProvider = f
+}
 
 // TriggerUpdate checks for updates and performs a silent update if available.
 // It returns true if an update was performed (and the app should likely exit/restart).
@@ -44,6 +51,13 @@ func ApplyUpdate(info *UpdateInfo) error {
 	exeName := filepath.Base(currentExe)
 	newExe := filepath.Join(exeDir, exeName+".new")
 
+	// Get restart args
+	var args []string
+	if RestartArgsProvider != nil {
+		args = RestartArgsProvider()
+	}
+	argsStr := strings.Join(args, " ")
+
 	// Download
 	log.Printf("Downloading %s to %s...", info.URL, newExe)
 	resp, err := http.Get(DiscoveryServerURL + info.URL)
@@ -74,8 +88,8 @@ func ApplyUpdate(info *UpdateInfo) error {
 timeout /t 1 >nul
 move /y "%s" "%s"
 if errorlevel 1 goto loop
-start "" "%s"
-`, filepath.Base(newExe), exeName, exeName)
+start "" "%s" %s
+`, filepath.Base(newExe), exeName, exeName, argsStr)
 
 		if err := os.WriteFile(batPath, []byte(batContent), 0755); err != nil {
 			return fmt.Errorf("failed to create update script: %w", err)
@@ -83,7 +97,7 @@ start "" "%s"
 
 		log.Printf("Starting update script and exiting...")
 		// Run batch script detached
-		cmd := exec.Command("cmd", "/c", "start", "/min", "update.bat")
+		cmd := exec.Command("cmd", "/c", "start", "/min", "cmd", "/c", "update.bat")
 		cmd.Dir = exeDir
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("failed to start update script: %w", err)
@@ -109,17 +123,23 @@ start "" "%s"
 	}
 	
 	log.Printf("Restarting process...")
-	startNewProcess(currentExe)
+	startNewProcess(currentExe, args)
 	os.Exit(0)
 	
 	return nil
 }
 
-func startNewProcess(exePath string) {
+func startNewProcess(exePath string, args []string) {
 	// Simple restart logic: start independent process
 	var attr os.ProcAttr
 	attr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
-	_, err := os.StartProcess(exePath, os.Args, &attr)
+	// os.Args[0] is usually the program name.
+	// We should construct new args.
+	// os.StartProcess expects argv to include the program name as first element?
+	// Yes, argv[0].
+	newArgs := append([]string{exePath}, args...)
+	
+	_, err := os.StartProcess(exePath, newArgs, &attr)
 	if err != nil {
 		log.Printf("Failed to restart process: %v", err)
 	}
