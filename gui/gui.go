@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -56,6 +57,10 @@ func checkUpdate(w fyne.Window) {
 }
 
 func Run() {
+	// Clean up update script if present (from previous update).
+	// We ignore the error because the file usually doesn't exist, which is fine.
+	os.Remove("update.bat")
+
 	proxyURL := flag.String("proxy-url", "", "URL to proxy on startup")
 	startMinimized := flag.Bool("minimized", false, "start minimized with windows start")
 	flag.Parse()

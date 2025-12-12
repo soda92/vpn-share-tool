@@ -75,7 +75,6 @@ timeout /t 1 >nul
 move /y "%s" "%s"
 if errorlevel 1 goto loop
 start "" "%s"
-del "%%~f0"
 `, filepath.Base(newExe), exeName, exeName)
 
 		if err := os.WriteFile(batPath, []byte(batContent), 0755); err != nil {
