@@ -141,17 +141,35 @@ func registerWithDiscoveryServer(apiPort int) {
 			}
 
 			log.Printf("Trying to connect to discovery server at %s...", serverAddr)
-			conn, err = net.DialTimeout("tcp", serverAddr, 2*time.Second)
+
+			// Prepare TLS config
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(rootCACert)
+			tlsConfig := &tls.Config{RootCAs: caCertPool}
+			dialer := &net.Dialer{Timeout: 2 * time.Second}
+
+			// Try TLS first
+			conn, err = tls.DialWithDialer(dialer, "tcp", serverAddr, tlsConfig)
 			if err == nil {
-				log.Printf("Connected to discovery server at %s", serverAddr)
+				log.Printf("Connected to discovery server at %s (TLS)", serverAddr)
 
 				host, _, _ := net.SplitHostPort(serverAddr)
 				DiscoveryServerURL = fmt.Sprintf("https://%s:8080", host)
 
 				break
 			}
-		}
 
+			// Fallback to Plaintext
+			conn, err = dialer.Dial("tcp", serverAddr)
+			if err == nil {
+				log.Printf("Connected to discovery server at %s (Plaintext)", serverAddr)
+
+				host, _, _ := net.SplitHostPort(serverAddr)
+				DiscoveryServerURL = fmt.Sprintf("http://%s:8080", host)
+
+				break
+			}
+		}
 		if err != nil {
 			log.Printf("Failed to connect to any discovery server. Retrying in 5 seconds.")
 			time.Sleep(5 * time.Second)
