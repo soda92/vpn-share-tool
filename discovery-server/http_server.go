@@ -162,6 +162,21 @@ func startHTTPServer() {
 	}))
 
 	log.Printf("Starting discovery HTTP server on port %s", httpListenPort)
+	
+	// Check for certificates
+	certFile := "certs/server.crt"
+	keyFile := "certs/server.key"
+	if _, err := os.Stat(certFile); err == nil {
+		if _, err := os.Stat(keyFile); err == nil {
+			log.Printf("TLS certificates found. Serving HTTPS.")
+			if err := http.ListenAndServeTLS(":"+httpListenPort, certFile, keyFile, mux); err != nil {
+				log.Fatalf("Failed to start HTTPS server: %v", err)
+			}
+			return
+		}
+	}
+
+	log.Printf("No certificates found. Serving HTTP (Insecure).")
 	if err := http.ListenAndServe(":"+httpListenPort, mux); err != nil {
 		log.Fatalf("Failed to start HTTP server: %v", err)
 	}

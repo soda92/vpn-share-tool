@@ -2,14 +2,21 @@ package core
 
 import (
 	"bufio"
+	"crypto/tls"
+	"crypto/x509"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
+
+//go:embed ca.crt
+var rootCACert []byte
 
 type sharedURLInfo struct {
 	OriginalURL string `json:"original_url"`
@@ -28,6 +35,22 @@ var (
 	DiscoveryServerURL string
 	Version            string
 )
+
+func GetHTTPClient() *http.Client {
+	caCertPool := x509.NewCertPool()
+	if ok := caCertPool.AppendCertsFromPEM(rootCACert); !ok {
+		log.Println("Failed to append CA cert")
+	}
+
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: caCertPool,
+			},
+		},
+		Timeout: 30 * time.Second,
+	}
+}
 
 // SetMyIP allows external packages (like mobile bridge) to set the client IP.
 func SetMyIP(ip string) {
@@ -123,7 +146,7 @@ func registerWithDiscoveryServer(apiPort int) {
 				log.Printf("Connected to discovery server at %s", serverAddr)
 
 				host, _, _ := net.SplitHostPort(serverAddr)
-				DiscoveryServerURL = fmt.Sprintf("http://%s:8080", host)
+				DiscoveryServerURL = fmt.Sprintf("https://%s:8080", host)
 
 				break
 			}
@@ -397,7 +420,8 @@ func CheckForUpdates() (*UpdateInfo, error) {
 		return nil, fmt.Errorf("discovery server not connected")
 	}
 
-	resp, err := http.Get(DiscoveryServerURL + "/latest-version")
+	client := GetHTTPClient()
+	resp, err := client.Get(DiscoveryServerURL + "/latest-version")
 	if err != nil {
 		return nil, err
 	}

@@ -60,7 +60,8 @@ func ApplyUpdate(info *UpdateInfo) error {
 
 	// Download
 	log.Printf("Downloading %s to %s...", info.URL, newExe)
-	resp, err := http.Get(DiscoveryServerURL + info.URL)
+	client := GetHTTPClient()
+	resp, err := client.Get(DiscoveryServerURL + info.URL)
 	if err != nil {
 		return err
 	}
