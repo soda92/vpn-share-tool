@@ -115,15 +115,19 @@ def get_instance_list(timeout: int = 5):
     if CA_CERT_PEM and "__CA_CERT_PLACEHOLDER__" not in CA_CERT_PEM:
         try:
             context = ssl.create_default_context(cadata=CA_CERT_PEM)
-            context.check_hostname = False # Discovery uses IP/different hostname often
+            context.check_hostname = False  # Discovery uses IP/different hostname often
             logging.debug("Using embedded CA certificate for TLS.")
         except Exception as e:
-            logging.warning(f"Failed to load embedded CA cert: {e}. Falling back to unverified TLS.")
+            logging.warning(
+                f"Failed to load embedded CA cert: {e}. Falling back to unverified TLS."
+            )
             context = ssl.create_default_context()
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
     else:
-        logging.debug("No embedded CA certificate found. Using unverified TLS.")
+        logging.warning(
+            "No embedded CA certificate found. Using unverified TLS (Security Risk)."
+        )
         context = ssl.create_default_context()
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
@@ -148,8 +152,8 @@ def get_instance_list(timeout: int = 5):
                     logging.info(f"Successfully retrieved instances from {host}")
                     return [item["address"] for item in instances_raw]
         except ssl.SSLError as e:
-             logging.debug(f"SSL Error connecting to {host}: {e}")
-             continue
+            logging.debug(f"SSL Error connecting to {host}: {e}")
+            continue
         except socket.timeout:
             logging.debug(
                 f"Timeout connecting to discovery server at {host}:{DISCOVERY_SERVER_PORT}"
