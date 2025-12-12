@@ -30,5 +30,9 @@
     "enableAutostartMenuItem": "Start with system",
     "setupAutostartMenuItem": "Setup Autostart",
     "autostartEnabledTitle": "Autostart Enabled",
-    "autostartEnabledContent": "You can disable this later via your OS's Task Manager or settings."
+    "autostartEnabledContent": "You can disable this later via your OS's Task Manager or settings.",
+    "updateAvailableTitle": "Update Available",
+    "updateAvailableContent": "New version {{.version}} is available. Do you want to update now?",
+    "updateSuccessTitle": "Update Successful",
+    "updateSuccessContent": "Application updated successfully. It will now restart."
 }
