@@ -22,9 +22,11 @@ const (
 
 var (
 	// Fallback IPs if scanning fails
-	SERVER_IPs = []string{"192.168.0.81", "192.168.1.81"}
-	ApiPort    int
-	MyIP       string
+	SERVER_IPs         = []string{"192.168.0.81", "192.168.1.81"}
+	ApiPort            int
+	MyIP               string
+	DiscoveryServerURL string
+	Version            string
 )
 
 // SetMyIP allows external packages (like mobile bridge) to set the client IP.
@@ -119,6 +121,10 @@ func registerWithDiscoveryServer(apiPort int) {
 			conn, err = net.DialTimeout("tcp", serverAddr, 2*time.Second)
 			if err == nil {
 				log.Printf("Connected to discovery server at %s", serverAddr)
+
+				host, _, _ := net.SplitHostPort(serverAddr)
+				DiscoveryServerURL = fmt.Sprintf("http://%s:8080", host)
+
 				break
 			}
 		}
@@ -136,7 +142,7 @@ func registerWithDiscoveryServer(apiPort int) {
 			scanner := bufio.NewScanner(conn)
 
 			// 1. Initial Registration
-			registerMsg := fmt.Sprintf("REGISTER %d\n", apiPort)
+			registerMsg := fmt.Sprintf("REGISTER %d %s\n", apiPort, Version)
 			if _, err := conn.Write([]byte(registerMsg)); err != nil {
 				log.Printf("Failed to send REGISTER command: %v", err)
 				return // Exit closure, trigger reconnect
@@ -315,6 +321,27 @@ func handleToggleDebug(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func handleTriggerUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	go func() {
+		updated, err := TriggerUpdate()
+		if err != nil {
+			log.Printf("Remote trigger update failed: %v", err)
+		} else if updated {
+			log.Printf("Remote triggered update success. Exiting.")
+			// The process will exit in TriggerUpdate usually, but if not:
+			// os.Exit(0)
+		}
+	}()
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Update triggered"))
+}
+
 // StartApiServer starts the HTTP server to provide the API endpoints.
 func StartApiServer(apiPort int) error {
 	ApiPort = apiPort
@@ -343,6 +370,7 @@ func StartApiServer(apiPort int) error {
 	mux.HandleFunc("/can-reach", canReachHandler)
 	mux.HandleFunc("/active-proxies", handleGetActiveProxies)
 	mux.HandleFunc("/toggle-debug", handleToggleDebug)
+	mux.HandleFunc("/trigger-update", handleTriggerUpdate)
 
 	RegisterDebugRoutes(mux)
 
@@ -357,4 +385,32 @@ func StartApiServer(apiPort int) error {
 		return fmt.Errorf("API server stopped with error: %w", err)
 	}
 	return nil
+}
+
+type UpdateInfo struct {
+	Version string `json:"version"`
+	URL     string `json:"url"`
+}
+
+func CheckForUpdates() (*UpdateInfo, error) {
+	if DiscoveryServerURL == "" {
+		return nil, fmt.Errorf("discovery server not connected")
+	}
+
+	resp, err := http.Get(DiscoveryServerURL + "/latest-version")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned status: %d", resp.StatusCode)
+	}
+
+	var info UpdateInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, err
+	}
+
+	return &info, nil
 }

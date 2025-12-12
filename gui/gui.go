@@ -29,6 +29,8 @@ func Run() {
 	startMinimized := flag.Bool("minimized", false, "start minimized with windows start")
 	flag.Parse()
 
+	core.Version = Version
+
 	initI18n()
 	SetAutostart(true)
 

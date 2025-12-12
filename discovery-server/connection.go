@@ -41,12 +41,18 @@ func handleConnection(conn net.Conn) {
 				break
 			}
 			apiPort := parts[1]
+			version := "unknown"
+			if len(parts) >= 3 {
+				version = parts[2]
+			}
+
 			instanceAddress = net.JoinHostPort(remoteAddr, apiPort)
 			instances[instanceAddress] = Instance{
 				Address:  instanceAddress,
+				Version:  version,
 				LastSeen: time.Now(),
 			}
-			log.Printf("Registered instance: %s", instanceAddress)
+			log.Printf("Registered instance: %s (v%s)", instanceAddress, version)
 			response := fmt.Sprintf("OK %s\n", remoteAddr)
 			if _, err := conn.Write([]byte(response)); err != nil {
 				log.Printf("Error writing to %s: %v", remoteAddr, err)

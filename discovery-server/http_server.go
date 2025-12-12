@@ -86,6 +86,45 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func handleTriggerUpdateRemote(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Address string `json:"address"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Address == "" {
+		http.Error(w, "Address is required", http.StatusBadRequest)
+		return
+	}
+
+	// Proxy the request to the client instance
+	targetURL := fmt.Sprintf("http://%s/trigger-update", req.Address)
+	log.Printf("Triggering update for %s", targetURL)
+
+	resp, err := http.Post(targetURL, "application/json", nil)
+	if err != nil {
+		log.Printf("Failed to trigger update on %s: %v", targetURL, err)
+		http.Error(w, fmt.Sprintf("Failed to trigger update: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, fmt.Sprintf("Instance returned status %d", resp.StatusCode), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func startHTTPServer() {
 	mux := http.NewServeMux()
 
@@ -99,6 +138,7 @@ func startHTTPServer() {
 	
 	// Update routes
 	mux.HandleFunc("/latest-version", handleLatestVersion)
+	mux.HandleFunc("/trigger-update-remote", handleTriggerUpdateRemote)
 	mux.Handle("/download/", http.StripPrefix("/download/", http.FileServer(http.Dir(SharePath))))
 
 	// Serve the Vue frontend
