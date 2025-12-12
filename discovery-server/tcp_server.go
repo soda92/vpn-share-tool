@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"log"
 	"net"
-	"os"
 )
 
 const listenPort = "45679"
@@ -15,23 +14,13 @@ func startTCPServer() {
 	var listener net.Listener
 	var err error
 
-	certFile := "certs/server.crt"
-	keyFile := "certs/server.key"
-
-	if _, errStat := os.Stat(certFile); errStat == nil {
-		if _, errStat := os.Stat(keyFile); errStat == nil {
-			log.Printf("TLS certificates found. Starting Secure TCP Server.")
-			cer, errLoad := tls.LoadX509KeyPair(certFile, keyFile)
-			if errLoad != nil {
-				log.Fatalf("Failed to load keypair: %v", errLoad)
-			}
-			config := &tls.Config{Certificates: []tls.Certificate{cer}}
-			listener, err = tls.Listen("tcp", ":"+listenPort, config)
-		}
-	}
-
-	if listener == nil {
-		log.Printf("No certificates found. Starting Insecure TCP Server.")
+	cer, errLoad := tls.X509KeyPair(serverCert, serverKey)
+	if errLoad == nil {
+		log.Printf("Embedded TLS certificates found. Starting Secure TCP Server.")
+		config := &tls.Config{Certificates: []tls.Certificate{cer}}
+		listener, err = tls.Listen("tcp", ":"+listenPort, config)
+	} else {
+		log.Printf("Failed to load embedded certs: %v. Starting Insecure TCP Server.", errLoad)
 		listener, err = net.Listen("tcp", ":"+listenPort)
 	}
 
