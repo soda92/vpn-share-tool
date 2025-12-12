@@ -61,7 +61,7 @@ func loadReleaseConfig() (*ReleaseConfig, error) {
 		// Create default
 		config = ReleaseConfig{
 			Share: ShareConfig{
-				WindowsPath: `Z:\VPN共享工具`,
+				WindowsPath: `\\192.168.1.81\文件共享\VPN共享工具`,
 				LinuxPath:   `/mnt/samba_share/VPN共享工具`,
 			},
 			Version: VersionConfig{
