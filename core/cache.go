@@ -79,19 +79,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 
 	// Determine if the asset is "Static" (Cache, No Modification)
-	ext := strings.ToLower(filepath.Ext(req.URL.Path))
-	isStatic := false
-	switch ext {
-	// CSS is considered dynamic as it might need URL rewriting
-	case ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2", ".ttf", ".eot":
-		isStatic = true
-	case ".js":
-		// Only cache common libraries, treat app JS as dynamic
-		lowerPath := strings.ToLower(req.URL.Path)
-		if strings.Contains(lowerPath, "jquery") || strings.Contains(lowerPath, "bootstrap") || strings.Contains(lowerPath, "moment") {
-			isStatic = true
-		}
-	}
+	isStatic := IsCacheable(req.URL.Path)
 
 	// 1. STATIC ASSETS: Cache Strategy (No Pipeline)
 	if isStatic {
