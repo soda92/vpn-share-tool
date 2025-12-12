@@ -8,6 +8,9 @@
 /dist
 /vendor
 
+server.crt
+server.key
+
 /dev
 
 __debug_bin*

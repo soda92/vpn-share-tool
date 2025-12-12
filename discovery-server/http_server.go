@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/tls"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -12,6 +14,12 @@ import (
 	"strconv"
 	"strings"
 )
+
+//go:embed server.crt
+var serverCert []byte
+
+//go:embed server.key
+var serverKey []byte
 
 const (
 	httpListenPort = "8080"
@@ -90,6 +98,52 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func handleTriggerUpdateRemote(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Address string `json:"address"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Address == "" {
+		http.Error(w, "Address is required", http.StatusBadRequest)
+		return
+	}
+
+	// Proxy the request to the client instance
+	// Since we upgraded client to use HTTPS for discovery URL construction,
+	// but the client LISTEN port (API) is HTTP or HTTPS?
+	// core/server.go: StartApiServer uses http.ListenAndServe (plaintext).
+	// So we should use http:// here.
+	// Check core/server.go: StartApiServer listens on apiPort.
+	// It does NOT wrap in TLS.
+	// So targetURL is http://
+	targetURL := fmt.Sprintf("http://%s/trigger-update", req.Address)
+	log.Printf("Triggering update for %s", targetURL)
+
+	resp, err := http.Post(targetURL, "application/json", nil)
+	if err != nil {
+		log.Printf("Failed to trigger update on %s: %v", targetURL, err)
+		http.Error(w, fmt.Sprintf("Failed to trigger update: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, fmt.Sprintf("Instance returned status %d", resp.StatusCode), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func BasicAuth(next http.Handler) http.Handler {
 	user := os.Getenv("BASIC_AUTH_USER")
 	pass := os.Getenv("BASIC_AUTH_PASS")
@@ -149,21 +203,24 @@ func startHTTPServer() {
 
 	log.Printf("Starting discovery HTTP server on port %s", httpListenPort)
 	
-	// Check for certificates
-	certFile := "certs/server.crt"
-	keyFile := "certs/server.key"
-	if _, err := os.Stat(certFile); err == nil {
-		if _, err := os.Stat(keyFile); err == nil {
-			log.Printf("TLS certificates found. Serving HTTPS.")
-			if err := http.ListenAndServeTLS(":"+httpListenPort, certFile, keyFile, rootMux); err != nil {
-				log.Fatalf("Failed to start HTTPS server: %v", err)
-			}
-			return
+	// Load embedded certificates
+	cert, err := tls.X509KeyPair(serverCert, serverKey)
+	if err != nil {
+		log.Printf("Failed to load embedded certs: %v. Falling back to HTTP.", err)
+		if err := http.ListenAndServe(":"+httpListenPort, rootMux); err != nil {
+			log.Fatalf("Failed to start HTTP server: %v", err)
 		}
+		return
 	}
 
-	log.Printf("No certificates found. Serving HTTP (Insecure).")
-	if err := http.ListenAndServe(":"+httpListenPort, rootMux); err != nil {
-		log.Fatalf("Failed to start HTTP server: %v", err)
+	log.Printf("Embedded TLS certificates found. Serving HTTPS.")
+	server := &http.Server{
+		Addr:      ":" + httpListenPort,
+		Handler:   rootMux,
+		TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}},
+	}
+
+	if err := server.ListenAndServeTLS("", ""); err != nil {
+		log.Fatalf("Failed to start HTTPS server: %v", err)
 	}
 }

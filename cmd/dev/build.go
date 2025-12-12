@@ -66,6 +66,8 @@ var buildServerCmd = &cobra.Command{
 	},
 }
 
+var noFrontend bool
+
 func init() {
 	rootCmd.AddCommand(buildCmd)
 	buildCmd.AddCommand(buildAndroidCmd)
@@ -74,6 +76,42 @@ func init() {
 	buildCmd.AddCommand(buildWindowsCmd)
 	buildCmd.AddCommand(buildTestCmd)
 	buildCmd.AddCommand(buildServerCmd)
+
+	buildCmd.PersistentFlags().BoolVar(&noFrontend, "no-frontend", false, "Skip frontend build")
+}
+
+func copyServerCerts() error {
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	
+	files := []string{"server.crt", "server.key"}
+	for _, file := range files {
+		src := filepath.Join(rootDir, "certs", file)
+		dst := filepath.Join(rootDir, "discovery-server", file)
+		
+		data, err := os.ReadFile(src)
+		if err != nil {
+			if os.IsNotExist(err) {
+				fmt.Println("⚠️ Server certs not found. Running 'dev certs' to generate...")
+				if err := runGenCerts(); err != nil {
+					return err
+				}
+				data, err = os.ReadFile(src)
+				if err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
+		}
+		
+		if err := os.WriteFile(dst, data, 0644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func runBuildServer() error {
@@ -83,10 +121,18 @@ func runBuildServer() error {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
 
+	if err := copyServerCerts(); err != nil {
+		return fmt.Errorf("failed to copy server certs: %w", err)
+	}
+
 	// Build server frontend
-	fmt.Println("Building server frontend...")
-	if err := buildFrontendIn(filepath.Join(rootDir, "discovery-server", "frontend")); err != nil {
-		return fmt.Errorf("failed to build server frontend: %w", err)
+	if !noFrontend {
+		fmt.Println("Building server frontend...")
+		if err := buildFrontendIn(filepath.Join(rootDir, "discovery-server", "frontend")); err != nil {
+			return fmt.Errorf("failed to build server frontend: %w", err)
+		}
+	} else {
+		fmt.Println("Skipping server frontend build.")
 	}
 
 	// Build Server Binary
@@ -148,8 +194,12 @@ func runBuildDesktop() error {
 	}
 
 	// Build frontend
-	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
-		return err
+	if !noFrontend {
+		if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("Skipping frontend build.")
 	}
 
 	// Build Go binary
@@ -243,8 +293,12 @@ func runBuildWindows() error {
 	}
 
 	// Build frontend
-	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
-		return err
+	if !noFrontend {
+		if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("Skipping frontend build.")
 	}
 
 	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool"); err != nil {
