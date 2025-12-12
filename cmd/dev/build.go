@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/cobra"
 )
@@ -57,6 +58,16 @@ var buildTestCmd = &cobra.Command{
 	},
 }
 
+var buildServerCmd = &cobra.Command{
+	Use:   "server",
+	Short: "Build discovery server",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildServer()
+	},
+}
+
+var noFrontend bool
+
 func init() {
 	rootCmd.AddCommand(buildCmd)
 	buildCmd.AddCommand(buildAndroidCmd)
@@ -64,6 +75,111 @@ func init() {
 	buildCmd.AddCommand(buildLinuxCmd)
 	buildCmd.AddCommand(buildWindowsCmd)
 	buildCmd.AddCommand(buildTestCmd)
+	buildCmd.AddCommand(buildServerCmd)
+
+	buildCmd.PersistentFlags().BoolVar(&noFrontend, "no-frontend", false, "Skip frontend build")
+}
+
+func copyServerCerts() error {
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	
+	files := []string{"server.crt", "server.key"}
+	for _, file := range files {
+		src := filepath.Join(rootDir, "certs", file)
+		dst := filepath.Join(rootDir, "discovery-server", file)
+		
+		data, err := os.ReadFile(src)
+		if err != nil {
+			if os.IsNotExist(err) {
+				fmt.Println("⚠️ Server certs not found. Running 'dev certs' to generate...")
+				if err := runGenCerts(); err != nil {
+					return err
+				}
+				data, err = os.ReadFile(src)
+				if err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
+		}
+		
+		if err := os.WriteFile(dst, data, 0644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runBuildServer() error {
+	fmt.Println("Building Discovery Server...")
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get cwd: %w", err)
+	}
+
+	if err := copyServerCerts(); err != nil {
+		return fmt.Errorf("failed to copy server certs: %w", err)
+	}
+
+	// Build server frontend
+	if !noFrontend {
+		fmt.Println("Building server frontend...")
+		if err := buildFrontendIn(filepath.Join(rootDir, "discovery-server", "frontend")); err != nil {
+			return fmt.Errorf("failed to build server frontend: %w", err)
+		}
+	} else {
+		fmt.Println("Skipping server frontend build.")
+	}
+
+	// Build Server Binary
+	fmt.Println("Building server binary...")
+	output := filepath.Join(rootDir, "dist", "discovery-server")
+	if runtime.GOOS == "windows" {
+		output += ".exe"
+	}
+	
+	// Ensure dist dir exists
+	if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
+		return err
+	}
+
+	if err := execCmd(rootDir, nil, "go", "build", "-o", output, "./discovery-server"); err != nil {
+		return fmt.Errorf("go build failed: %w", err)
+	}
+
+	fmt.Printf("✅ Server build successful: %s\n", output)
+	return nil
+}
+
+func copyCertsToCore() error {
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	src := filepath.Join(rootDir, "certs", "ca.crt")
+	dst := filepath.Join(rootDir, "core", "ca.crt")
+	
+	data, err := os.ReadFile(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("⚠️ CA cert not found. Running 'dev certs' to generate...")
+			if err := runGenCerts(); err != nil {
+				return err
+			}
+			data, err = os.ReadFile(src)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	
+	return os.WriteFile(dst, data, 0644)
 }
 
 func runBuildDesktop() error {
@@ -73,9 +189,17 @@ func runBuildDesktop() error {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
 
+	if err := copyCertsToCore(); err != nil {
+		return fmt.Errorf("failed to copy certs: %w", err)
+	}
+
 	// Build frontend
-	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
-		return err
+	if !noFrontend {
+		if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("Skipping frontend build.")
 	}
 
 	// Build Go binary
@@ -151,9 +275,30 @@ func runBuildWindows() error {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
 
+	if err := copyCertsToCore(); err != nil {
+		return fmt.Errorf("failed to copy certs: %w", err)
+	}
+
+	// Bump version before building
+	version, _, err := BumpVersion()
+	if err != nil {
+		return fmt.Errorf("failed to bump version: %w", err)
+	}
+	fmt.Printf("Build Version: %s\n", version)
+
+	// Write version to gui/version.txt
+	versionFile := filepath.Join(rootDir, "gui", "version.txt")
+	if err := os.WriteFile(versionFile, []byte(version), 0644); err != nil {
+		return fmt.Errorf("failed to write version file: %w", err)
+	}
+
 	// Build frontend
-	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
-		return err
+	if !noFrontend {
+		if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("Skipping frontend build.")
 	}
 
 	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool"); err != nil {

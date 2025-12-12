@@ -10,6 +10,7 @@ import (
 
 type Instance struct {
 	Address  string    `json:"address"`
+	Version  string    `json:"version"`
 	LastSeen time.Time `json:"last_seen"`
 }
 

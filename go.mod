@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	fyne.io/fyne/v2 v2.7.0
+	github.com/BurntSushi/toml v1.5.0
 	github.com/Xuanwo/go-locale v1.1.3
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
@@ -11,14 +12,12 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.6.0
 	github.com/spf13/cobra v1.10.1
 	go.etcd.io/bbolt v1.4.3
-	golang.org/x/mobile v0.0.0-20251113184115-a159579294ab
 	golang.org/x/sys v0.38.0
 	golang.org/x/text v0.31.0
 )
 
 require (
 	fyne.io/systray v1.11.1-0.20250603113521-ca66a66d8b58 // indirect
-	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fredbi/uri v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
@@ -48,10 +47,7 @@ require (
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/yuin/goldmark v1.7.8 // indirect
 	golang.org/x/image v0.33.0 // indirect
-	golang.org/x/mod v0.30.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/tools v0.39.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

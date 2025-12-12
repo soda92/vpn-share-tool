@@ -4,16 +4,26 @@
 
     <div class="main-grid">
       <!-- Left Column: Tagged URLs (Primary Action) -->
-      <TaggedList :tagged-urls="taggedUrls" :add-form="newTag" :creating-proxy-url="creatingProxyUrl"
-        @save-tag="saveTaggedUrl" @create-proxy="createProxy" @toggle-debug="toggleDebug" @rename-tag="renameTag"
-        @delete-tag="deleteTag" />
+      <TaggedList
+        :tagged-urls="taggedUrls"
+        :add-form="newTag"
+        :creating-proxy-urls="creatingProxyUrls"
+        @save-tag="saveTaggedUrl"
+        @create-proxy="createProxy"
+        @toggle-debug="toggleDebug"
+        @rename-tag="renameTag"
+        @delete-tag="deleteTag"
+      />
 
       <!-- Right Column: All Active Proxies (Quick Access) -->
-      <ProxyList :cluster-proxies="clusterProxies" @toggle-debug="toggleDebug" />
+      <ProxyList
+        :cluster-proxies="clusterProxies"
+        @toggle-debug="toggleDebug"
+      />
     </div>
 
     <!-- Bottom Section: Active Servers (Info) -->
-    <ServerInfo :servers="servers" />
+    <ServerInfo :servers="servers" :latest-version="latestVersion" @update-server="handleUpdateServer" />
   </div>
 </template>
 
@@ -29,7 +39,8 @@ const servers = ref([]);
 const taggedUrls = ref([]);
 const clusterProxies = ref([]);
 const newTag = ref({ tag: '', url: '' });
-const creatingProxyUrl = ref(null);
+const creatingProxyUrls = ref({});
+const latestVersion = ref('');
 
 const fetchServers = async () => {
   try {
@@ -49,6 +60,22 @@ const fetchTaggedURLs = async () => {
     taggedUrls.value = (response.data || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   } catch (err) { console.error('Error fetching tagged URLs:', err); }
 };
+const fetchLatestVersion = async () => {
+  try {
+    const response = await axios.get('/latest-version');
+    if (response.data && response.data.version) {
+      latestVersion.value = response.data.version;
+    }
+  } catch (err) { console.error('Error fetching latest version:', err); }
+};
+const handleUpdateServer = async (address) => {
+  try {
+    await axios.post('/trigger-update-remote', { address });
+    ElNotification({ title: 'Success', message: `Update triggered for ${address}`, type: 'success' });
+  } catch (err) {
+    ElNotification({ title: 'Error', message: err.response?.data?.error || err.message, type: 'error' });
+  }
+};
 const saveTaggedUrl = async () => {
   try {
     await axios.post('/tagged-urls', newTag.value);
@@ -60,7 +87,7 @@ const saveTaggedUrl = async () => {
   }
 };
 const createProxy = async (url) => {
-  creatingProxyUrl.value = url;
+  creatingProxyUrls.value[url] = true;
   try {
     const response = await axios.post('/create-proxy', { url });
     ElNotification({ title: 'Success', message: `Proxy created: ${response.data.shared_url}`, type: 'success' });
@@ -69,7 +96,7 @@ const createProxy = async (url) => {
   } catch (err) {
     ElNotification({ title: 'Error', message: err.response?.data?.error || err.message, type: 'error' });
   } finally {
-    creatingProxyUrl.value = null;
+    delete creatingProxyUrls.value[url];
   }
 };
 const toggleDebug = async (url, enable) => {
@@ -102,6 +129,7 @@ const deleteTag = async (id) => {
   }
 };
 onMounted(() => {
+  fetchLatestVersion(); // Fetch once on mount
   const pollServers = () => {
     fetchServers().finally(() => setTimeout(pollServers, 5000));
   };

@@ -29,11 +29,11 @@
           <div class="url-actions compact-actions">
             <button 
               @click="$emit('create-proxy', url.url)" 
-              :disabled="!!url.proxy_url || creatingProxyUrl === url.url" 
+              :disabled="!!url.proxy_url || creatingProxyUrls[url.url]" 
               class="action-btn create"
               title="Create Proxy"
             >
-              <span v-if="creatingProxyUrl === url.url" class="spinner"></span>
+              <span v-if="creatingProxyUrls[url.url]" class="spinner"></span>
               <span v-else>⚡</span>
             </button>
             <button @click="handleRename(url.id, url.tag)" class="action-btn rename" title="Rename">✎</button>
@@ -57,9 +57,9 @@ defineProps({
     type: Object,
     required: true
   },
-  creatingProxyUrl: {
-    type: String,
-    default: null
+  creatingProxyUrls: {
+    type: Object,
+    default: () => ({})
   }
 });
 

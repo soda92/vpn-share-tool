@@ -2,7 +2,17 @@
   <div class="server-info-bar">
     <span class="server-label" v-t="'active_servers_title'"></span>:
     <span v-for="(server, index) in servers" :key="server.address" class="server-item">
-      {{ server.address }}<span v-if="index < servers.length - 1">, </span>
+      {{ server.address }}
+      <span v-if="server.version" class="server-version">(v{{ server.version }})</span>
+      <button 
+        v-if="latestVersion && server.version && server.version !== latestVersion" 
+        class="update-btn"
+        @click="$emit('update-server', server.address)"
+        :title="'Update to ' + latestVersion"
+      >
+        ↑
+      </button>
+      <span v-if="index < servers.length - 1">, </span>
     </span>
     <span v-if="!servers.length">{{ $t('no_active_servers') }}</span>
   </div>
@@ -13,8 +23,14 @@ defineProps({
   servers: {
     type: Array,
     default: () => []
+  },
+  latestVersion: {
+    type: String,
+    default: ''
   }
 });
+
+defineEmits(['update-server']);
 </script>
 
 <style scoped>
@@ -39,6 +55,28 @@ defineProps({
 
 .server-item {
   font-family: monospace;
+}
+
+.server-version {
+  color: #95a5a6;
+  font-size: 0.75rem;
+  margin-left: 2px;
+}
+
+.update-btn {
+  background: #e67e22;
+  color: white;
+  border: none;
+  border-radius: 2px;
+  padding: 0 4px;
+  margin-left: 4px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.update-btn:hover {
+  background: #d35400;
 }
 
 @media (max-width: 768px) {

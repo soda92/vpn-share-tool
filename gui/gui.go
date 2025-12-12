@@ -5,12 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -20,20 +22,68 @@ import (
 //go:embed i18n/*.json
 var i18nFS embed.FS
 
+//go:embed version.txt
+var versionFile string
+
+var Version = "dev"
+
 const (
 	startPort = 10081
 )
 
+func checkUpdate(w fyne.Window) {
+	info, err := core.CheckForUpdates()
+	if err != nil {
+		log.Printf("Failed to check for updates: %v", err)
+		return
+	}
+
+	if info.Version != Version && Version != "dev" {
+		dialog.ShowConfirm(
+			l("updateAvailableTitle"),
+			l("updateAvailableContent", map[string]interface{}{"version": info.Version}),
+			func(b bool) {
+				if b {
+					// Perform update via core logic
+					if err := core.ApplyUpdate(info); err != nil {
+						dialog.ShowError(err, w)
+					}
+					// ApplyUpdate exits on success, so we only reach here on error
+				}
+			},
+			w,
+		)
+	}
+}
+
 func Run() {
+	// Clean up update script if present (from previous update).
+	// We ignore the error because the file usually doesn't exist, which is fine.
+	os.Remove("update.bat")
+
 	proxyURL := flag.String("proxy-url", "", "URL to proxy on startup")
 	startMinimized := flag.Bool("minimized", false, "start minimized with windows start")
 	flag.Parse()
+
+	if v := strings.TrimSpace(versionFile); v != "" {
+		Version = v
+	}
+	core.Version = Version
 
 	initI18n()
 	SetAutostart(true)
 
 	myApp := app.New()
-	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
+	myWindow := myApp.NewWindow(l("vpnShareToolTitle") + " " + Version)
+	isVisible := !*startMinimized // Track visibility state
+
+	// Setup restart args provider for updates
+	core.SetRestartArgsProvider(func() []string {
+		if !isVisible {
+			return []string{"--minimized"}
+		}
+		return nil
+	})
 
 	// Find an available port for the API server
 	apiPort, err := findAvailablePort(startPort)
@@ -55,6 +105,8 @@ func Run() {
 		ip := <-core.IPReadyChan
 		fyne.Do(func() {
 			serverStatus.SetText(fmt.Sprintf("Server running on: %s", ip))
+			// Check for updates after connection is established
+			checkUpdate(myWindow)
 		})
 	}()
 
@@ -195,6 +247,7 @@ func Run() {
 	if desk, ok := myApp.(desktop.App); ok {
 		menu := fyne.NewMenu("VPN Share Tool",
 			fyne.NewMenuItem(l("showMenuItem"), func() {
+				isVisible = true
 				myWindow.Show()
 			}),
 			fyne.NewMenuItem(l("exitMenuItem"), func() {
@@ -221,6 +274,7 @@ func Run() {
 	})
 	// Intercept close to hide window instead of quitting
 	myWindow.SetCloseIntercept(func() {
+		isVisible = false
 		myWindow.Hide()
 	})
 	myWindow.SetOnClosed(func() {
@@ -229,6 +283,7 @@ func Run() {
 
 	myWindow.Resize(fyne.NewSize(600, 400))
 	if !*startMinimized && *proxyURL == "" {
+		isVisible = true // Explicitly set true (redundant but safe)
 		myWindow.Show()
 	}
 	myApp.Run()

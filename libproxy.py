@@ -11,6 +11,7 @@ import concurrent.futures
 import subprocess
 import re
 import platform
+import ssl
 
 # Fallback addresses if scanning fails
 DISCOVERY_SERVER_HOSTS = ["192.168.0.81", "192.168.1.81"]
@@ -107,24 +108,33 @@ def get_instance_list(timeout: int = 5):
     # 2. Add fallbacks
     candidate_hosts.extend(DISCOVERY_SERVER_HOSTS)
 
+    # Setup SSL context (Unverified for self-signed)
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+
     # 3. Try to connect to candidates
     for host in candidate_hosts:
         try:
             logging.debug(f"Trying discovery server at {host}...")
             with socket.create_connection(
-                (host, DISCOVERY_SERVER_PORT), timeout=1
+                (host, DISCOVERY_SERVER_PORT), timeout=timeout
             ) as sock:
-                sock.sendall(b"LIST\n")
-                response = sock.makefile().readline()
-                if not response:
-                    logging.warning(
-                        f"Did not receive a response from discovery server at {host}"
-                    )
-                    continue
-                instances_raw = json.loads(response)
-                # The server gives us a list of objects with an "address" field
-                logging.info(f"Successfully retrieved instances from {host}")
-                return [item["address"] for item in instances_raw]
+                with context.wrap_socket(sock, server_hostname=host) as ssock:
+                    ssock.sendall(b"LIST\n")
+                    response = ssock.makefile().readline()
+                    if not response:
+                        logging.warning(
+                            f"Did not receive a response from discovery server at {host}"
+                        )
+                        continue
+                    instances_raw = json.loads(response)
+                    # The server gives us a list of objects with an "address" field
+                    logging.info(f"Successfully retrieved instances from {host}")
+                    return [item["address"] for item in instances_raw]
+        except ssl.SSLError as e:
+             logging.debug(f"SSL Error connecting to {host}: {e}")
+             continue
         except socket.timeout:
             logging.debug(
                 f"Timeout connecting to discovery server at {host}:{DISCOVERY_SERVER_PORT}"
@@ -182,7 +192,7 @@ def discover_proxy(target_url, timeout=10):
     if not urlparse(schemed_target_url).scheme:
         schemed_target_url = f"http://{schemed_target_url}"
 
-    if is_url_reachable_locally(schemed_target_url, timeout=3):
+    if is_url_reachable_locally(schemed_target_url, timeout=timeout):
         logging.info(f"URL {target_url} is directly reachable. No proxy needed.")
         return target_url  # Return the original URL
 
