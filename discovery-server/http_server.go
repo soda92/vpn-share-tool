@@ -1,14 +1,90 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 )
 
-const httpListenPort = "8080"
+const (
+	httpListenPort = "8080"
+	SharePath      = "/mnt/samba_share/VPN共享工具"
+)
+
+type updateInfo struct {
+	Version string `json:"version"`
+	URL     string `json:"url"`
+}
+
+var reVersion = regexp.MustCompile(`vpn-share-tool_v(\d+)([a-z]+)\.exe`)
+
+func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
+	entries, err := os.ReadDir(SharePath)
+	if err != nil {
+		log.Printf("Failed to read share path: %v", err)
+		http.Error(w, "Failed to check for updates", http.StatusInternalServerError)
+		return
+	}
+
+	type version struct {
+		Counter int
+		Suffix  string
+		Full    string
+		File    string
+	}
+
+	var versions []version
+
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		matches := reVersion.FindStringSubmatch(e.Name())
+		if len(matches) == 3 {
+			counter, _ := strconv.Atoi(matches[1])
+			suffix := matches[2]
+			versions = append(versions, version{
+				Counter: counter,
+				Suffix:  suffix,
+				Full:    fmt.Sprintf("v%d%s", counter, suffix),
+				File:    e.Name(),
+			})
+		}
+	}
+
+	if len(versions) == 0 {
+		http.Error(w, "No versions found", http.StatusNotFound)
+		return
+	}
+
+	sort.Slice(versions, func(i, j int) bool {
+		if versions[i].Counter != versions[j].Counter {
+			return versions[i].Counter > versions[j].Counter
+		}
+		// Compare suffixes (length then alphabetic)
+		// e.g. 'aa' > 'z'.
+		if len(versions[i].Suffix) != len(versions[j].Suffix) {
+			return len(versions[i].Suffix) > len(versions[j].Suffix)
+		}
+		return versions[i].Suffix > versions[j].Suffix
+	})
+
+	latest := versions[0]
+	resp := updateInfo{
+		Version: latest.Full,
+		URL:     fmt.Sprintf("/download/%s", latest.File),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
 
 func startHTTPServer() {
 	mux := http.NewServeMux()
@@ -20,6 +96,10 @@ func startHTTPServer() {
 	mux.HandleFunc("/tagged-urls/", handleTaggedURLs)
 	mux.HandleFunc("/cluster-proxies", handleClusterProxies)
 	mux.HandleFunc("/toggle-debug-proxy", handleToggleDebugProxy)
+	
+	// Update routes
+	mux.HandleFunc("/latest-version", handleLatestVersion)
+	mux.Handle("/download/", http.StripPrefix("/download/", http.FileServer(http.Dir(SharePath))))
 
 	// Serve the Vue frontend
 	fsys, err := fs.Sub(frontendDist, "frontend/dist")
