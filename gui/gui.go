@@ -4,13 +4,17 @@ import (
 	"embed"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"os"
 	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -20,22 +24,100 @@ import (
 //go:embed i18n/*.json
 var i18nFS embed.FS
 
+//go:embed version.txt
+var versionFile string
+
+var Version = "dev"
+
 const (
 	startPort = 10081
 )
+
+func checkUpdate(w fyne.Window) {
+	info, err := core.CheckForUpdates()
+	if err != nil {
+		log.Printf("Failed to check for updates: %v", err)
+		return
+	}
+
+	if info.Version != Version && Version != "dev" {
+		dialog.ShowConfirm(
+			l("updateAvailableTitle"),
+			l("updateAvailableContent", map[string]interface{}{"version": info.Version}),
+			func(b bool) {
+				if b {
+					// Perform update
+					currentExe, err := os.Executable()
+					if err != nil {
+						dialog.ShowError(err, w)
+						return
+					}
+
+					newExe := currentExe + ".new"
+					oldExe := currentExe + ".old"
+
+					// Download
+					resp, err := http.Get(core.DiscoveryServerURL + info.URL)
+					if err != nil {
+						dialog.ShowError(err, w)
+						return
+					}
+					defer resp.Body.Close()
+
+					out, err := os.Create(newExe)
+					if err != nil {
+						dialog.ShowError(err, w)
+						return
+					}
+					
+					_, err = io.Copy(out, resp.Body)
+					out.Close()
+					if err != nil {
+						dialog.ShowError(err, w)
+						return
+					}
+
+					// Rename current to old
+					if err := os.Rename(currentExe, oldExe); err != nil {
+						dialog.ShowError(err, w)
+						return
+					}
+
+					// Rename new to current
+					if err := os.Rename(newExe, currentExe); err != nil {
+						// Try to rollback
+						os.Rename(oldExe, currentExe)
+						dialog.ShowError(err, w)
+						return
+					}
+					
+					// Make executable on Linux/Mac
+					os.Chmod(currentExe, 0755)
+
+					dialog.ShowInformation(l("updateSuccessTitle"), l("updateSuccessContent"), w)
+					fyne.CurrentApp().Quit()
+				}
+			},
+			w,
+		)
+	}
+}
 
 func Run() {
 	proxyURL := flag.String("proxy-url", "", "URL to proxy on startup")
 	startMinimized := flag.Bool("minimized", false, "start minimized with windows start")
 	flag.Parse()
 
+	if v := strings.TrimSpace(versionFile); v != "" {
+		Version = v
+	}
 	core.Version = Version
 
 	initI18n()
 	SetAutostart(true)
 
 	myApp := app.New()
-	myWindow := myApp.NewWindow(l("vpnShareToolTitle"))
+	myWindow := myApp.NewWindow(l("vpnShareToolTitle") + " " + Version)
 
 	// Find an available port for the API server
 	apiPort, err := findAvailablePort(startPort)
@@ -57,6 +139,8 @@ func Run() {
 		ip := <-core.IPReadyChan
 		fyne.Do(func() {
 			serverStatus.SetText(fmt.Sprintf("Server running on: %s", ip))
+			// Check for updates after connection is established
+			checkUpdate(myWindow)
 		})
 	}()
 

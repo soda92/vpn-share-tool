@@ -201,14 +201,18 @@ func runBuildWindows() error {
 	}
 	fmt.Printf("Build Version: %s\n", version)
 
+	// Write version to gui/version.txt
+	versionFile := filepath.Join(rootDir, "gui", "version.txt")
+	if err := os.WriteFile(versionFile, []byte(version), 0644); err != nil {
+		return fmt.Errorf("failed to write version file: %w", err)
+	}
+
 	// Build frontend
 	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
 		return err
 	}
 
-	ldflags := fmt.Sprintf("-X github.com/soda92/vpn-share-tool/gui.Version=%s", version)
-
-	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool", "-ldflags", ldflags); err != nil {
+	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool"); err != nil {
 		return fmt.Errorf("fyne-cross failed: %w", err)
 	}
 	fmt.Println("✅ Windows build successful.")
