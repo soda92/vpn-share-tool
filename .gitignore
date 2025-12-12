@@ -34,4 +34,5 @@ discovery-server/discovery-server
 
 flutter_gui/linux/libcore*
 certs/
-core/ca.crt
+certs/*.key
+discovery-server/*.key

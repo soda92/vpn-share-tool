@@ -17,6 +17,9 @@ import ssl
 DISCOVERY_SERVER_HOSTS = ["192.168.0.81", "192.168.1.81"]
 DISCOVERY_SERVER_PORT = 45679
 
+# Placeholder for CA Cert injection
+CA_CERT_PEM = """__CA_CERT_PLACEHOLDER__"""
+
 
 def get_local_ip():
     """Attempts to detect the local IP address, preferring private networks (192.168.x.x)."""
@@ -108,10 +111,22 @@ def get_instance_list(timeout: int = 5):
     # 2. Add fallbacks
     candidate_hosts.extend(DISCOVERY_SERVER_HOSTS)
 
-    # Setup SSL context (Unverified for self-signed)
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
+    # Setup SSL context
+    if CA_CERT_PEM and "__CA_CERT_PLACEHOLDER__" not in CA_CERT_PEM:
+        try:
+            context = ssl.create_default_context(cadata=CA_CERT_PEM)
+            context.check_hostname = False # Discovery uses IP/different hostname often
+            logging.debug("Using embedded CA certificate for TLS.")
+        except Exception as e:
+            logging.warning(f"Failed to load embedded CA cert: {e}. Falling back to unverified TLS.")
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+    else:
+        logging.debug("No embedded CA certificate found. Using unverified TLS.")
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
 
     # 3. Try to connect to candidates
     for host in candidate_hosts:
