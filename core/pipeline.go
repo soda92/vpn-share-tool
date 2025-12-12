@@ -1,0 +1,155 @@
+package core
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strings"
+)
+
+var (
+	rePhisUrl            = regexp.MustCompile(`phisUrl\s*:\s*['"](.*?)['"]`)
+	reHttpPhis           = regexp.MustCompile(`Http\.phis\s*=\s*['"](.*?)['"]`)
+	reStopItBlock        = regexp.MustCompile(`function\s+_stopIt\(e\)\s*\{[\s\S]*?return\s+false;\s*\}`)
+	reShowModalCheck     = regexp.MustCompile(`if\s*\(\s*window\.showModalDialog\s*==\s*undefined\s*\)`)
+	reWindowOpenFallback = regexp.MustCompile(`window\.open\(url,obj,"width="\+w\+",height="\+h\+",modal=yes,toolbar=no,menubar=no,scrollbars=yes,resizeable=no,location=no,status=no"\);`)
+	reEhrOpenChrome      = regexp.MustCompile(`Ehr\.openChrome\s*=\s*function\s*\(\s*url\s*\)\s*\{`)
+	reEhrWindowOpen      = regexp.MustCompile(`window\.open\(\s*url\s*,\s*""\s*,\s*[^;]+\);`)
+	reInternalURL        = regexp.MustCompile(`(https?://)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|localhost)(:\d+)?`)
+)
+
+var DefaultProcessors = []ContentProcessor{
+	InjectDebugScript,
+	FixLegacyJS,
+	RewriteInternalURLs,
+	RewritePhisURLs,
+}
+
+type ProcessingContext struct {
+	ReqURL      *url.URL
+	ReqContext  context.Context
+	RespHeader  http.Header
+	Proxy       *SharedProxy
+}
+
+type ContentProcessor func(ctx *ProcessingContext, body string) string
+
+func RunPipeline(ctx *ProcessingContext, body string, processors []ContentProcessor) string {
+	for _, p := range processors {
+		body = p(ctx, body)
+	}
+	return body
+}
+
+func InjectDebugScript(ctx *ProcessingContext, body string) string {
+	if ctx.Proxy != nil && ctx.Proxy.GetEnableDebug() && strings.Contains(ctx.RespHeader.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
+		debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
+		script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
+		injectionHTML := "<script>" + string(script) + "</script>"
+		return strings.Replace(body, "</body>", injectionHTML+"</body>", 1)
+	}
+	return body
+}
+
+func FixLegacyJS(ctx *ProcessingContext, body string) string {
+	// Remove disable_backspace script using regex
+	body = reStopItBlock.ReplaceAllString(body, "")
+
+	// Replace openModalDialog logic
+	body = reShowModalCheck.ReplaceAllString(body, "if(true)")
+	body = reWindowOpenFallback.ReplaceAllString(body, `window.open(url, "_blank");`)
+	body = reEhrOpenChrome.ReplaceAllString(body, `Ehr.openChrome = function(url){ window.open(url, "_blank"); return;`)
+	body = reEhrWindowOpen.ReplaceAllString(body, `window.open(url, "_blank");`)
+	return body
+}
+
+func RewriteInternalURLs(ctx *ProcessingContext, body string) string {
+	contentType := ctx.RespHeader.Get("Content-Type")
+	if strings.Contains(contentType, "text/") ||
+		strings.Contains(contentType, "application/javascript") ||
+		strings.Contains(contentType, "application/json") ||
+		strings.Contains(ctx.ReqURL.Path, ".jsp") {
+
+		matches := reInternalURL.FindAllString(body, -1)
+		if len(matches) > 0 {
+			replacements := make(map[string]string)
+			originalHost, ctxOk := ctx.ReqContext.Value(originalHostKey).(string)
+
+			for _, match := range matches {
+				if _, processed := replacements[match]; processed {
+					continue
+				}
+
+				if MyIP != "" && strings.Contains(match, MyIP) {
+					continue
+				}
+
+				newProxy, err := ShareUrlAndGetProxy(match)
+				if err != nil {
+					log.Printf("Error creating proxy for internal URL %s: %v", match, err)
+					continue
+				}
+
+				if !ctxOk {
+					if MyIP != "" {
+						replacements[match] = fmt.Sprintf("http://%s:%d", MyIP, newProxy.RemotePort)
+					}
+				} else {
+					hostParts := strings.Split(originalHost, ":")
+					proxyHost := hostParts[0]
+					replacements[match] = fmt.Sprintf("http://%s:%d", proxyHost, newProxy.RemotePort)
+				}
+			}
+
+			for oldURL, newURL := range replacements {
+				if oldURL != newURL {
+					log.Printf("Rewriting body URL: %s -> %s", oldURL, newURL)
+					body = strings.ReplaceAll(body, oldURL, newURL)
+				}
+			}
+		}
+	}
+	return body
+}
+
+func RewritePhisURLs(ctx *ProcessingContext, body string) string {
+	if strings.Contains(ctx.ReqURL.Path, "showView.jsp") {
+		matchesHttpPhis := reHttpPhis.FindStringSubmatch(body)
+		matchesPhisUrl := rePhisUrl.FindStringSubmatch(body)
+
+		var originalPhisURL string
+		var foundMatch bool
+
+		if len(matchesPhisUrl) > 1 {
+			originalPhisURL = matchesPhisUrl[1]
+			foundMatch = true
+		} else if len(matchesHttpPhis) > 1 {
+			originalPhisURL = matchesHttpPhis[1]
+			foundMatch = true
+		}
+
+		if foundMatch {
+			log.Printf("Found phis URL: %s", originalPhisURL)
+
+			newProxy, err := ShareUrlAndGetProxy(originalPhisURL)
+			if err != nil {
+				log.Printf("Error creating proxy for phis URL: %v", err)
+			} else {
+				originalHost, ok := ctx.ReqContext.Value(originalHostKey).(string)
+				if !ok {
+					log.Printf("Error: originalHost not found in request context for URL %s", ctx.ReqURL.String())
+				} else {
+					hostParts := strings.Split(originalHost, ":")
+					newProxyURL := fmt.Sprintf("http://%s:%d%s", hostParts[0], newProxy.RemotePort, newProxy.Path)
+
+					log.Printf("Replacing phis URL with: %s", newProxyURL)
+					body = strings.Replace(body, originalPhisURL, newProxyURL, 1)
+				}
+			}
+		}
+	}
+	return body
+}

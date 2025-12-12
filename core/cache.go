@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
-	"context"
 	_ "embed"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	// "mime"
 	"net/http"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -23,15 +21,6 @@ var injectorScript []byte
 
 //go:embed calendar.unpacked.js
 var calendarScript []byte
-
-var rePhisUrl = regexp.MustCompile(`phisUrl\s*:\s*['"](.*?)['"]`)
-var reHttpPhis = regexp.MustCompile(`Http\.phis\s*=\s*['"](.*?)['"]`)
-var reStopItBlock = regexp.MustCompile(`function\s+_stopIt\(e\)\s*\{[\s\S]*?return\s+false;\s*\}`)
-var reShowModalCheck = regexp.MustCompile(`if\s*\(\s*window\.showModalDialog\s*==\s*undefined\s*\)`)
-var reWindowOpenFallback = regexp.MustCompile(`window\.open\(url,obj,"width="\+w\+",height="\+h\+",modal=yes,toolbar=no,menubar=no,scrollbars=yes,resizeable=no,location=no,status=no"\);`)
-var reEhrOpenChrome = regexp.MustCompile(`Ehr\.openChrome\s*=\s*function\s*\(\s*url\s*\)\s*\{`)
-var reEhrWindowOpen = regexp.MustCompile(`window\.open\(\s*url\s*,\s*""\s*,\s*[^;]+\);`)
-var reInternalURL = regexp.MustCompile(`(https?://)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|localhost)(:\d+)?`)
 
 // cacheEntry holds the cached response data and headers.
 type cacheEntry struct {
@@ -57,16 +46,6 @@ func NewCachingTransport(transport http.RoundTripper, proxy *SharedProxy) *Cachi
 		Cache:     cache,
 		Proxy:     proxy,
 	}
-}
-
-func (t *CachingTransport) injectDebugScript(body string, header http.Header) string {
-	if t.Proxy != nil && t.Proxy.GetEnableDebug() && strings.Contains(header.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
-		debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
-		script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
-		injectionHTML := "<script>" + string(script) + "</script>"
-		return strings.Replace(body, "</body>", injectionHTML+"</body>", 1)
-	}
-	return body
 }
 
 // RoundTrip implements the http.RoundTripper interface.
@@ -99,50 +78,72 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		return resp, nil
 	}
 
-	// We only cache GET requests for static assets.
-	ext := filepath.Ext(req.URL.Path)
-	isCacheable := false
-	if req.Method == http.MethodGet {
-		switch ext {
-		case ".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".ico":
-			isCacheable = true
+	// Determine if the asset is "Static" (Cache, No Modification)
+	ext := strings.ToLower(filepath.Ext(req.URL.Path))
+	isStatic := false
+	switch ext {
+	// CSS is considered dynamic as it might need URL rewriting
+	case ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2", ".ttf", ".eot":
+		isStatic = true
+	case ".js":
+		// Only cache common libraries, treat app JS as dynamic
+		lowerPath := strings.ToLower(req.URL.Path)
+		if strings.Contains(lowerPath, "jquery") || strings.Contains(lowerPath, "bootstrap") || strings.Contains(lowerPath, "moment") {
+			isStatic = true
 		}
 	}
 
-	// If cacheable, check the cache first.
-	if isCacheable {
+	// 1. STATIC ASSETS: Cache Strategy (No Pipeline)
+	if isStatic {
 		if entry, ok := t.Cache.Get(req.URL.String()); ok {
-			log.Printf("Cache HIT for: %s", req.URL.String())
-
-			// We have the clean body. We must re-apply any injections (like the debugger script)
-			// because the EnableDebug flag might have changed.
-			bodyStr := string(entry.Body)
-
-			bodyStr = t.injectDebugScript(bodyStr, entry.Header)
-
-			// Convert back to bytes
-			finalBody := []byte(bodyStr)
-
+			log.Printf("Cache HIT for static: %s", req.URL.String())
 			resp := &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     entry.Header,
-				Body:       io.NopCloser(bytes.NewReader(finalBody)),
+				Body:       io.NopCloser(bytes.NewReader(entry.Body)),
 				Request:    req,
 			}
-
-			// Update Content-Length if changed (though for chunked/compressed it might not matter, but good practice)
-			if len(finalBody) != len(entry.Body) {
-				resp.Header.Del("Content-Length")
-			}
-
-			// Capture the cached response (using clean body)
 			CaptureRequest(req, resp, reqBody, entry.Body)
 			return resp, nil
 		}
-		log.Printf("Cache MISS for: %s", req.URL.String())
+		log.Printf("Cache MISS for static: %s", req.URL.String())
+
+		// Fetch
+		transport := t.Transport
+		if transport == nil {
+			transport = http.DefaultTransport
+		}
+		resp, err := transport.RoundTrip(req)
+		if err != nil {
+			return nil, err
+		}
+
+		// Read Body
+		var respBody []byte
+		if resp.Body != nil {
+			respBody, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body.Close()
+		}
+
+		// Cache if 200 OK
+		if resp.StatusCode == http.StatusOK && respBody != nil {
+			t.Cache.Add(req.URL.String(), cacheEntry{
+				Header: resp.Header,
+				Body:   respBody,
+			})
+		}
+
+		if respBody != nil {
+			resp.Body = io.NopCloser(bytes.NewReader(respBody))
+		}
+		CaptureRequest(req, resp, reqBody, respBody)
+		return resp, nil
 	}
 
-	// If not cacheable or not in cache, make the request.
+	// 2. DYNAMIC/APP ASSETS: Pipeline Strategy (No Cache)
 	transport := t.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
@@ -152,19 +153,18 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		return nil, err
 	}
 
-	// Read the response body for capturing and caching
 	var respBody []byte
-	var decompressedBody []byte // Declare here for scope access
+	var decompressedBody []byte
 
 	if resp.Body != nil {
-		var err error
 		respBody, err = io.ReadAll(resp.Body)
 		if err != nil {
 			log.Printf("Error reading response body: %v", err)
 			return nil, err
 		}
+		resp.Body.Close()
 
-		// Decompress body if necessary
+		// Decompress
 		var reader io.ReadCloser
 		switch resp.Header.Get("Content-Encoding") {
 		case "gzip":
@@ -187,144 +187,33 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			return nil, err
 		}
 
-		// Now, use decompressedBody for all manipulations
+		// Run Pipeline
 		bodyStr := string(decompressedBody)
 		originalBodyStr := bodyStr
 
-		// 1. Inject script (Only if enabled)
-		bodyStr = t.injectDebugScript(bodyStr, resp.Header)
-
-		// Remove disable_backspace script using regex
-		bodyStr = reStopItBlock.ReplaceAllString(bodyStr, "")
-
-		// Replace openModalDialog logic
-		bodyStr = reShowModalCheck.ReplaceAllString(bodyStr, "if(true)")
-		bodyStr = reWindowOpenFallback.ReplaceAllString(bodyStr, `window.open(url, "_blank");`)
-		bodyStr = reEhrOpenChrome.ReplaceAllString(bodyStr, `Ehr.openChrome = function(url){ window.open(url, "_blank"); return;`)
-		bodyStr = reEhrWindowOpen.ReplaceAllString(bodyStr, `window.open(url, "_blank");`)
-
-		// 1.5. General URL rewriting for internal IPs
-		// Check content type to avoid processing unnecessary files (like images, though images usually don't have text bodies we decompress as text)
-		contentType := resp.Header.Get("Content-Type")
-		if strings.Contains(contentType, "text/") ||
-			strings.Contains(contentType, "application/javascript") ||
-			strings.Contains(contentType, "application/json") ||
-			strings.Contains(req.URL.Path, ".jsp") {
-
-			matches := reInternalURL.FindAllString(bodyStr, -1)
-			if len(matches) > 0 {
-				replacements := make(map[string]string)
-				originalHost, ctxOk := req.Context().Value(originalHostKey).(string)
-
-				for _, match := range matches {
-					if _, processed := replacements[match]; processed {
-						continue
-					}
-
-					// Don't replace if it's already pointing to our proxy IP (avoid loops)
-					// Simple check: if MyIP is set and match contains it.
-					// Note: MyIP is global in core package.
-					if MyIP != "" && strings.Contains(match, MyIP) {
-						continue
-					}
-
-					newProxy, err := ShareUrlAndGetProxy(match)
-					if err != nil {
-						log.Printf("Error creating proxy for internal URL %s: %v", match, err)
-						continue
-					}
-
-					if !ctxOk {
-						// Attempt to get from MyIP/ApiPort if context missing (fallback)
-						if MyIP != "" {
-							replacements[match] = fmt.Sprintf("http://%s:%d", MyIP, newProxy.RemotePort)
-						}
-					} else {
-						hostParts := strings.Split(originalHost, ":")
-						proxyHost := hostParts[0]
-						replacements[match] = fmt.Sprintf("http://%s:%d", proxyHost, newProxy.RemotePort)
-					}
-				}
-
-				for oldURL, newURL := range replacements {
-					if oldURL != newURL {
-						log.Printf("Rewriting body URL: %s -> %s", oldURL, newURL)
-						bodyStr = strings.ReplaceAll(bodyStr, oldURL, newURL)
-					}
-				}
-			}
+		ctx := &ProcessingContext{
+			ReqURL:     req.URL,
+			ReqContext: req.Context(),
+			RespHeader: resp.Header,
+			Proxy:      t.Proxy,
 		}
 
-		// 2. Handle Http.phis replacement
-		if strings.Contains(req.URL.Path, "showView.jsp") {
-			// Regex for Http.phis = '...'
-			matchesHttpPhis := reHttpPhis.FindStringSubmatch(bodyStr)
+		bodyStr = RunPipeline(ctx, bodyStr, DefaultProcessors)
 
-			// Regex for phisUrl:'...'
-			matchesPhisUrl := rePhisUrl.FindStringSubmatch(bodyStr)
-
-			var originalPhisURL string
-			var foundMatch bool
-
-			if len(matchesPhisUrl) > 1 {
-				originalPhisURL = matchesPhisUrl[1]
-				foundMatch = true
-			} else if len(matchesHttpPhis) > 1 {
-				originalPhisURL = matchesHttpPhis[1]
-				foundMatch = true
-			}
-
-			if foundMatch {
-				log.Printf("Found phis URL: %s", originalPhisURL)
-
-				newProxy, err := ShareUrlAndGetProxy(originalPhisURL)
-				if err != nil {
-					log.Printf("Error creating proxy for phis URL: %v", err)
-				} else {
-					originalHost, ok := req.Context().Value(originalHostKey).(string)
-					if !ok {
-						log.Printf("Error: originalHost not found in request context for URL %s", req.URL.String())
-					} else {
-						hostParts := strings.Split(originalHost, ":")
-						// Construct the new URL, preserving the path from the original
-						newProxyURL := fmt.Sprintf("http://%s:%d%s", hostParts[0], newProxy.RemotePort, newProxy.Path)
-
-						log.Printf("Replacing phis URL with: %s", newProxyURL)
-						bodyStr = strings.Replace(bodyStr, originalPhisURL, newProxyURL, 1)
-					}
-				}
-			}
-		}
-
-		// If body was modified, update respBody and headers
+		// Update response if modified
 		if bodyStr != originalBodyStr {
 			respBody = []byte(bodyStr)
 			resp.Header.Del("Content-Encoding")
 			resp.Header.Del("Content-Length")
 		} else {
-			// If no modifications, the captured body should still be the decompressed one
 			respBody = decompressedBody
 			resp.Header.Del("Content-Encoding")
 		}
 
-		// Restore the body for the client
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
-
-		// Capture the request and the clean (decompressed) response body
 		CaptureRequest(req, resp, reqBody, decompressedBody)
 	} else {
-		// If there was no body, capture the request anyway
 		CaptureRequest(req, resp, reqBody, nil)
-	}
-
-	// If cacheable, store the response in the cache.
-	if isCacheable && resp.StatusCode == http.StatusOK {
-		entry := cacheEntry{
-			Header: resp.Header,
-			// Store the clean body in cache so we can re-inject (or not) on next hit
-			Body: decompressedBody,
-		}
-		t.Cache.Add(req.URL.String(), entry)
 	}
 
 	return resp, nil
