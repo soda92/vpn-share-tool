@@ -7,7 +7,6 @@ import (
 	"net/http"
 )
 
-
 func handleGetActiveProxies(w http.ResponseWriter, r *http.Request) {
 	proxies := GetProxies()
 	w.Header().Set("Content-Type", "application/json")

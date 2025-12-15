@@ -94,7 +94,7 @@ func handleConnection(conn net.Conn) {
 				updatedInstance := existingInstance
 				updatedInstance.LastSeen = time.Now()
 				instances[instanceAddress] = updatedInstance
-				
+
 				// log.Printf("Heartbeat from: %s", instanceAddress)
 				if _, err := conn.Write([]byte("OK\n")); err != nil {
 					log.Printf("Error writing to %s: %v", remoteAddr, err)

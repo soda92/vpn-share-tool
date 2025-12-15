@@ -6,7 +6,6 @@ import (
 	"net/http"
 )
 
-
 func canReachHandler(w http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("url")
 	if targetURL == "" {

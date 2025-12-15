@@ -167,7 +167,7 @@ func BasicAuth(next http.Handler) http.Handler {
 func startHTTPServer() {
 	// Protected Mux for Dashboard and Management APIs
 	protectedMux := http.NewServeMux()
-	
+
 	// API routes (Protected)
 	protectedMux.HandleFunc("/create-proxy", handleCreateProxy)
 	protectedMux.HandleFunc("/instances", handleGetInstances)
@@ -193,16 +193,16 @@ func startHTTPServer() {
 
 	// Root Mux
 	rootMux := http.NewServeMux()
-	
+
 	// Public Routes (for Auto-Update)
 	rootMux.HandleFunc("/latest-version", handleLatestVersion)
 	rootMux.Handle("/download/", http.StripPrefix("/download/", http.FileServer(http.Dir(SharePath))))
-	
+
 	// Delegate everything else to Protected Mux
 	rootMux.Handle("/", BasicAuth(protectedMux))
 
 	log.Printf("Starting discovery HTTP server on port %s", httpListenPort)
-	
+
 	// Load embedded certificates
 	cert, err := tls.X509KeyPair(serverCert, serverKey)
 	if err != nil {

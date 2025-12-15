@@ -34,7 +34,7 @@ func runGenCerts() error {
 	if err != nil {
 		return err
 	}
-	
+
 	certsDir := filepath.Join(rootDir, "certs")
 	if err := os.MkdirAll(certsDir, 0755); err != nil {
 		return err
@@ -45,7 +45,7 @@ func runGenCerts() error {
 	if err != nil {
 		return err
 	}
-	
+
 	if err := savePEM(filepath.Join(certsDir, "ca.crt"), "CERTIFICATE", caCert); err != nil {
 		return err
 	}

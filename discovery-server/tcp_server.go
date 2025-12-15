@@ -10,7 +10,7 @@ const listenPort = "45679"
 
 func startTCPServer() {
 	log.Printf("Starting discovery TCP server on port %s", listenPort)
-	
+
 	var listener net.Listener
 	var err error
 

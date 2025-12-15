@@ -104,18 +104,18 @@ func IncrementSuffix(s string) string {
 	}
 	runes := []rune(s)
 	last := len(runes) - 1
-	
+
 	if runes[last] < 'z' {
 		runes[last]++
 		return string(runes)
 	}
-	
+
 	// If last char is 'z', reset it to 'a' and increment previous
 	runes[last] = 'a'
 	if last > 0 {
 		return IncrementSuffix(string(runes[:last])) + "a"
 	}
-	
+
 	// If it was just "z", return "aa"
 	return "aa"
 }
@@ -126,7 +126,7 @@ func BumpVersion() (string, *ReleaseConfig, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	
+
 	today := time.Now().Format("2006-01-02")
 
 	if config.Version.CurrentDate != today {
@@ -138,7 +138,7 @@ func BumpVersion() (string, *ReleaseConfig, error) {
 		// Same day, increment suffix
 		config.Version.Suffix = IncrementSuffix(config.Version.Suffix)
 	}
-	
+
 	if err := saveReleaseConfig(config); err != nil {
 		return "", nil, fmt.Errorf("failed to save bumped version: %w", err)
 	}
@@ -159,11 +159,11 @@ func GetCurrentVersion() (string, *ReleaseConfig, error) {
 
 func incrementVersion(config *ReleaseConfig) string {
 	// Deprecated in favor of BumpVersion logic, but keeping for compatibility if needed internally
-v, _, err := BumpVersion()
-if err != nil {
-    // Or handle more gracefully depending on expected usage.
-    panic(fmt.Sprintf("failed to bump version in incrementVersion: %v", err))
-}
+	v, _, err := BumpVersion()
+	if err != nil {
+		// Or handle more gracefully depending on expected usage.
+		panic(fmt.Sprintf("failed to bump version in incrementVersion: %v", err))
+	}
 	return v
 }
 
@@ -207,7 +207,7 @@ func runRelease() error {
 	if err != nil {
 		return fmt.Errorf("failed to get current version: %w", err)
 	}
-	
+
 	// Determine share path
 	var sharePath string
 	if runtime.GOOS == "windows" {
