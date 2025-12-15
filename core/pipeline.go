@@ -32,10 +32,10 @@ var DefaultProcessors = []ContentProcessor{
 }
 
 type ProcessingContext struct {
-	ReqURL      *url.URL
-	ReqContext  context.Context
-	RespHeader  http.Header
-	Proxy       *SharedProxy
+	ReqURL     *url.URL
+	ReqContext context.Context
+	RespHeader http.Header
+	Proxy      *SharedProxy
 }
 
 type ContentProcessor func(ctx *ProcessingContext, body string) string
@@ -77,7 +77,7 @@ func RewriteInternalURLs(ctx *ProcessingContext, body string) string {
 		strings.Contains(ctx.ReqURL.Path, ".jsp") {
 
 		regexes := []*regexp.Regexp{reLocalhost, rePrivate10, rePrivate172, rePrivate192}
-		
+
 		uniqueMatches := make(map[string]bool)
 		for _, re := range regexes {
 			matches := re.FindAllString(body, -1)

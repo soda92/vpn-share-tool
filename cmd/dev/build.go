@@ -85,12 +85,12 @@ func copyServerCerts() error {
 	if err != nil {
 		return err
 	}
-	
+
 	files := []string{"server.crt", "server.key"}
 	for _, file := range files {
 		src := filepath.Join(rootDir, "certs", file)
 		dst := filepath.Join(rootDir, "discovery-server", file)
-		
+
 		data, err := os.ReadFile(src)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -106,7 +106,7 @@ func copyServerCerts() error {
 				return err
 			}
 		}
-		
+
 		if err := os.WriteFile(dst, data, 0644); err != nil {
 			return err
 		}
@@ -141,7 +141,7 @@ func runBuildServer() error {
 	if runtime.GOOS == "windows" {
 		output += ".exe"
 	}
-	
+
 	// Ensure dist dir exists
 	if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
 		return err
@@ -162,7 +162,7 @@ func copyCertsToCore() error {
 	}
 	src := filepath.Join(rootDir, "certs", "ca.crt")
 	dst := filepath.Join(rootDir, "core", "ca.crt")
-	
+
 	data, err := os.ReadFile(src)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -178,7 +178,7 @@ func copyCertsToCore() error {
 			return err
 		}
 	}
-	
+
 	return os.WriteFile(dst, data, 0644)
 }
 

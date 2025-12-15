@@ -8,7 +8,6 @@ import (
 	"net/http"
 )
 
-
 func handleTriggerUpdate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

@@ -17,9 +17,9 @@ var runCmd = &cobra.Command{
 }
 
 var runTestCmd = &cobra.Command{
-	Use:   "test",
+	Use:     "test",
 	Aliases: []string{"test-project"},
-	Short: "Run test project",
+	Short:   "Run test project",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runRunTestProject()
 	},

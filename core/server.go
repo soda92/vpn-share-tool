@@ -52,5 +52,3 @@ func SetMyIP(ip string) {
 	log.Printf("Device IP set to: %s", MyIP)
 	// Trigger a signal? For now just logging.
 }
-
-

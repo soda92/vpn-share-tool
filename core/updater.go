@@ -30,7 +30,7 @@ func TriggerUpdate() (bool, error) {
 	}
 
 	log.Printf("Update available: %s -> %s. Applying update...", Version, info.Version)
-	
+
 	if err := ApplyUpdate(info); err != nil {
 		return false, err
 	}
@@ -45,7 +45,7 @@ func ApplyUpdate(info *UpdateInfo) error {
 	if err != nil {
 		return err
 	}
-	
+
 	exeDir := filepath.Dir(currentExe)
 	exeName := filepath.Base(currentExe)
 	newExe := filepath.Join(exeDir, exeName+".new")
@@ -70,7 +70,7 @@ func ApplyUpdate(info *UpdateInfo) error {
 	if err != nil {
 		return err
 	}
-	
+
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		out.Close()
 		return err
@@ -110,14 +110,14 @@ pause
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("failed to start update script: %w", err)
 		}
-		
+
 		os.Exit(0)
 		return nil
 	}
 
 	// Linux/Unix: Rename running file and restart
 	oldExe := currentExe + ".old"
-	
+
 	// Rename current to old
 	if err := os.Rename(currentExe, oldExe); err != nil {
 		return fmt.Errorf("failed to rename current exe: %w", err)
@@ -129,11 +129,11 @@ pause
 		os.Rename(oldExe, currentExe)
 		return fmt.Errorf("failed to rename new exe: %w", err)
 	}
-	
+
 	log.Printf("Restarting process...")
 	startNewProcess(currentExe, args)
 	os.Exit(0)
-	
+
 	return nil
 }
 
@@ -146,7 +146,7 @@ func startNewProcess(exePath string, args []string) {
 	// os.StartProcess expects argv to include the program name as first element?
 	// Yes, argv[0].
 	newArgs := append([]string{exePath}, args...)
-	
+
 	_, err := os.StartProcess(exePath, newArgs, &attr)
 	if err != nil {
 		log.Printf("Failed to restart process: %v", err)

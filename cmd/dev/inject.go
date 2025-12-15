@@ -46,10 +46,20 @@ func runInjectCert() error {
 		return err
 	}
 
+	// Try certs/ca.crt first (generated), then core/ca.crt (embedded/committed)
 	caPath := filepath.Join(rootDir, "certs", "ca.crt")
 	caBytes, err := os.ReadFile(caPath)
+	if os.IsNotExist(err) {
+		// If certs/ca.crt doesn't exist, try core/ca.crt
+		caPath = filepath.Join(rootDir, "core", "ca.crt")
+		caBytes, err = os.ReadFile(caPath)
+	}
 	if err != nil {
-		return fmt.Errorf("failed to read CA cert: %w", err)
+		// If there was an error (from either read attempt), handle it.
+		if os.IsNotExist(err) {
+			return fmt.Errorf("CA certificate not found in certs/ or core/")
+		}
+		return fmt.Errorf("failed to read CA cert from %s: %w", caPath, err)
 	}
 	caContent := string(caBytes)
 
@@ -68,18 +78,18 @@ func runInjectCert() error {
 	// Regex to match CA_CERT_PEM block (placeholder or existing)
 	// Matches: CA_CERT_PEM = """...""" allowing for whitespace
 	reCACertBlock := regexp.MustCompile(`CA_CERT_PEM\s*=\s*"""[\s\S]*?"""`)
-	
+
 	newDef := fmt.Sprintf("CA_CERT_PEM = \"\"\"%s\"\"\"", caContent)
-	
+
 	if reCACertBlock.MatchString(libContent) {
 		newContent := reCACertBlock.ReplaceAllString(libContent, newDef)
-		
+
 		if err := os.WriteFile(destPath, []byte(newContent), 0644); err != nil {
 			return fmt.Errorf("failed to write dist/libproxy.py: %w", err)
 		}
 		fmt.Printf("✅ CA Certificate injected into %s\n", destPath)
 		return nil
-	} 
-	
+	}
+
 	return fmt.Errorf("CA_CERT_PEM definition not found in libproxy.py")
 }
