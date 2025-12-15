@@ -28,12 +28,24 @@ func handleConnection(conn net.Conn) {
 	log.Printf("Accepted connection from %s", remoteAddr)
 
 	scanner := bufio.NewScanner(conn)
-	for scanner.Scan() {
+	for {
+		// Set read deadline to detect dead clients (Heartbeat is every 5s)
+		conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+
+		if !scanner.Scan() {
+			break
+		}
+
+		// Reset write deadline for the response
+		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+
 		message := scanner.Text()
 		parts := strings.Split(message, " ")
 		command := parts[0]
 
-		mutex.Lock()
+		var response []byte
+		shouldWrite := false
+
 		switch command {
 		case "REGISTER":
 			if len(parts) < 2 {
@@ -47,40 +59,34 @@ func handleConnection(conn net.Conn) {
 			}
 
 			instanceAddress = net.JoinHostPort(remoteAddr, apiPort)
+
+			mutex.Lock()
 			instances[instanceAddress] = Instance{
 				Address:  instanceAddress,
 				Version:  version,
 				LastSeen: time.Now(),
 			}
+			mutex.Unlock()
+
 			log.Printf("Registered instance: %s (v%s)", instanceAddress, version)
-			response := fmt.Sprintf("OK %s\n", remoteAddr)
-			if _, err := conn.Write([]byte(response)); err != nil {
-				log.Printf("Error writing to %s: %v", remoteAddr, err)
-				mutex.Unlock()
-				return
-			}
+			response = []byte(fmt.Sprintf("OK %s\n", remoteAddr))
+			shouldWrite = true
 
 		case "LIST":
+			mutex.Lock()
 			activeInstances := make([]Instance, 0, len(instances))
 			for _, instance := range instances {
 				activeInstances = append(activeInstances, instance)
 			}
-			mutex.Unlock() // Unlock early
+			mutex.Unlock()
 
 			data, err := json.Marshal(activeInstances)
 			if err != nil {
 				log.Printf("Failed to marshal instance list: %v", err)
-				continue // Skip to next loop iteration
+				continue
 			}
-			if _, err := conn.Write(data); err != nil {
-				log.Printf("Error writing to %s: %v", remoteAddr, err)
-				return // Exit function
-			}
-			if _, err := conn.Write([]byte("\n")); err != nil {
-				log.Printf("Error writing to %s: %v", remoteAddr, err)
-				return // Exit function
-			}
-			continue // Continue to next loop iteration to avoid double-unlock
+			response = append(data, '\n')
+			shouldWrite = true
 
 		case "HEARTBEAT":
 			if len(parts) < 2 {
@@ -89,31 +95,30 @@ func handleConnection(conn net.Conn) {
 			}
 			apiPort := parts[1]
 			instanceAddress = net.JoinHostPort(remoteAddr, apiPort)
+
+			mutex.Lock()
 			if existingInstance, ok := instances[instanceAddress]; ok {
-				// Preserve existing fields like Version
 				updatedInstance := existingInstance
 				updatedInstance.LastSeen = time.Now()
 				instances[instanceAddress] = updatedInstance
-
-				// log.Printf("Heartbeat from: %s", instanceAddress)
-				if _, err := conn.Write([]byte("OK\n")); err != nil {
-					log.Printf("Error writing to %s: %v", remoteAddr, err)
-					mutex.Unlock()
-					return
-				}
+				response = []byte("OK\n")
 			} else {
 				log.Printf("Heartbeat from unregistered instance: %s", instanceAddress)
-				if _, err := conn.Write([]byte("ERR_NOT_REGISTERED\n")); err != nil {
-					log.Printf("Error writing to %s: %v", remoteAddr, err)
-					mutex.Unlock()
-					return
-				}
+				response = []byte("ERR_NOT_REGISTERED\n")
 			}
+			mutex.Unlock()
+			shouldWrite = true
 
 		default:
 			log.Printf("Unknown command from %s: %s", remoteAddr, command)
 		}
-		mutex.Unlock()
+
+		if shouldWrite {
+			if _, err := conn.Write(response); err != nil {
+				log.Printf("Error writing to %s: %v", remoteAddr, err)
+				return
+			}
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
