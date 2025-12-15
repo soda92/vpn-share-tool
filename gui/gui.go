@@ -76,6 +76,7 @@ func Run() {
 		// Just print to stdout if file fails
 		fmt.Printf("Failed to open log file: %v\n", err)
 	} else {
+		defer logFile.Close()
 		log.SetOutput(&safeMultiWriter{writers: []io.Writer{os.Stdout, logFile}})
 	}
 
