@@ -64,7 +64,7 @@ type safeMultiWriter struct {
 
 func (t *safeMultiWriter) Write(p []byte) (n int, err error) {
 	for _, w := range t.writers {
-		n, _ = w.Write(p) // Ignore errors (e.g. from closed stdout)
+		_, _ = w.Write(p) // Ignore errors (e.g. from closed stdout)
 	}
 	return len(p), nil
 }
