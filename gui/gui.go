@@ -124,6 +124,9 @@ func Run() {
 
 	// Server section
 	serverStatus := widget.NewLabel(l("startingServer"))
+	
+	// Channel to signal the startup proxy logic that IP is ready
+	startupProxyChan := make(chan string, 1)
 
 	go func() {
 		for ip := range core.IPReadyChan {
@@ -133,6 +136,12 @@ func Run() {
 				// Check for updates after connection is established
 				checkUpdate(myWindow)
 			})
+			
+			// Signal startup proxy logic if it's waiting
+			select {
+			case startupProxyChan <- ip:
+			default:
+			}
 		}
 	}()
 
@@ -159,8 +168,8 @@ func Run() {
 
 	if *proxyURL != "" {
 		go func() {
-			// Wait for the IP address to be ready
-			ip := <-core.IPReadyChan
+			// Wait for the IP address to be ready via our local broadcast channel
+			ip := <-startupProxyChan
 
 			newProxy, err := core.ShareUrlAndGetProxy(*proxyURL)
 			if err != nil {
