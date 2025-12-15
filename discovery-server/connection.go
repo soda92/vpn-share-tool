@@ -31,14 +31,14 @@ func handleConnection(conn net.Conn) {
 	for {
 		// Set read deadline to detect dead clients (Heartbeat is every 5s)
 		conn.SetReadDeadline(time.Now().Add(15 * time.Second))
-		
+
 		if !scanner.Scan() {
 			break
 		}
-		
+
 		// Reset write deadline for the response
 		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		
+
 		message := scanner.Text()
 		parts := strings.Split(message, " ")
 		command := parts[0]
@@ -59,7 +59,7 @@ func handleConnection(conn net.Conn) {
 			}
 
 			instanceAddress = net.JoinHostPort(remoteAddr, apiPort)
-			
+
 			mutex.Lock()
 			instances[instanceAddress] = Instance{
 				Address:  instanceAddress,
@@ -67,7 +67,7 @@ func handleConnection(conn net.Conn) {
 				LastSeen: time.Now(),
 			}
 			mutex.Unlock()
-			
+
 			log.Printf("Registered instance: %s (v%s)", instanceAddress, version)
 			response = []byte(fmt.Sprintf("OK %s\n", remoteAddr))
 			shouldWrite = true
@@ -95,7 +95,7 @@ func handleConnection(conn net.Conn) {
 			}
 			apiPort := parts[1]
 			instanceAddress = net.JoinHostPort(remoteAddr, apiPort)
-			
+
 			mutex.Lock()
 			if existingInstance, ok := instances[instanceAddress]; ok {
 				updatedInstance := existingInstance

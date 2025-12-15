@@ -124,7 +124,7 @@ func Run() {
 
 	// Server section
 	serverStatus := widget.NewLabel(l("startingServer"))
-	
+
 	// Channel to signal the startup proxy logic that IP is ready
 	startupProxyChan := make(chan string, 1)
 
@@ -136,7 +136,7 @@ func Run() {
 				// Check for updates after connection is established
 				checkUpdate(myWindow)
 			})
-			
+
 			// Signal startup proxy logic if it's waiting
 			select {
 			case startupProxyChan <- ip:
@@ -246,8 +246,6 @@ func Run() {
 		// Unselect the item so it can be clicked again.
 		sharedList.Unselect(id)
 	}
-
-
 
 	shareLogic := func(rawURL string) {
 		go func() {
