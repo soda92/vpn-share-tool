@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"regexp"
 
 	"github.com/spf13/cobra"
 )
@@ -21,8 +21,27 @@ func init() {
 	rootCmd.AddCommand(injectCertCmd)
 }
 
+func findProjectRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("could not find project root (go.mod not found)")
+		}
+		dir = parent
+	}
+}
+
 func runInjectCert() error {
-	rootDir, err := os.Getwd()
+	rootDir, err := findProjectRoot()
 	if err != nil {
 		return err
 	}
@@ -46,36 +65,21 @@ func runInjectCert() error {
 		return err
 	}
 
-	// Replace placeholder
-	placeholder := `CA_CERT_PEM = """__CA_CERT_PLACEHOLDER__"""`
+	// Regex to match CA_CERT_PEM block (placeholder or existing)
+	// Matches: CA_CERT_PEM = """...""" allowing for whitespace
+	reCACertBlock := regexp.MustCompile(`CA_CERT_PEM\s*=\s*"""[\s\S]*?"""`)
+	
 	newDef := fmt.Sprintf("CA_CERT_PEM = \"\"\"%s\"\"\"", caContent)
 	
-	var newContent string
-	if strings.Contains(libContent, placeholder) {
-		newContent = strings.Replace(libContent, placeholder, newDef, 1)
-	} else if strings.Contains(libContent, "CA_CERT_PEM = \"\"\"") {
-		// Already injected? Re-inject with current cert
-		fmt.Println("ℹ️ Source libproxy.py seems already injected. Updating in dist...")
-		startMarker := "CA_CERT_PEM = \"\"\""
-		startIndex := strings.Index(libContent, startMarker)
-		if startIndex == -1 {
-			return fmt.Errorf("could not find CA_CERT_PEM definition")
-		}
-		endIndex := strings.Index(libContent[startIndex+len(startMarker):], "\"\"\"")
-		if endIndex == -1 {
-			return fmt.Errorf("could not find end of CA_CERT_PEM definition")
-		}
-		endIndex += startIndex + len(startMarker) // Adjust to absolute
+	if reCACertBlock.MatchString(libContent) {
+		newContent := reCACertBlock.ReplaceAllString(libContent, newDef)
 		
-		newContent = libContent[:startIndex] + newDef + libContent[endIndex+3:]
-	} else {
-		return fmt.Errorf("placeholder not found in libproxy.py")
-	}
+		if err := os.WriteFile(destPath, []byte(newContent), 0644); err != nil {
+			return fmt.Errorf("failed to write dist/libproxy.py: %w", err)
+		}
+		fmt.Printf("✅ CA Certificate injected into %s\n", destPath)
+		return nil
+	} 
 	
-	if err := os.WriteFile(destPath, []byte(newContent), 0644); err != nil {
-		return fmt.Errorf("failed to write dist/libproxy.py: %w", err)
-	}
-
-	fmt.Printf("✅ CA Certificate injected into %s\n", destPath)
-	return nil
+	return fmt.Errorf("CA_CERT_PEM definition not found in libproxy.py")
 }

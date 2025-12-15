@@ -115,22 +115,14 @@ def get_instance_list(timeout: int = 5):
     if CA_CERT_PEM and "__CA_CERT_PLACEHOLDER__" not in CA_CERT_PEM:
         try:
             context = ssl.create_default_context(cadata=CA_CERT_PEM)
-            context.check_hostname = False  # Discovery uses IP/different hostname often
+            context.check_hostname = False # Discovery uses IP/different hostname often
             logging.debug("Using embedded CA certificate for TLS.")
         except Exception as e:
-            logging.warning(
-                f"Failed to load embedded CA cert: {e}. Falling back to unverified TLS."
-            )
-            context = ssl.create_default_context()
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
+            logging.error(f"Failed to load embedded CA cert: {e}. Exiting for security.")
+            sys.exit(1)
     else:
-        logging.warning(
-            "No embedded CA certificate found. Using unverified TLS (Security Risk)."
-        )
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
+        logging.error("No embedded CA certificate found. Exiting for security.")
+        sys.exit(1)
 
     # 3. Try to connect to candidates
     for host in candidate_hosts:
