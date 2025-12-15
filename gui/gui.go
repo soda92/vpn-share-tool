@@ -4,6 +4,7 @@ import (
 	"embed"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -56,7 +57,28 @@ func checkUpdate(w fyne.Window) {
 	}
 }
 
+// safeMultiWriter writes to multiple writers, ignoring errors from individual writers
+type safeMultiWriter struct {
+	writers []io.Writer
+}
+
+func (t *safeMultiWriter) Write(p []byte) (n int, err error) {
+	for _, w := range t.writers {
+		n, _ = w.Write(p) // Ignore errors (e.g. from closed stdout)
+	}
+	return len(p), nil
+}
+
 func Run() {
+	// Setup Logging
+	logFile, err := os.OpenFile("vpn-share-tool.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		// Just print to stdout if file fails
+		fmt.Printf("Failed to open log file: %v\n", err)
+	} else {
+		log.SetOutput(&safeMultiWriter{writers: []io.Writer{os.Stdout, logFile}})
+	}
+
 	// Clean up update script if present (from previous update).
 	// We ignore the error because the file usually doesn't exist, which is fine.
 	os.Remove("update.bat")
@@ -69,6 +91,8 @@ func Run() {
 		Version = v
 	}
 	core.Version = Version
+
+	log.Printf("Starting VPN Share Tool version %s", Version)
 
 	initI18n()
 	SetAutostart(true)
@@ -102,12 +126,14 @@ func Run() {
 	serverStatus := widget.NewLabel(l("startingServer"))
 
 	go func() {
-		ip := <-core.IPReadyChan
-		fyne.Do(func() {
-			serverStatus.SetText(fmt.Sprintf("Server running on: %s", ip))
-			// Check for updates after connection is established
-			checkUpdate(myWindow)
-		})
+		for ip := range core.IPReadyChan {
+			localIP := ip
+			fyne.Do(func() {
+				serverStatus.SetText(fmt.Sprintf("Server running on: %s", localIP))
+				// Check for updates after connection is established
+				checkUpdate(myWindow)
+			})
+		}
 	}()
 
 	// Client/Proxy section
@@ -144,9 +170,9 @@ func Run() {
 
 			// Print the shared URL to the console
 			sharedURL := fmt.Sprintf("http://%s:%d%s", ip, newProxy.RemotePort, newProxy.Path)
-			fmt.Println("--- SHARED URL ---")
-			fmt.Println(sharedURL)
-			fmt.Println("------------------")
+			log.Println("--- SHARED URL ---")
+			log.Println(sharedURL)
+			log.Println("------------------")
 
 			// Also add it to the UI list for consistency
 			addProxyToUI(newProxy)
