@@ -46,10 +46,18 @@ func runInjectCert() error {
 		return err
 	}
 
+	// Try certs/ca.crt first (generated), then core/ca.crt (embedded/committed)
 	caPath := filepath.Join(rootDir, "certs", "ca.crt")
+	if _, err := os.Stat(caPath); os.IsNotExist(err) {
+		caPath = filepath.Join(rootDir, "core", "ca.crt")
+		if _, err := os.Stat(caPath); os.IsNotExist(err) {
+			return fmt.Errorf("CA certificate not found in certs/ or core/")
+		}
+	}
+
 	caBytes, err := os.ReadFile(caPath)
 	if err != nil {
-		return fmt.Errorf("failed to read CA cert: %w", err)
+		return fmt.Errorf("failed to read CA cert from %s: %w", caPath, err)
 	}
 	caContent := string(caBytes)
 
