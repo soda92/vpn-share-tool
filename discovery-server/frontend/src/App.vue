@@ -45,7 +45,7 @@ const latestVersion = ref('');
 const fetchServers = async () => {
   try {
     const response = await axios.get('/instances');
-    servers.value = response.data || [];
+    servers.value = (response.data || []).sort((a, b) => a.address.localeCompare(b.address));
   } catch (err) { console.error('Error fetching servers:', err); }
 };
 const fetchClusterProxies = async () => {

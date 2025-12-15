@@ -3,7 +3,7 @@
     <span class="server-label" v-t="'active_servers_title'"></span>:
     <span v-for="(server, index) in servers" :key="server.address" class="server-item">
       {{ server.address }}
-      <span v-if="server.version" class="server-version">(v{{ server.version }})</span>
+      <span v-if="server.version" class="server-version">({{ server.version }})</span>
       <button 
         v-if="latestVersion && server.version && server.version !== latestVersion" 
         class="update-btn"
