@@ -80,6 +80,78 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	// Determine if the asset is "Static" (Cache, No Modification)
 	isStatic := IsCacheable(req.URL.Path)
 
+	// Intercept Captcha Image
+	if strings.Contains(req.URL.Path, "voCode") {
+		transport := t.Transport
+		if transport == nil {
+			transport = http.DefaultTransport
+		}
+		resp, err := transport.RoundTrip(req)
+		if err != nil {
+			return nil, err
+		}
+
+		var respBody []byte
+		if resp.Body != nil {
+			respBody, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body.Close()
+		}
+
+		// Solve and Store
+		if len(respBody) > 0 {
+			solution := SolveCaptcha(respBody)
+			
+			// Get Client IP
+			clientIP := req.Header.Get("X-Forwarded-For")
+			if clientIP == "" {
+				clientIP = req.RemoteAddr
+			}
+			// XFF might contain multiple IPs, take the first
+			if strings.Contains(clientIP, ",") {
+				clientIP = strings.Split(clientIP, ",")[0]
+			}
+			clientIP = strings.TrimSpace(clientIP)
+
+			StoreCaptchaSolution(clientIP, solution)
+		}
+
+		resp.Body = io.NopCloser(bytes.NewReader(respBody))
+		CaptureRequest(req, resp, reqBody, respBody)
+		return resp, nil
+	}
+
+	// Intercept Captcha Solution Poll
+	if strings.HasSuffix(req.URL.Path, "/_proxy/captcha-solution") {
+		clientIP := req.Header.Get("X-Forwarded-For")
+		if clientIP == "" {
+			clientIP = req.RemoteAddr
+		}
+		if strings.Contains(clientIP, ",") {
+			clientIP = strings.Split(clientIP, ",")[0]
+		}
+		clientIP = strings.TrimSpace(clientIP)
+
+		solution := GetCaptchaSolution(clientIP)
+		if solution != "" {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(bytes.NewBufferString(solution)),
+				Request:    req,
+			}, nil
+		}
+		// Not ready yet
+		return &http.Response{
+			StatusCode: http.StatusNotFound, // JS will retry
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewBufferString("Not found")),
+			Request:    req,
+		}, nil
+	}
+
 	// 1. STATIC ASSETS: Cache Strategy (No Pipeline)
 	if isStatic {
 		if entry, ok := t.Cache.Get(req.URL.String()); ok {

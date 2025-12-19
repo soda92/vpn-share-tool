@@ -40,6 +40,53 @@ type ProcessingContext struct {
 
 type ContentProcessor func(ctx *ProcessingContext, body string) string
 
+func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
+	if strings.Contains(body, `<img id="img" src="/phis/app/login/voCode"`) {
+		log.Println("Injecting Captcha Solver Script")
+		
+		solverScript := `
+<script>
+(function() {
+    var attempts = 0;
+    var maxAttempts = 30; // 30 seconds
+    var checkInterval = setInterval(function() {
+        attempts++;
+        if (attempts > maxAttempts) {
+            clearInterval(checkInterval);
+            return;
+        }
+        
+        // Ensure we are talking to the proxy
+        fetch('/_proxy/captcha-solution')
+            .then(function(res) {
+                if (res.ok) return res.text();
+                throw new Error('Not ready');
+            })
+            .then(function(code) {
+                if (code && code.trim() !== "") {
+                    var input = document.getElementById('verifyCode');
+                    if (input) {
+                        input.value = code;
+                        console.log('Auto-filled Captcha: ' + code);
+                        
+                        // Optional: Trigger change event if needed by frameworks
+                        var event = new Event('input', { bubbles: true });
+                        input.dispatchEvent(event);
+                        
+                        clearInterval(checkInterval);
+                    }
+                }
+            })
+            .catch(function(e) {}); 
+    }, 1000);
+})();
+</script>`
+		return strings.Replace(body, "</body>", solverScript+"</body>", 1)
+	}
+	return body
+}
+
+
 func RunPipeline(ctx *ProcessingContext, body string, processors []ContentProcessor) string {
 	for _, p := range processors {
 		body = p(ctx, body)
