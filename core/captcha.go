@@ -3,7 +3,10 @@ package core
 import (
 	"bytes"
 	_ "embed"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -89,13 +92,42 @@ func getPythonPath() (string, error) {
 	if _, err := os.Stat(ocrEnvPython); err == nil {
 		return ocrEnvPython, nil
 	}
-	
+
 	return "python3", nil
 }
 
-// SolveCaptcha attempts to solve the image.
 func SolveCaptcha(imgData []byte) string {
-	log.Printf("Solving captcha... (%d bytes)", len(imgData))
+	if DiscoveryServerURL != "" {
+		log.Printf("trying to use server to solve...")
+
+		// 1. Format the endpoint URL
+		url := fmt.Sprintf("%s/solve-captcha", DiscoveryServerURL)
+
+		// 2. Post the raw bytes
+		resp, err := http.Post(url, "application/octet-stream", bytes.NewBuffer(imgData))
+		if err != nil {
+			log.Printf("server request failed: %v", err)
+			return SolveCaptchaLocal(imgData)
+		}
+		defer resp.Body.Close()
+
+		// 3. Read the response from the server
+		solution, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("failed to read server response: %v", err)
+			return SolveCaptchaLocal(imgData)
+		}
+
+		return string(solution)
+	}
+
+	log.Printf("no discovery server. trying locally...")
+	return SolveCaptchaLocal(imgData)
+}
+
+// SolveCaptchaLocal attempts to solve the image locally using Python.
+func SolveCaptchaLocal(imgData []byte) string {
+	log.Printf("Solving captcha locally... (%d bytes)", len(imgData))
 
 	// 1. Create temp script file
 	tmpFile, err := os.CreateTemp("", "ocr_solver_*.py")
@@ -104,7 +136,7 @@ func SolveCaptcha(imgData []byte) string {
 		return ""
 	}
 	defer os.Remove(tmpFile.Name())
-	
+
 	if _, err := tmpFile.Write(ocrSolverScript); err != nil {
 		log.Printf("Failed to write temp solver script: %v", err)
 		return ""
