@@ -22,6 +22,7 @@ var (
 	rePrivate10          = regexp.MustCompile(`(https?://)(10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?`)
 	rePrivate172         = regexp.MustCompile(`(https?://)(172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?`)
 	rePrivate192         = regexp.MustCompile(`(https?://)(192\.168\.\d{1,3}\.\d{1,3})(:\d+)?`)
+	reCaptchaImage       = regexp.MustCompile(`<img[^>]+src=["']/phis/app/login/voCode["']`)
 )
 
 var DefaultProcessors = []ContentProcessor{
@@ -42,44 +43,68 @@ type ProcessingContext struct {
 type ContentProcessor func(ctx *ProcessingContext, body string) string
 
 func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
-	if strings.Contains(body, `<img id="img" src="/phis/app/login/voCode"`) {
+	if reCaptchaImage.MatchString(body) {
 		log.Println("Injecting Captcha Solver Script")
 		
 		solverScript := `
 <script>
 (function() {
-    var attempts = 0;
-    var maxAttempts = 30; // 30 seconds
-    var checkInterval = setInterval(function() {
-        attempts++;
-        if (attempts > maxAttempts) {
-            clearInterval(checkInterval);
-            return;
-        }
+    var checkInterval;
+    
+    function startPolling() {
+        if (checkInterval) clearInterval(checkInterval);
         
-        // Ensure we are talking to the proxy
-        fetch('/_proxy/captcha-solution')
-            .then(function(res) {
-                if (res.ok) return res.text();
-                throw new Error('Not ready');
-            })
-            .then(function(code) {
-                if (code && code.trim() !== "") {
-                    var input = document.getElementById('verifyCode');
-                    if (input) {
-                        input.value = code;
-                        console.log('Auto-filled Captcha: ' + code);
-                        
-                        // Optional: Trigger change event if needed by frameworks
-                        var event = new Event('input', { bubbles: true });
-                        input.dispatchEvent(event);
-                        
-                        clearInterval(checkInterval);
+        var attempts = 0;
+        var maxAttempts = 60; // 60 seconds
+        
+        // Reset input on polling start (new image)
+        var input = document.getElementById('verifyCode');
+        if (input) input.value = '';
+
+        checkInterval = setInterval(function() {
+            attempts++;
+            if (attempts > maxAttempts) {
+                clearInterval(checkInterval);
+                return;
+            }
+            
+            fetch('/_proxy/captcha-solution')
+                .then(function(res) {
+                    if (res.ok) return res.text();
+                    throw new Error('Not ready');
+                })
+                .then(function(code) {
+                    // Check if input is empty (to avoid overwriting user edits if they started typing?)
+                    // But if we just started polling, we cleared it.
+                    if (code && code.trim() !== "") {
+                        var input = document.getElementById('verifyCode');
+                        if (input) {
+                            input.value = code;
+                            console.log('Auto-filled Captcha: ' + code);
+                            
+                            var event = new Event('input', { bubbles: true });
+                            input.dispatchEvent(event);
+                            
+                            clearInterval(checkInterval);
+                        }
                     }
-                }
-            })
-            .catch(function(e) {}); 
-    }, 1000);
+                })
+                .catch(function(e) {}); 
+        }, 500); // Poll faster
+    }
+
+    // Start on load
+    startPolling();
+
+    // Restart on image click
+    var img = document.getElementById('img');
+    if (img) {
+        img.addEventListener('click', function() {
+            console.log('Captcha refreshed, restarting solver...');
+            // Wait a bit for the new request to trigger
+            setTimeout(startPolling, 500);
+        });
+    }
 })();
 </script>`
 		return strings.Replace(body, "</body>", solverScript+"</body>", 1)
