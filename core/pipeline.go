@@ -67,7 +67,7 @@ func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
                 clearInterval(checkInterval);
                 return;
             }
-            
+
             fetch('/_proxy/captcha-solution')
                 .then(function(res) {
                     if (res.ok) return res.text();
@@ -81,10 +81,10 @@ func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
                         if (input) {
                             input.value = code;
                             console.log('Auto-filled Captcha: ' + code);
-                            
+
                             var event = new Event('input', { bubbles: true });
                             input.dispatchEvent(event);
-                            
+
                             clearInterval(checkInterval);
                         }
                     }
