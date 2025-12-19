@@ -100,22 +100,24 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			resp.Body.Close()
 		}
 
-		// Solve and Store
+		// Solve and Store (Async to avoid blocking image load)
 		if len(respBody) > 0 {
-			solution := SolveCaptcha(respBody)
-			
 			// Get Client IP
 			clientIP := req.Header.Get("X-Forwarded-For")
 			if clientIP == "" {
 				clientIP = req.RemoteAddr
 			}
-			// XFF might contain multiple IPs, take the first
 			if strings.Contains(clientIP, ",") {
 				clientIP = strings.Split(clientIP, ",")[0]
 			}
 			clientIP = strings.TrimSpace(clientIP)
 
-			StoreCaptchaSolution(clientIP, solution)
+			go func(data []byte, ip string) {
+				solution := SolveCaptcha(data)
+				if solution != "" {
+					StoreCaptchaSolution(ip, solution)
+				}
+			}(respBody, clientIP)
 		}
 
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))

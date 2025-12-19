@@ -29,6 +29,7 @@ var DefaultProcessors = []ContentProcessor{
 	FixLegacyJS,
 	RewriteInternalURLs,
 	RewritePhisURLs,
+	InjectCaptchaSolver,
 }
 
 type ProcessingContext struct {

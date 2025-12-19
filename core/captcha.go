@@ -111,6 +111,7 @@ func SolveCaptcha(imgData []byte) string {
 
 	// 3. Run Script
 	cmd := exec.Command(pythonPath, tmpFile.Name())
+	cmd.SysProcAttr = getSysProcAttr()
 	cmd.Stdin = bytes.NewReader(imgData)
 	var out bytes.Buffer
 	var stderr bytes.Buffer
