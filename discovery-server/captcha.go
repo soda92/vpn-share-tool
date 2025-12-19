@@ -1,4 +1,4 @@
-package core
+package main
 
 import (
 	"bytes"
@@ -9,42 +9,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 )
 
 //go:embed ocr_solver.py
 var ocrSolverScript []byte
-
-var (
-	captchaSolutions = make(map[string]string) // Map[ClientIP] -> Solution
-	captchaLock      sync.RWMutex
-)
-
-// StoreCaptchaSolution saves the solution for a client
-func StoreCaptchaSolution(clientIP, solution string) {
-	captchaLock.Lock()
-	defer captchaLock.Unlock()
-	captchaSolutions[clientIP] = solution
-	log.Printf("Stored captcha solution for %s: %s", clientIP, solution)
-}
-
-// ClearCaptchaSolution removes the stored solution for a client
-func ClearCaptchaSolution(clientIP string) {
-	captchaLock.Lock()
-	defer captchaLock.Unlock()
-	delete(captchaSolutions, clientIP)
-}
-
-// GetCaptchaSolution retrieves and deletes the solution (one-time use)
-func GetCaptchaSolution(clientIP string) string {
-	captchaLock.Lock()
-	defer captchaLock.Unlock()
-	if sol, ok := captchaSolutions[clientIP]; ok {
-		// will be deleted in ClearCaptchaSolution
-		return sol
-	}
-	return ""
-}
 
 func getPythonPath() (string, error) {
 	if runtime.GOOS == "windows" {
@@ -116,7 +84,6 @@ func SolveCaptcha(imgData []byte) string {
 
 	// 3. Run Script
 	cmd := exec.Command(pythonPath, tmpFile.Name())
-	cmd.SysProcAttr = getSysProcAttr()
 	cmd.Stdin = bytes.NewReader(imgData)
 	var out bytes.Buffer
 	var stderr bytes.Buffer

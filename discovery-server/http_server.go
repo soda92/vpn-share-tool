@@ -177,6 +177,7 @@ func startHTTPServer() {
 	protectedMux.HandleFunc("/toggle-debug-proxy", handleToggleDebugProxy)
 	protectedMux.HandleFunc("/toggle-captcha-proxy", handleCaptchaProxy)
 	protectedMux.HandleFunc("/trigger-update-remote", handleTriggerUpdateRemote)
+	protectedMux.HandleFunc("/solve-captcha", handleSolveCaptchaRequest)
 
 	// Serve the Vue frontend (Protected)
 	fsys, err := fs.Sub(frontendDist, "frontend/dist")
