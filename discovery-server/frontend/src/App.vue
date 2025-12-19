@@ -116,7 +116,7 @@ const toggleDebug = async (url, enable) => {
 const toggleCaptcha = async (url, enable) => {
   try {
     await axios.post('/toggle-captcha-proxy', { url, enable });
-    ElNotification({ title: 'Success', message: `Debugger ${enable ? 'enabled' : 'disabled'}`, type: 'success' });
+    ElNotification({ title: 'Success', message: `Auto captcha ${enable ? 'enabled' : 'disabled'}`, type: 'success' });
     // Refresh to show new status
     fetchTaggedURLs();
     fetchClusterProxies();
