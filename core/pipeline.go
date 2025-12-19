@@ -89,7 +89,7 @@ func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
                         }
                     }
                 })
-                .catch(function(e) {}); 
+                .catch(function(e) { console.error('Captcha solution fetch error:', e);});
         }, 500); // Poll faster
     }
 
