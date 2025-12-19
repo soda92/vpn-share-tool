@@ -28,6 +28,13 @@ func StoreCaptchaSolution(clientIP, solution string) {
 	log.Printf("Stored captcha solution for %s: %s", clientIP, solution)
 }
 
+// ClearCaptchaSolution removes the stored solution for a client
+func ClearCaptchaSolution(clientIP string) {
+	captchaLock.Lock()
+	defer captchaLock.Unlock()
+	delete(captchaSolutions, clientIP)
+}
+
 // GetCaptchaSolution retrieves and deletes the solution (one-time use)
 func GetCaptchaSolution(clientIP string) string {
 	captchaLock.Lock()

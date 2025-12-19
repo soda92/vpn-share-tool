@@ -112,6 +112,9 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			}
 			clientIP = strings.TrimSpace(clientIP)
 
+			// Clear old solution immediately to prevent JS from picking up stale data
+			ClearCaptchaSolution(clientIP)
+
 			go func(data []byte, ip string) {
 				solution := SolveCaptcha(data)
 				if solution != "" {
