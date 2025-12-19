@@ -28,6 +28,7 @@ type SharedProxy struct {
 	Handler     *httputil.ReverseProxy `json:"-"`
 	Server      *http.Server           `json:"-"`
 	EnableDebug bool                   `json:"enable_debug"`
+	EnableCaptcha bool                 `json:"enable_captcha"`
 	mu          sync.RWMutex
 }
 
@@ -41,6 +42,18 @@ func (p *SharedProxy) GetEnableDebug() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.EnableDebug
+}
+
+func (p *SharedProxy) SetEnableCaptcha(enable bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.EnableCaptcha = enable
+}
+
+func (p *SharedProxy) GetEnableCaptcha() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.EnableCaptcha
 }
 
 var (
@@ -255,6 +268,7 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 		Handler:     proxy,
 		Server:      server,
 		EnableDebug: true,
+		EnableCaptcha: true,
 	}
 
 	// Assign transport here to pass the newProxy reference

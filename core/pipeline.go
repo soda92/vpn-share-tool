@@ -43,7 +43,7 @@ type ProcessingContext struct {
 type ContentProcessor func(ctx *ProcessingContext, body string) string
 
 func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
-	if reCaptchaImage.MatchString(body) {
+	if ctx.Proxy != nil && ctx.Proxy.GetEnableCaptcha() && reCaptchaImage.MatchString(body) {
 		log.Println("Injecting Captcha Solver Script")
 		
 		solverScript := `

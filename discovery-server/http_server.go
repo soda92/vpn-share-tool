@@ -175,6 +175,7 @@ func startHTTPServer() {
 	protectedMux.HandleFunc("/tagged-urls/", handleTaggedURLs)
 	protectedMux.HandleFunc("/cluster-proxies", handleClusterProxies)
 	protectedMux.HandleFunc("/toggle-debug-proxy", handleToggleDebugProxy)
+	protectedMux.HandleFunc("/toggle-captcha-proxy", handleCaptchaProxy)
 	protectedMux.HandleFunc("/trigger-update-remote", handleTriggerUpdateRemote)
 
 	// Serve the Vue frontend (Protected)

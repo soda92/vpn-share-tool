@@ -21,6 +21,11 @@
                   @change="$emit('toggle-debug', url.url, $event.target.checked)">
                 🐞
               </label>
+              <label class="captcha-toggle" title="Toggle Captcha">
+                <input type="checkbox" :checked="url.enable_captcha"
+                  @change="$emit('toggle-captcha', url.url, $event.target.checked)">
+                🤖
+              </label>
             </div>
             <div v-else class="proxy-status inactive">
               Not proxied ({{ url.url.replace('http://', '').replace('https://', '') }})
@@ -63,7 +68,7 @@ defineProps({
   }
 });
 
-const emit = defineEmits(['save-tag', 'create-proxy', 'toggle-debug', 'rename-tag', 'delete-tag']);
+const emit = defineEmits(['save-tag', 'create-proxy', 'toggle-debug', 'toggle-captcha', 'rename-tag', 'delete-tag']);
 
 const handleRename = async (id, oldTag) => {
   try {

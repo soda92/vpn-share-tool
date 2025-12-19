@@ -39,13 +39,6 @@ func handleTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func normalizeURL(u string) string {
-	u = strings.TrimPrefix(u, "http://")
-	u = strings.TrimPrefix(u, "https://")
-	u = strings.TrimRight(u, "/")
-	return u
-}
-
 func normalizeHost(u string) string {
 	if !strings.HasPrefix(u, "http") {
 		u = "http://" + u
@@ -71,8 +64,9 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	// Enrich the tagged URLs with their proxy status
 	type EnrichedTaggedURL struct {
 		TaggedURL
-		ProxyURL    string `json:"proxy_url,omitempty"`
-		EnableDebug bool   `json:"enable_debug"`
+		ProxyURL      string `json:"proxy_url,omitempty"`
+		EnableDebug   bool   `json:"enable_debug"`
+		EnableCaptcha bool   `json:"enable_captcha"`
 	}
 
 	enrichedUrls := make([]EnrichedTaggedURL, len(urls))
@@ -82,6 +76,7 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 		if proxyInfo, ok := allProxies[normalizeHost(u.URL)]; ok {
 			enrichedUrls[i].ProxyURL = proxyInfo.SharedURL
 			enrichedUrls[i].EnableDebug = proxyInfo.EnableDebug
+			enrichedUrls[i].EnableCaptcha = proxyInfo.EnableCaptcha
 		}
 	}
 

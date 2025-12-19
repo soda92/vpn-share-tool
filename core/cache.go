@@ -81,7 +81,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	isStatic := IsCacheable(req.URL.Path)
 
 	// Intercept Captcha Image
-	if strings.Contains(req.URL.Path, "voCode") {
+	if strings.HasSuffix(req.URL.Path, "voCode") && t.Proxy != nil && t.Proxy.GetEnableCaptcha() {
 		transport := t.Transport
 		if transport == nil {
 			transport = http.DefaultTransport
