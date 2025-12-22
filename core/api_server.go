@@ -36,6 +36,7 @@ func StartApiServer(apiPort int) error {
 	mux.HandleFunc("/active-proxies", handleGetActiveProxies)
 	mux.HandleFunc("/toggle-debug", handleToggleDebug)
 	mux.HandleFunc("/trigger-update", handleTriggerUpdate)
+	mux.HandleFunc("/toggle-captcha", handleToggleCaptcha)
 
 	RegisterDebugRoutes(mux)
 

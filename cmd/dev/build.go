@@ -182,6 +182,7 @@ func copyCertsToCore() error {
 	return os.WriteFile(dst, data, 0644)
 }
 
+
 func runBuildDesktop() error {
 	fmt.Println("Building main application (Desktop)...")
 	rootDir, err := os.Getwd()

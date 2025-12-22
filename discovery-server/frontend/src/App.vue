@@ -11,6 +11,7 @@
         @save-tag="saveTaggedUrl"
         @create-proxy="createProxy"
         @toggle-debug="toggleDebug"
+        @toggle-captcha="toggleCaptcha"
         @rename-tag="renameTag"
         @delete-tag="deleteTag"
       />
@@ -19,6 +20,7 @@
       <ProxyList
         :cluster-proxies="clusterProxies"
         @toggle-debug="toggleDebug"
+        @toggle-captcha="toggleCaptcha"
       />
     </div>
 
@@ -103,6 +105,18 @@ const toggleDebug = async (url, enable) => {
   try {
     await axios.post('/toggle-debug-proxy', { url, enable });
     ElNotification({ title: 'Success', message: `Debugger ${enable ? 'enabled' : 'disabled'}`, type: 'success' });
+    // Refresh to show new status
+    fetchTaggedURLs();
+    fetchClusterProxies();
+  } catch (err) {
+    ElNotification({ title: 'Error', message: 'Failed to toggle debugger', type: 'error' });
+  }
+};
+
+const toggleCaptcha = async (url, enable) => {
+  try {
+    await axios.post('/toggle-captcha-proxy', { url, enable });
+    ElNotification({ title: 'Success', message: `Auto captcha ${enable ? 'enabled' : 'disabled'}`, type: 'success' });
     // Refresh to show new status
     fetchTaggedURLs();
     fetchClusterProxies();

@@ -30,6 +30,10 @@ func runDeploy(target string) error {
 
 	fmt.Println("Building executable...")
 
+	if err := copyServerCerts(); err != nil {
+		return fmt.Errorf("failed to copy server certs: %w", err)
+	}
+
 	// Build paths
 	rootDir, err := os.Getwd()
 	if err != nil {

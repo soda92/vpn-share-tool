@@ -22,6 +22,7 @@ var (
 	rePrivate10          = regexp.MustCompile(`(https?://)(10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?`)
 	rePrivate172         = regexp.MustCompile(`(https?://)(172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?`)
 	rePrivate192         = regexp.MustCompile(`(https?://)(192\.168\.\d{1,3}\.\d{1,3})(:\d+)?`)
+	reCaptchaImage       = regexp.MustCompile(`<img[^>]+src=["']/phis/app/login/voCode["']`)
 )
 
 var DefaultProcessors = []ContentProcessor{
@@ -29,6 +30,7 @@ var DefaultProcessors = []ContentProcessor{
 	FixLegacyJS,
 	RewriteInternalURLs,
 	RewritePhisURLs,
+	InjectCaptchaSolver,
 }
 
 type ProcessingContext struct {
@@ -39,6 +41,76 @@ type ProcessingContext struct {
 }
 
 type ContentProcessor func(ctx *ProcessingContext, body string) string
+
+func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
+	if ctx.Proxy != nil && ctx.Proxy.GetEnableCaptcha() && reCaptchaImage.MatchString(body) {
+		log.Println("Injecting Captcha Solver Script")
+
+		solverScript := `
+<script>
+(function() {
+    var checkInterval;
+    
+    function startPolling() {
+        if (checkInterval) clearInterval(checkInterval);
+        
+        var attempts = 0;
+        var maxAttempts = 60; // 30 seconds (60 * 500 ms)
+        
+        // Reset input on polling start (new image)
+        var input = document.getElementById('verifyCode');
+        if (input) input.value = '';
+
+        checkInterval = setInterval(function() {
+            attempts++;
+            if (attempts > maxAttempts) {
+                clearInterval(checkInterval);
+                return;
+            }
+
+            fetch('/_proxy/captcha-solution')
+                .then(function(res) {
+                    if (res.ok) return res.text();
+                    throw new Error('Not ready');
+                })
+                .then(function(code) {
+                    // Check if input is empty (to avoid overwriting user edits if they started typing?)
+                    // But if we just started polling, we cleared it.
+                    if (code && code.trim() !== "") {
+                        var input = document.getElementById('verifyCode');
+                        if (input) {
+                            input.value = code;
+                            console.log('Auto-filled Captcha: ' + code);
+
+                            var event = new Event('input', { bubbles: true });
+                            input.dispatchEvent(event);
+
+                            clearInterval(checkInterval);
+                        }
+                    }
+                })
+                .catch(function(e) { console.error('Captcha solution fetch error:', e);});
+        }, 500); // Poll faster
+    }
+
+    // Start on load
+    startPolling();
+
+    // Restart on image click
+    var img = document.getElementById('img');
+    if (img) {
+        img.addEventListener('click', function() {
+            console.log('Captcha refreshed, restarting solver...');
+            // Wait a bit for the new request to trigger
+            setTimeout(startPolling, 500);
+        });
+    }
+})();
+</script>`
+		return strings.Replace(body, "</body>", solverScript+"</body>", 1)
+	}
+	return body
+}
 
 func RunPipeline(ctx *ProcessingContext, body string, processors []ContentProcessor) string {
 	for _, p := range processors {
