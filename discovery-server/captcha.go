@@ -57,7 +57,7 @@ func getPythonPath() (string, error) {
 	if _, err := os.Stat(ocrEnvPython); err == nil {
 		return ocrEnvPython, nil
 	}
-	
+
 	return "python3", nil
 }
 
@@ -72,7 +72,7 @@ func SolveCaptcha(imgData []byte) string {
 		return ""
 	}
 	defer os.Remove(tmpFile.Name())
-	
+
 	if _, err := tmpFile.Write(ocrSolverScript); err != nil {
 		log.Printf("Failed to write temp solver script: %v", err)
 		return ""

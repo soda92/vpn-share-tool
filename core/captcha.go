@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,11 +83,7 @@ func getPythonPath() (string, error) {
 	}
 
 	// Linux / Other
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "python3", nil
-	}
-	ocrEnvPython := filepath.Join(homeDir, "ocr_env", "bin", "python")
+	ocrEnvPython := filepath.Join("/opt", "ocr_env", "bin", "python")
 	if _, err := os.Stat(ocrEnvPython); err == nil {
 		return ocrEnvPython, nil
 	}
@@ -102,9 +97,9 @@ func SolveCaptcha(imgData []byte) string {
 
 		// 1. Format the endpoint URL
 		url := fmt.Sprintf("%s/solve-captcha", DiscoveryServerURL)
-
+		client := GetHTTPClient()
 		// 2. Post the raw bytes
-		resp, err := http.Post(url, "application/octet-stream", bytes.NewBuffer(imgData))
+		resp, err := client.Post(url, "application/octet-stream", bytes.NewBuffer(imgData))
 		if err != nil {
 			log.Printf("server request failed: %v", err)
 			return SolveCaptchaLocal(imgData)
