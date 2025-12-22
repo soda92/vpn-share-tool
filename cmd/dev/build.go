@@ -125,10 +125,6 @@ func runBuildServer() error {
 		return fmt.Errorf("failed to copy server certs: %w", err)
 	}
 
-	if err := copyOcrScriptToServer(); err != nil {
-		return fmt.Errorf("failed to copy ocr scripts: %w", err)
-	}
-
 	// Build server frontend
 	if !noFrontend {
 		fmt.Println("Building server frontend...")
@@ -186,38 +182,6 @@ func copyCertsToCore() error {
 	return os.WriteFile(dst, data, 0644)
 }
 
-func copyOcrScriptToCore() error {
-	rootDir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	src := filepath.Join(rootDir, "ocr_solver.py")
-	dst := filepath.Join(rootDir, "core", "ocr_solver.py")
-
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(dst, data, 0644)
-}
-
-
-func copyOcrScriptToServer() error {
-	rootDir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	src := filepath.Join(rootDir, "ocr_solver.py")
-	dst := filepath.Join(rootDir, "discovery-server", "ocr_solver.py")
-
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(dst, data, 0644)
-}
 
 func runBuildDesktop() error {
 	fmt.Println("Building main application (Desktop)...")
@@ -228,9 +192,6 @@ func runBuildDesktop() error {
 
 	if err := copyCertsToCore(); err != nil {
 		return fmt.Errorf("failed to copy certs: %w", err)
-	}
-	if err := copyOcrScriptToCore(); err != nil {
-		return fmt.Errorf("failed to copy ocr scripts: %w", err)
 	}
 
 	// Build frontend
@@ -317,10 +278,6 @@ func runBuildWindows() error {
 
 	if err := copyCertsToCore(); err != nil {
 		return fmt.Errorf("failed to copy certs: %w", err)
-	}
-
-	if err := copyOcrScriptToCore(); err != nil {
-		return fmt.Errorf("failed to copy ocr scripts: %w", err)
 	}
 
 	// Bump version before building
