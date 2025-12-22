@@ -1,6 +1,3 @@
-discovery-server/ocr_solver.py
-core/ocr_solver.py
-
 /vpn-share-tool
 *.exe
 *.db
