@@ -3,6 +3,8 @@ package main
 import (
 	"io"
 	"net/http"
+
+	"github.com/soda92/vpn-share-tool/pkg/pythonenv"
 )
 
 // handleSolveCaptchaRequest receives an image and returns the solved text.
@@ -24,6 +26,6 @@ func handleSolveCaptchaRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	solution := SolveCaptcha(body)
+	solution := pythonenv.SolveCaptchaLocal(body)
 	w.Write([]byte(solution))
 }
