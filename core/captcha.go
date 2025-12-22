@@ -11,7 +11,6 @@ import (
 	"github.com/soda92/vpn-share-tool/pkg/pythonenv"
 )
 
-
 var (
 	captchaSolutions = make(map[string]string) // Map[ClientIP] -> Solution
 	captchaLock      sync.RWMutex
@@ -32,7 +31,7 @@ func ClearCaptchaSolution(clientIP string) {
 	delete(captchaSolutions, clientIP)
 }
 
-// GetCaptchaSolution retrieves and deletes the solution (one-time use)
+// GetCaptchaSolution retrieves the solution for a client
 func GetCaptchaSolution(clientIP string) string {
 	captchaLock.Lock()
 	defer captchaLock.Unlock()
@@ -71,4 +70,3 @@ func SolveCaptcha(imgData []byte) string {
 	log.Printf("no discovery server. trying locally...")
 	return pythonenv.SolveCaptchaLocal(imgData)
 }
-

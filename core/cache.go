@@ -102,16 +102,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 
 		// Solve and Store (Async to avoid blocking image load)
 		if len(respBody) > 0 {
-			// Get Client IP
-			clientIP := req.Header.Get("X-Forwarded-For")
-			if clientIP == "" {
-				clientIP = req.RemoteAddr
-			}
-			if strings.Contains(clientIP, ",") {
-				clientIP = strings.Split(clientIP, ",")[0]
-			}
-			clientIP = strings.TrimSpace(clientIP)
-
+			clientIP := getClientIP(req)
 			// Clear old solution immediately to prevent JS from picking up stale data
 			ClearCaptchaSolution(clientIP)
 
@@ -130,14 +121,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 
 	// Intercept Captcha Solution Poll
 	if strings.HasSuffix(req.URL.Path, "/_proxy/captcha-solution") {
-		clientIP := req.Header.Get("X-Forwarded-For")
-		if clientIP == "" {
-			clientIP = req.RemoteAddr
-		}
-		if strings.Contains(clientIP, ",") {
-			clientIP = strings.Split(clientIP, ",")[0]
-		}
-		clientIP = strings.TrimSpace(clientIP)
+		clientIP := getClientIP(req)
 
 		solution := GetCaptchaSolution(clientIP)
 		if solution != "" {

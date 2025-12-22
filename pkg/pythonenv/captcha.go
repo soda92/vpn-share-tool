@@ -31,8 +31,11 @@ func SolveCaptchaLocal(imgData []byte) string {
 	}
 	tmpFile.Close()
 
-	// 2. Get Python Path
-	pythonPath, _ := GetPythonPath()
+	pythonPath, err := GetPythonPath()
+	if err != nil {
+		log.Printf("Failed to get python path: %v", err)
+		return ""
+	}
 
 	// 3. Run Script
 	cmd := exec.Command(pythonPath, tmpFile.Name())

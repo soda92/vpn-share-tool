@@ -45,7 +45,7 @@ type ContentProcessor func(ctx *ProcessingContext, body string) string
 func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
 	if ctx.Proxy != nil && ctx.Proxy.GetEnableCaptcha() && reCaptchaImage.MatchString(body) {
 		log.Println("Injecting Captcha Solver Script")
-		
+
 		solverScript := `
 <script>
 (function() {
@@ -55,7 +55,7 @@ func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
         if (checkInterval) clearInterval(checkInterval);
         
         var attempts = 0;
-        var maxAttempts = 60; // 60 seconds
+        var maxAttempts = 60; // 30 seconds (60 * 500 ms)
         
         // Reset input on polling start (new image)
         var input = document.getElementById('verifyCode');
@@ -111,7 +111,6 @@ func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
 	}
 	return body
 }
-
 
 func RunPipeline(ctx *ProcessingContext, body string, processors []ContentProcessor) string {
 	for _, p := range processors {

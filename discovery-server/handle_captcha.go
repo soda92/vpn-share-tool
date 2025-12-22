@@ -14,12 +14,12 @@ func handleSolveCaptchaRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	defer r.Body.Close()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read body", http.StatusInternalServerError)
 		return
 	}
-	defer r.Body.Close()
 
 	if len(body) == 0 {
 		http.Error(w, "Empty body", http.StatusBadRequest)

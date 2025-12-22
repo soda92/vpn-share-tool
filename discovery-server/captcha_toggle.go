@@ -56,7 +56,7 @@ func handleCaptchaProxy(w http.ResponseWriter, r *http.Request) {
 
 		if resp.StatusCode == http.StatusOK {
 			found = true
-			log.Printf("Successfully toggled debug for %s on %s", req.URL, instance.Address)
+			log.Printf("Successfully toggled captcha for %s on %s", req.URL, instance.Address)
 		}
 	}
 
