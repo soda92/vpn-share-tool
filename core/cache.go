@@ -274,9 +274,10 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			resp.Header.Del("Content-Length")
 
 			if isGBK {
-				newContentType := strings.Replace(strings.ToLower(contentType), "gb2312", "utf-8", -1)
-				newContentType = strings.Replace(newContentType, "gbk", "utf-8", -1)
-				resp.Header.Set("Content-Type", newContentType)
+				if mediaType, params, err := mime.ParseMediaType(contentType); err == nil {
+					params["charset"] = "utf-8"
+					resp.Header.Set("Content-Type", mime.FormatMediaType(mediaType, params))
+				}
 			}
 		} else {
 			respBody = decompressedBody
