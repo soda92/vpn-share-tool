@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+
 	// "mime"
 	"net/http"
 	"strings"
 
 	lru "github.com/hashicorp/golang-lru/v2"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
 
 //go:embed injector.js
@@ -236,7 +239,23 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		}
 
 		// Run Pipeline
-		bodyStr := string(decompressedBody)
+		var bodyStr string
+		contentType := resp.Header.Get("Content-Type")
+		isGBK := strings.Contains(strings.ToLower(contentType), "gb2312") || strings.Contains(strings.ToLower(contentType), "gbk")
+
+		if isGBK {
+			reader := transform.NewReader(bytes.NewReader(decompressedBody), simplifiedchinese.GBK.NewDecoder())
+			decoded, err := io.ReadAll(reader)
+			if err != nil {
+				log.Printf("Error decoding GBK body: %v", err)
+				bodyStr = string(decompressedBody)
+			} else {
+				bodyStr = string(decoded)
+			}
+		} else {
+			bodyStr = string(decompressedBody)
+		}
+
 		originalBodyStr := bodyStr
 
 		ctx := &ProcessingContext{
@@ -253,9 +272,16 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			respBody = []byte(bodyStr)
 			resp.Header.Del("Content-Encoding")
 			resp.Header.Del("Content-Length")
+
+			if isGBK {
+				newContentType := strings.Replace(strings.ToLower(contentType), "gb2312", "utf-8", -1)
+				newContentType = strings.Replace(newContentType, "gbk", "utf-8", -1)
+				resp.Header.Set("Content-Type", newContentType)
+			}
 		} else {
 			respBody = decompressedBody
 			resp.Header.Del("Content-Encoding")
+			resp.Header.Del("Content-Length")
 		}
 
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
