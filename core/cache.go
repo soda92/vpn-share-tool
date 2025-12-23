@@ -8,8 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-
-	// "mime"
+	"mime"
 	"net/http"
 	"strings"
 
@@ -241,7 +240,11 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		// Run Pipeline
 		var bodyStr string
 		contentType := resp.Header.Get("Content-Type")
-		isGBK := strings.Contains(strings.ToLower(contentType), "gb2312") || strings.Contains(strings.ToLower(contentType), "gbk")
+		isGBK := false
+		if _, params, err := mime.ParseMediaType(contentType); err == nil {
+			charset := strings.ToLower(params["charset"])
+			isGBK = charset == "gbk" || charset == "gb2312"
+		}
 
 		if isGBK {
 			reader := transform.NewReader(bytes.NewReader(decompressedBody), simplifiedchinese.GBK.NewDecoder())
