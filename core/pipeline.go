@@ -113,6 +113,15 @@ func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
 }
 
 func RunPipeline(ctx *ProcessingContext, body string, processors []ContentProcessor) string {
+	// Skip processing for specific dynamic JS patterns or large libraries
+	path := strings.ToLower(ctx.ReqURL.Path)
+	if path == "*.js" {
+		return body
+	}
+	if !ctx.Proxy.GetEnableCaptcha() {
+		return body
+	}
+
 	for _, p := range processors {
 		body = p(ctx, body)
 	}

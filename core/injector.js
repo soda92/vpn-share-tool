@@ -13,7 +13,7 @@
     debugButton.style.cursor = 'pointer';
     debugButton.style.zIndex = '10000';
     debugButton.style.fontSize = '24px';
-    debugButton.innerHTML = '🐞';
+    debugButton.innerHTML = '\uD83D\uDC1E';
     debugButton.title = 'Open Debugger';
 
     debugButton.addEventListener('click', () => {
