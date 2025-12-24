@@ -14,7 +14,7 @@
                 🐞
               </label>
               <label class="captcha-toggle" title="Toggle Captcha">
-                <input type="checkbox" :checked="url.enable_captcha"
+                <input type="checkbox" :checked="proxy.enable_captcha"
                   @change="$emit('toggle-captcha', proxy.original_url, $event.target.checked)">
                 🤖
               </label>
