@@ -68,9 +68,12 @@ func removeProxy(p *SharedProxy) {
 
 	// 3. Signal the UI to update
 	ProxyRemovedChan <- p
+
+	// 4. Persist changes
+	SaveProxies()
 }
 
-func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
+func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error) {
 	if rawURL == "" {
 		return nil, fmt.Errorf("URL cannot be empty")
 	}
@@ -158,7 +161,7 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 				log.Printf("Redirecting to existing proxy: %s", newLocation)
 			} else {
 				log.Printf("Redirect location not proxied, creating new proxy for: %s", locationURL.String())
-				newProxy, err := ShareUrlAndGetProxy(locationURL.String())
+				newProxy, err := ShareUrlAndGetProxy(locationURL.String(), 0)
 				if err != nil {
 					log.Printf("Error creating new proxy for redirect: %v", err)
 				} else {
@@ -172,22 +175,41 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 	}
 
 	remotePort := 0
-	port := startPort
-	for {
+	
+	// Try requested port first
+	if requestedPort > 0 {
 		isUsed := false
 		for _, p := range Proxies {
-			if p.RemotePort == port {
+			if p.RemotePort == requestedPort {
 				isUsed = true
 				break
 			}
 		}
-		if !isUsed && isPortAvailable(port) {
-			remotePort = port
-			break
+		if !isUsed && isPortAvailable(requestedPort) {
+			remotePort = requestedPort
+		} else {
+			log.Printf("Requested port %d is not available or in use, falling back to auto-selection.", requestedPort)
 		}
-		port++
-		if port > startPort+1000 {
-			return nil, fmt.Errorf("could not find an available port")
+	}
+
+	if remotePort == 0 {
+		port := startPort
+		for {
+			isUsed := false
+			for _, p := range Proxies {
+				if p.RemotePort == port {
+					isUsed = true
+					break
+				}
+			}
+			if !isUsed && isPortAvailable(port) {
+				remotePort = port
+				break
+			}
+			port++
+			if port > startPort+1000 {
+				return nil, fmt.Errorf("could not find an available port")
+			}
 		}
 	}
 	
@@ -230,6 +252,8 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 	Proxies = append(Proxies, newProxy)
 
 	ProxyAddedChan <- newProxy
+
+	SaveProxies()
 
 	return newProxy, nil
 }

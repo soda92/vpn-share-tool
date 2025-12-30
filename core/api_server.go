@@ -46,6 +46,10 @@ func StartApiServer(apiPort int) error {
 	}
 
 	log.Printf("Starting API server on port %d", apiPort)
+
+	// Restore saved proxies
+	LoadProxies()
+
 	go registerWithDiscoveryServer(apiPort)
 	if err := apiServer.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("API server stopped with error: %w", err)

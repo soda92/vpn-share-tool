@@ -27,7 +27,7 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newProxy, err := ShareUrlAndGetProxy(req.URL)
+	newProxy, err := ShareUrlAndGetProxy(req.URL, 0)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create proxy: %v", err), http.StatusInternalServerError)
 		return

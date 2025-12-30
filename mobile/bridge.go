@@ -103,7 +103,7 @@ func StartGoBackendWithPort(port int) {
 
 // ShareURL shares a URL.
 func ShareURL(url string) {
-	go core.ShareUrlAndGetProxy(url)
+	go core.ShareUrlAndGetProxy(url, 0)
 }
 
 // GetProxies returns the list of shared proxies as a JSON string.

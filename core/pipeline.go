@@ -180,7 +180,7 @@ func RewriteInternalURLs(ctx *ProcessingContext, body string) string {
 					continue
 				}
 
-				newProxy, err := ShareUrlAndGetProxy(match)
+				newProxy, err := ShareUrlAndGetProxy(match, 0)
 				if err != nil {
 					log.Printf("Error creating proxy for internal URL %s: %v", match, err)
 					continue
@@ -227,10 +227,23 @@ func RewritePhisURLs(ctx *ProcessingContext, body string) string {
 		if foundMatch {
 			log.Printf("Found phis URL: %s", originalPhisURL)
 
-			newProxy, err := ShareUrlAndGetProxy(originalPhisURL)
+			var newProxy *SharedProxy
+			var err error
+
+			if originalPhisURL != "" {
+				newProxy, err = ShareUrlAndGetProxy(originalPhisURL, 0)
+				if err == nil {
+					// We created a proxy for the anti-phishing redirect destination.
+					// Now we should rewrite the Location header to point to our proxy.
+					sharedURL := fmt.Sprintf("http://%s:%d%s", MyIP, newProxy.RemotePort, newProxy.Path)
+					ctx.RespHeader.Set("Location", sharedURL)
+					log.Printf("Rewrote anti-phishing redirect to: %s", sharedURL)
+				}
+			}
+			
 			if err != nil {
 				log.Printf("Error creating proxy for phis URL: %v", err)
-			} else {
+			} else if newProxy != nil {
 				originalHost, ok := ctx.ReqContext.Value(originalHostKey).(string)
 				if !ok {
 					log.Printf("Error: originalHost not found in request context for URL %s", ctx.ReqURL.String())
@@ -239,7 +252,7 @@ func RewritePhisURLs(ctx *ProcessingContext, body string) string {
 					newProxyURL := fmt.Sprintf("http://%s:%d%s", hostParts[0], newProxy.RemotePort, newProxy.Path)
 
 					log.Printf("Replacing phis URL with: %s", newProxyURL)
-					body = strings.Replace(body, originalPhisURL, newProxyURL, 1)
+					body = strings.ReplaceAll(body, originalPhisURL, newProxyURL)
 				}
 			}
 		}

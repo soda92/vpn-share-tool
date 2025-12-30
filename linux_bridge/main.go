@@ -96,7 +96,7 @@ func StartApiServerWithPort(port int) {
 
 //export ShareURL
 func ShareURL(url *C.char) {
-	go core.ShareUrlAndGetProxy(C.GoString(url))
+	go core.ShareUrlAndGetProxy(C.GoString(url), 0)
 }
 
 //export GetProxies

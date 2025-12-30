@@ -172,7 +172,7 @@ func Run() {
 			// Wait for the IP address to be ready via our local broadcast channel
 			ip := <-startupProxyChan
 
-			newProxy, err := core.ShareUrlAndGetProxy(*proxyURL)
+			newProxy, err := core.ShareUrlAndGetProxy(*proxyURL, 0)
 			if err != nil {
 				log.Printf("Error sharing URL from command line: %v", err)
 				return
@@ -250,7 +250,7 @@ func Run() {
 
 	shareLogic := func(rawURL string) {
 		go func() {
-			_, err := core.ShareUrlAndGetProxy(rawURL)
+			_, err := core.ShareUrlAndGetProxy(rawURL, 0)
 			if err != nil {
 				// The error might be that it already exists, which is not a critical failure for the user.
 				log.Printf("Error sharing URL: %v", err)
