@@ -129,8 +129,8 @@ func RunPipeline(ctx *ProcessingContext, body string, processors []ContentProces
 }
 
 func InjectDebugScript(ctx *ProcessingContext, body string) string {
-	if ctx.Proxy != nil && ctx.Proxy.GetEnableDebug() && strings.Contains(ctx.RespHeader.Get("Content-Type"), "text/html") && MyIP != "" && ApiPort != 0 {
-		debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, ApiPort)
+	if ctx.Proxy != nil && ctx.Proxy.GetEnableDebug() && strings.Contains(ctx.RespHeader.Get("Content-Type"), "text/html") && MyIP != "" && APIPort != 0 {
+		debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, APIPort)
 		script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
 		injectionHTML := "<script>" + string(script) + "</script>"
 		return strings.Replace(body, "</body>", injectionHTML+"</body>", 1)

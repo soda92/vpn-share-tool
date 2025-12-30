@@ -9,7 +9,7 @@ import (
 
 // StartApiServer starts the HTTP server to provide the API endpoints.
 func StartApiServer(apiPort int) error {
-	ApiPort = apiPort
+	APIPort = apiPort
 
 	// Try to auto-detect IP on startup for Desktop/CLI usage
 	if MyIP == "" {

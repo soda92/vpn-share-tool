@@ -23,8 +23,8 @@ const (
 
 var (
 	// Fallback IPs if scanning fails
-	SERVER_IPs         = []string{"192.168.0.81", "192.168.1.81"}
-	ApiPort            int
+	ServerIPs          = []string{"192.168.0.81", "192.168.1.81"}
+	APIPort            int
 	MyIP               string
 	DiscoveryServerURL string
 	Version            string

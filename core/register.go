@@ -51,7 +51,7 @@ func registerWithDiscoveryServer(apiPort int) {
 		}
 
 		// Append hardcoded fallbacks at the end
-		candidateIPs = append(candidateIPs, SERVER_IPs...)
+		candidateIPs = append(candidateIPs, ServerIPs...)
 
 		var conn net.Conn
 		var err error
