@@ -43,11 +43,13 @@ func normalizeHost(u string) string {
 	if !strings.HasPrefix(u, "http") {
 		u = "http://" + u
 	}
+	// Replace localhost with 127.0.0.1 to match proxy behavior
+	u = strings.ReplaceAll(u, "localhost", "127.0.0.1")
 	parsed, err := url.Parse(u)
 	if err != nil {
 		return u
 	}
-	return parsed.Hostname()
+	return parsed.Host
 }
 
 func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
