@@ -16,6 +16,9 @@
             <div class="url-sub">{{ url.url }}</div>
             <div v-if="url.proxy_url" class="proxy-status active">
               <a :href="url.proxy_url" target="_blank">➤ {{ url.proxy_url }}</a>
+              <span class="stats-badge" :title="'Total Requests: ' + url.total_requests">
+                ⚡ {{ url.request_rate ? url.request_rate.toFixed(1) : 0 }}/s
+              </span>
               <label class="debug-toggle" title="Toggle Debugger">
                 <input type="checkbox" :checked="url.enable_debug"
                   @change="$emit('toggle-debug', url.url, $event.target.checked)">
@@ -237,6 +240,16 @@ h2 {
 
 .proxy-status.active a:hover {
   text-decoration: underline;
+}
+
+.stats-badge {
+  background-color: #f0f9eb;
+  color: #67c23a;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  border: 1px solid #e1f3d8;
+  cursor: help;
 }
 
 .proxy-status.inactive {

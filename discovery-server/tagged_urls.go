@@ -66,9 +66,11 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	// Enrich the tagged URLs with their proxy status
 	type EnrichedTaggedURL struct {
 		TaggedURL
-		ProxyURL      string `json:"proxy_url,omitempty"`
-		EnableDebug   bool   `json:"enable_debug"`
-		EnableCaptcha bool   `json:"enable_captcha"`
+		ProxyURL      string  `json:"proxy_url,omitempty"`
+		EnableDebug   bool    `json:"enable_debug"`
+		EnableCaptcha bool    `json:"enable_captcha"`
+		RequestRate   float64 `json:"request_rate"`
+		TotalRequests int64   `json:"total_requests"`
 	}
 
 	enrichedUrls := make([]EnrichedTaggedURL, len(urls))
@@ -79,6 +81,8 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 			enrichedUrls[i].ProxyURL = proxyInfo.SharedURL
 			enrichedUrls[i].EnableDebug = proxyInfo.EnableDebug
 			enrichedUrls[i].EnableCaptcha = proxyInfo.EnableCaptcha
+			enrichedUrls[i].RequestRate = proxyInfo.RequestRate
+			enrichedUrls[i].TotalRequests = proxyInfo.TotalRequests
 		}
 	}
 

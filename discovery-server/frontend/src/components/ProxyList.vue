@@ -8,6 +8,9 @@
             <div class="tag-name">{{ proxy.original_url }}</div>
             <div class="proxy-status active">
               <a :href="proxy.shared_url" target="_blank">➤ {{ proxy.shared_url }}</a>
+              <span class="stats-badge" :title="'Total Requests: ' + proxy.total_requests">
+                ⚡ {{ proxy.request_rate ? proxy.request_rate.toFixed(1) : 0 }}/s
+              </span>
               <label class="debug-toggle" title="Toggle Debugger">
                 <input type="checkbox" :checked="proxy.enable_debug"
                   @change="$emit('toggle-debug', proxy.original_url, $event.target.checked)">
@@ -127,6 +130,16 @@ h2 {
 
 .proxy-status.active a:hover {
   text-decoration: underline;
+}
+
+.stats-badge {
+  background-color: #f0f9eb;
+  color: #67c23a;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  border: 1px solid #e1f3d8;
+  cursor: help;
 }
 
 .debug-toggle {

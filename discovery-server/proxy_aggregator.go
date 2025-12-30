@@ -11,12 +11,14 @@ import (
 )
 
 type ProxyInfo struct {
-	OriginalURL   string `json:"original_url"`
-	RemotePort    int    `json:"remote_port"`
-	Path          string `json:"path"`
-	SharedURL     string `json:"shared_url"`
-	EnableDebug   bool   `json:"enable_debug"`
-	EnableCaptcha bool   `json:"enable_captcha"`
+	OriginalURL   string  `json:"original_url"`
+	RemotePort    int     `json:"remote_port"`
+	Path          string  `json:"path"`
+	SharedURL     string  `json:"shared_url"`
+	EnableDebug   bool    `json:"enable_debug"`
+	EnableCaptcha bool    `json:"enable_captcha"`
+	RequestRate   float64 `json:"request_rate"`
+	TotalRequests int64   `json:"total_requests"`
 }
 
 // fetchAllClusterProxies queries all registered instances for their active proxies.
