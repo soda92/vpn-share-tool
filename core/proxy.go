@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -22,14 +23,17 @@ type contextKey string
 const originalHostKey contextKey = "originalHost"
 
 type SharedProxy struct {
-	OriginalURL string                 `json:"original_url"`
-	RemotePort  int                    `json:"remote_port"`
-	Path        string                 `json:"path"`
-	Handler     *httputil.ReverseProxy `json:"-"`
-	Server      *http.Server           `json:"-"`
-	EnableDebug bool                   `json:"enable_debug"`
-	EnableCaptcha bool                 `json:"enable_captcha"`
-	mu          sync.RWMutex
+	OriginalURL   string                 `json:"original_url"`
+	RemotePort    int                    `json:"remote_port"`
+	Path          string                 `json:"path"`
+	Handler       *httputil.ReverseProxy `json:"-"`
+	Server        *http.Server           `json:"-"`
+	EnableDebug   bool                   `json:"enable_debug"`
+	EnableCaptcha bool                   `json:"enable_captcha"`
+	RequestRate   float64                `json:"request_rate"`
+	TotalRequests int64                  `json:"total_requests"`
+	mu            sync.RWMutex
+	reqCounter    int64 // Atomic counter for current second
 }
 
 func (p *SharedProxy) SetEnableDebug(enable bool) {
@@ -54,6 +58,43 @@ func (p *SharedProxy) GetEnableCaptcha() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.EnableCaptcha
+}
+
+// startStatsUpdater updates the RequestRate every second.
+func startStatsUpdater(p *SharedProxy) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	// We can't easily detect when to stop this goroutine without a context or channel in SharedProxy,
+	// but since proxies are long-lived or removed via removeProxy, we can check if p.Server is nil or similar,
+	// OR we can modify removeProxy to close a channel.
+	// For now, let's just check if the proxy is still in the global list every tick,
+	// or better: add a quit channel to SharedProxy.
+	// However, simplicity first: The server closure will happen, but this loop might linger.
+	// Let's add a rudimentary check: if the proxy is removed from the global list, we stop.
+	// Ideally, removeProxy should signal this.
+	for range ticker.C {
+		// Calculate rate
+		count := atomic.SwapInt64(&p.reqCounter, 0)
+		p.mu.Lock()
+		p.RequestRate = float64(count)
+		// TotalRequests is updated atomically in the handler, so we just read it if needed,
+		// but here we are just updating the rate.
+		p.mu.Unlock()
+		// Check if proxy is still active (rudimentary)
+		// In a real impl, removeProxy should cancel a context.
+		ProxiesLock.RLock()
+		found := false
+		for _, existing := range Proxies {
+			if existing == p {
+				found = true
+				break
+			}
+		}
+		ProxiesLock.RUnlock()
+		if !found {
+			return
+		}
+	}
 }
 
 var (
@@ -252,25 +293,26 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 			return nil, fmt.Errorf("could not find an available port")
 		}
 	}
-
+	// Pre-create the struct to allow closure capture
+	newProxy := &SharedProxy{
+		OriginalURL:   rawURL,
+		RemotePort:    remotePort,
+		Path:          target.Path,
+		Handler:       proxy,
+		EnableDebug:   true,
+		EnableCaptcha: true,
+	}
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", remotePort),
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Update metrics
+			atomic.AddInt64(&newProxy.reqCounter, 1)
+			atomic.AddInt64(&newProxy.TotalRequests, 1)
 			ctx := context.WithValue(r.Context(), originalHostKey, r.Host)
 			proxy.ServeHTTP(w, r.WithContext(ctx))
 		}),
 	}
-
-	newProxy := &SharedProxy{
-		OriginalURL: rawURL,
-		RemotePort:  remotePort,
-		Path:        target.Path,
-		Handler:     proxy,
-		Server:      server,
-		EnableDebug: true,
-		EnableCaptcha: true,
-	}
-
+	newProxy.Server = server
 	// Assign transport here to pass the newProxy reference
 	proxy.Transport = NewCachingTransport(client.Transport, newProxy)
 
@@ -283,7 +325,7 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 	}()
 
 	go startHealthChecker(newProxy)
-
+	go startStatsUpdater(newProxy)
 	Proxies = append(Proxies, newProxy)
 
 	ProxyAddedChan <- newProxy
