@@ -168,7 +168,7 @@ body {
   padding: 0;
   height: 100%;
   box-sizing: border-box;
-  overflow: hidden;
+  /* overflow: hidden;  <-- Removed to allow fallback scrolling */
   /* Desktop default */
   display: flex;
   flex-direction: column;
@@ -209,16 +209,25 @@ body {
 <style scoped>
 .container {
   max-width: 1400px;
-  width: calc(100% - 1rem);
-  height: calc(100% - 1rem);
+  width: 100%;
+  height: 100vh; /* Full viewport height */
+  max-height: 100vh;
   background-color: #ffffff;
   padding: 1rem;
-  border-radius: 8px;
+  /* border-radius: 8px; */ /* Removed for full-screen feel consistency, or keep if preferred. Keeping basic structure but ensuring sizing */
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   /* Prevent container scroll */
+}
+
+@media (min-width: 769px) {
+  .container {
+    width: calc(100% - 2rem);
+    height: calc(100vh - 2rem);
+    border-radius: 8px;
+  }
 }
 
 .app-title {

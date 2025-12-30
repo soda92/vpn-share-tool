@@ -43,9 +43,9 @@ defineEmits(['update-server']);
   font-size: 0.8rem;
   text-align: center;
   flex-shrink: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal; /* Allow wrapping */
+  overflow-y: auto;
+  max-height: 80px; /* Limit height */
 }
 
 .server-label {

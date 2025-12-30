@@ -48,6 +48,7 @@ defineEmits(['toggle-debug']);
   background: #fafafa;
   overflow: hidden;
   min-width: 0;
+  height: 100%; /* Ensure it fills grid cell */
 }
 
 h2 {

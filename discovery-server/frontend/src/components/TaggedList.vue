@@ -113,6 +113,7 @@ const handleDelete = async (id) => {
   background: #fafafa;
   overflow: hidden;
   min-width: 0;
+  height: 100%; /* Ensure it fills grid cell */
 }
 
 .section-header {
