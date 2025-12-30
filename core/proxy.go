@@ -18,85 +18,6 @@ const (
 	startPort = 10081
 )
 
-type contextKey string
-
-const originalHostKey contextKey = "originalHost"
-
-type SharedProxy struct {
-	OriginalURL   string                 `json:"original_url"`
-	RemotePort    int                    `json:"remote_port"`
-	Path          string                 `json:"path"`
-	Handler       *httputil.ReverseProxy `json:"-"`
-	Server        *http.Server           `json:"-"`
-	EnableDebug   bool                   `json:"enable_debug"`
-	EnableCaptcha bool                   `json:"enable_captcha"`
-	RequestRate   float64                `json:"request_rate"`
-	TotalRequests int64                  `json:"total_requests"`
-	mu            sync.RWMutex
-	reqCounter    int64 // Atomic counter for current second
-}
-
-func (p *SharedProxy) SetEnableDebug(enable bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.EnableDebug = enable
-}
-
-func (p *SharedProxy) GetEnableDebug() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.EnableDebug
-}
-
-func (p *SharedProxy) SetEnableCaptcha(enable bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.EnableCaptcha = enable
-}
-
-func (p *SharedProxy) GetEnableCaptcha() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.EnableCaptcha
-}
-
-// startStatsUpdater updates the RequestRate every second.
-func startStatsUpdater(p *SharedProxy) {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-	// We can't easily detect when to stop this goroutine without a context or channel in SharedProxy,
-	// but since proxies are long-lived or removed via removeProxy, we can check if p.Server is nil or similar,
-	// OR we can modify removeProxy to close a channel.
-	// For now, let's just check if the proxy is still in the global list every tick,
-	// or better: add a quit channel to SharedProxy.
-	// However, simplicity first: The server closure will happen, but this loop might linger.
-	// Let's add a rudimentary check: if the proxy is removed from the global list, we stop.
-	// Ideally, removeProxy should signal this.
-	for range ticker.C {
-		// Calculate rate
-		count := atomic.SwapInt64(&p.reqCounter, 0)
-		p.mu.Lock()
-		p.RequestRate = float64(count)
-		// TotalRequests is updated atomically in the handler, so we just read it if needed,
-		// but here we are just updating the rate.
-		p.mu.Unlock()
-		// Check if proxy is still active (rudimentary)
-		// In a real impl, removeProxy should cancel a context.
-		ProxiesLock.RLock()
-		found := false
-		for _, existing := range Proxies {
-			if existing == p {
-				found = true
-				break
-			}
-		}
-		ProxiesLock.RUnlock()
-		if !found {
-			return
-		}
-	}
-}
-
 var (
 	Proxies          []*SharedProxy
 	ProxiesLock      sync.RWMutex
@@ -120,6 +41,11 @@ func isPortAvailable(port int) bool {
 func removeProxy(p *SharedProxy) {
 	log.Printf("Removing proxy for unreachable URL: %s", p.OriginalURL)
 
+	// 0. Cancel the context to stop background tasks (Stats, HealthCheck)
+	if p.cancel != nil {
+		p.cancel()
+	}
+
 	// 1. Shutdown the HTTP server
 	if p.Server != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -142,35 +68,6 @@ func removeProxy(p *SharedProxy) {
 
 	// 3. Signal the UI to update
 	ProxyRemovedChan <- p
-}
-
-// startHealthChecker runs in a goroutine to periodically check if a URL is reachable.
-func startHealthChecker(p *SharedProxy) {
-	healthCheckTicker := time.NewTicker(1 * time.Minute) // Check more frequently
-	defer healthCheckTicker.Stop()
-
-	failureCount := 0
-	const maxFailures = 3
-
-	for range healthCheckTicker.C {
-		log.Printf("Performing health check for %s", p.OriginalURL)
-		if !IsURLReachable(p.OriginalURL) {
-			failureCount++
-			log.Printf("Health check failed for %s (%d/%d).", p.OriginalURL, failureCount, maxFailures)
-			if failureCount >= maxFailures {
-				log.Printf("Health check failed for %s after %d attempts. Tearing down proxy.", p.OriginalURL, maxFailures)
-				removeProxy(p)
-				return // Stop this health checker goroutine
-			}
-		} else {
-			if failureCount > 0 {
-				log.Printf("Health check successful for %s after %d failures, resetting failure count.", p.OriginalURL, failureCount)
-				failureCount = 0 // Reset on success
-			} else {
-				log.Printf("Health check successful for %s", p.OriginalURL)
-			}
-		}
-	}
 }
 
 func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
@@ -293,6 +190,8 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 			return nil, fmt.Errorf("could not find an available port")
 		}
 	}
+	
+	ctx, cancel := context.WithCancel(context.Background())
 	// Pre-create the struct to allow closure capture
 	newProxy := &SharedProxy{
 		OriginalURL:   rawURL,
@@ -301,6 +200,8 @@ func ShareUrlAndGetProxy(rawURL string) (*SharedProxy, error) {
 		Handler:       proxy,
 		EnableDebug:   true,
 		EnableCaptcha: true,
+		ctx:           ctx,
+		cancel:        cancel,
 	}
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", remotePort),
