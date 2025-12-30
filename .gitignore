@@ -6,7 +6,7 @@
 *.aar
 *.txt
 /dist
-/vendor
+/vendor*
 
 server.crt
 server.key

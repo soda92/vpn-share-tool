@@ -15,6 +15,14 @@ type ProxyConfigItem struct {
 }
 
 func getConfigFile() (string, error) {
+	if DebugStoragePath != "" {
+		// Ensure the directory exists
+		if err := os.MkdirAll(DebugStoragePath, 0755); err != nil {
+			return "", err
+		}
+		return filepath.Join(DebugStoragePath, "proxies.json"), nil
+	}
+
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
