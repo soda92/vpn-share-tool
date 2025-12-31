@@ -12,8 +12,6 @@ import (
 //go:embed ca.crt
 var rootCACert []byte
 
-
-
 const (
 	discoverySrvPort = "45679"
 )

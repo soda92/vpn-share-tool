@@ -14,7 +14,15 @@ import (
 	"time"
 
 	"github.com/soda92/vpn-share-tool/core/models"
+	"github.com/soda92/vpn-share-tool/core/cache"
 )
+
+type captchaAdapter struct{}
+
+func (c *captchaAdapter) Solve(data []byte) string { return SolveCaptcha(data) }
+func (c *captchaAdapter) Store(ip, sol string)     { StoreCaptchaSolution(ip, sol) }
+func (c *captchaAdapter) Get(ip string) string     { return GetCaptchaSolution(ip) }
+func (c *captchaAdapter) Clear(ip string)          { ClearCaptchaSolution(ip) }
 
 const (
 	startPort = 10081
@@ -237,7 +245,9 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 	}
 	newProxy.Server = server
 	// Assign transport here to pass the newProxy reference
-	proxy.Transport = NewCachingTransport(nil, newProxy)
+	proxy.Transport = cache.NewCachingTransport(nil, newProxy, &captchaAdapter{}, func(ctx *models.ProcessingContext, body string) string {
+		return RunPipeline(ctx, body, GetDefaultProcessors())
+	})
 
 	go func() {
 		log.Printf("Starting proxy for %s on port %d", rawURL, remotePort)

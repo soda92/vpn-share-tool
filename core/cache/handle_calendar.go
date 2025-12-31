@@ -1,0 +1,37 @@
+package cache
+
+import (
+	"bytes"
+	_ "embed"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"strings"
+
+	"github.com/soda92/vpn-share-tool/core/debug"
+)
+
+//go:embed calendar.unpacked.js
+var calendarScript []byte
+
+
+
+
+func (t *CachingTransport) handleCalendarJS(req *http.Request, reqBody []byte) *http.Response {
+	if strings.Contains(req.URL.Path, "calendar.js") {
+		log.Printf("Intercepting calendar.js request: %s", req.URL.String())
+		resp := &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(calendarScript)),
+			Request:    req,
+		}
+		resp.Header.Set("Content-Type", "application/javascript")
+		resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(calendarScript)))
+
+		debug.CaptureRequest(req, resp, reqBody, calendarScript)
+		return resp
+	}
+	return nil
+}

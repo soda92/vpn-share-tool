@@ -39,8 +39,8 @@ func StartApiServer(apiPort int) error {
 		IsURLReachable: IsURLReachable,
 	}
 	servicesHandler := &handlers.ServicesHandler{
-		GetProxies:  GetProxies,
-		MyIP:        MyIP,
+		GetProxies: GetProxies,
+		MyIP:       MyIP,
 	}
 
 	activeProxiesHandler := &handlers.GetActiveProxiesHandler{
@@ -48,10 +48,10 @@ func StartApiServer(apiPort int) error {
 	}
 
 	toggleDebugHandler := &handlers.ToggleDebugHandler{
-		GetProxies:  GetProxies,
+		GetProxies: GetProxies,
 	}
 	toggleCaptchaHandler := &handlers.ToggleCaptchaHandler{
-		GetProxies:  GetProxies,
+		GetProxies: GetProxies,
 	}
 
 	triggerUpdatehandler := &handlers.TriggerUpdateHandler{

@@ -1,20 +1,16 @@
 package core
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"log"
-	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 
+	"github.com/soda92/vpn-share-tool/core/cache"
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
-//go:embed solver_script.js
-var SolverScript []byte
 
 var (
 	rePhisUrl            = regexp.MustCompile(`phisUrl\s*:\s*['"](.*?)['"]`)
@@ -31,33 +27,28 @@ var (
 	reCaptchaImage       = regexp.MustCompile(`<img[^>]+src=["']/phis/app/login/voCode["']`)
 )
 
-var DefaultProcessors = []ContentProcessor{
-	InjectDebugScript,
-	FixLegacyJS,
-	RewriteInternalURLs,
-	RewritePhisURLs,
-	InjectCaptchaSolver,
+func GetDefaultProcessors() []ContentProcessor {
+	return []ContentProcessor{
+		InjectDebugScript,
+		FixLegacyJS,
+		RewriteInternalURLs,
+		RewritePhisURLs,
+		InjectCaptchaSolver,
+	}
 }
 
-type ProcessingContext struct {
-	ReqURL     *url.URL
-	ReqContext context.Context
-	RespHeader http.Header
-	Proxy      *models.SharedProxy
-}
+type ContentProcessor func(ctx *models.ProcessingContext, body string) string
 
-type ContentProcessor func(ctx *ProcessingContext, body string) string
-
-func InjectCaptchaSolver(ctx *ProcessingContext, body string) string {
+func InjectCaptchaSolver(ctx *models.ProcessingContext, body string) string {
 	if ctx.Proxy != nil && ctx.Proxy.GetEnableCaptcha() && reCaptchaImage.MatchString(body) {
 		log.Println("Injecting Captcha Solver Script")
 
-		return strings.Replace(body, "</body>", `<script>`+string(SolverScript)+`</script>`+"</body>", 1)
+		return strings.Replace(body, "</body>", `<script>`+string(cache.SolverScript)+`</script>`+"</body>", 1)
 	}
 	return body
 }
 
-func RunPipeline(ctx *ProcessingContext, body string, processors []ContentProcessor) string {
+func RunPipeline(ctx *models.ProcessingContext, body string, processors []ContentProcessor) string {
 	// Skip processing for specific dynamic JS patterns or large libraries
 	path := strings.ToLower(ctx.ReqURL.Path)
 	if path == "*.js" {
@@ -73,17 +64,18 @@ func RunPipeline(ctx *ProcessingContext, body string, processors []ContentProces
 	return body
 }
 
-func InjectDebugScript(ctx *ProcessingContext, body string) string {
+
+func InjectDebugScript(ctx *models.ProcessingContext, body string) string {
 	if ctx.Proxy != nil && ctx.Proxy.GetEnableDebug() && strings.Contains(ctx.RespHeader.Get("Content-Type"), "text/html") && MyIP != "" && APIPort != 0 {
 		debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, APIPort)
-		script := strings.Replace(string(injectorScript), "__DEBUG_URL__", debugURL, 1)
+		script := strings.Replace(string(cache.InjectorScript), "__DEBUG_URL__", debugURL, 1)
 		injectionHTML := "<script>" + string(script) + "</script>"
 		return strings.Replace(body, "</body>", injectionHTML+"</body>", 1)
 	}
 	return body
 }
 
-func FixLegacyJS(ctx *ProcessingContext, body string) string {
+func FixLegacyJS(ctx *models.ProcessingContext, body string) string {
 	// Remove disable_backspace script using regex
 	body = reStopItBlock.ReplaceAllString(body, "")
 
@@ -95,7 +87,7 @@ func FixLegacyJS(ctx *ProcessingContext, body string) string {
 	return body
 }
 
-func RewritePhisURLs(ctx *ProcessingContext, body string) string {
+func RewritePhisURLs(ctx *models.ProcessingContext, body string) string {
 	if strings.Contains(ctx.ReqURL.Path, "showView.jsp") {
 		matchesHttpPhis := reHttpPhis.FindStringSubmatch(body)
 		matchesPhisUrl := rePhisUrl.FindStringSubmatch(body)

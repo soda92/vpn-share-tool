@@ -4,12 +4,20 @@ import (
 	"context"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"sync"
 )
 
 type contextKey string
 
 const OriginalHostKey contextKey = "originalHost"
+
+type ProcessingContext struct {
+	ReqURL     *url.URL
+	ReqContext context.Context
+	RespHeader http.Header
+	Proxy      *SharedProxy
+}
 
 type SharedProxy struct {
 	OriginalURL   string                 `json:"original_url"`

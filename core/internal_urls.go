@@ -9,7 +9,8 @@ import (
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
-func RewriteInternalURLs(ctx *ProcessingContext, body string) string {
+func RewriteInternalURLs(ctx *models.ProcessingContext, body string) string {
+	// 1. Rewrite specific internal URLs (e.g. 10.x.x.x)
 	contentType := ctx.RespHeader.Get("Content-Type")
 	if strings.Contains(contentType, "text/") ||
 		strings.Contains(contentType, "application/javascript") ||
