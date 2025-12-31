@@ -1,4 +1,4 @@
-package core
+package pipeline
 
 import (
 	"fmt"
@@ -36,19 +36,28 @@ func RewriteInternalURLs(ctx *models.ProcessingContext, body string) string {
 					continue
 				}
 
-				if MyIP != "" && strings.Contains(match, MyIP) {
+				if ctx.Services.MyIP != "" && strings.Contains(match, ctx.Services.MyIP) {
 					continue
 				}
+				
+				var newProxy *models.SharedProxy
+				var err error
 
-				newProxy, err := ShareUrlAndGetProxy(match, 0)
+				// Use injected CreateProxy service
+				if ctx.Services.CreateProxy != nil {
+					newProxy, err = ctx.Services.CreateProxy(match, 0)
+				} else {
+					err = fmt.Errorf("CreateProxy service not available")
+				}
+
 				if err != nil {
 					log.Printf("Error creating proxy for internal URL %s: %v", match, err)
 					continue
 				}
 
 				if !ctxOk {
-					if MyIP != "" {
-						replacements[match] = fmt.Sprintf("http://%s:%d", MyIP, newProxy.RemotePort)
+					if ctx.Services.MyIP != "" {
+						replacements[match] = fmt.Sprintf("http://%s:%d", ctx.Services.MyIP, newProxy.RemotePort)
 					}
 				} else {
 					hostParts := strings.Split(originalHost, ":")

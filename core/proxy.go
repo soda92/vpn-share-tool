@@ -15,6 +15,7 @@ import (
 
 	"github.com/soda92/vpn-share-tool/core/models"
 	"github.com/soda92/vpn-share-tool/core/cache"
+	"github.com/soda92/vpn-share-tool/core/pipeline"
 )
 
 type captchaAdapter struct{}
@@ -246,7 +247,13 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 	newProxy.Server = server
 	// Assign transport here to pass the newProxy reference
 	proxy.Transport = cache.NewCachingTransport(nil, newProxy, &captchaAdapter{}, func(ctx *models.ProcessingContext, body string) string {
-		return RunPipeline(ctx, body, GetDefaultProcessors())
+		// Populate Services
+		ctx.Services = models.PipelineServices{
+			CreateProxy: ShareUrlAndGetProxy,
+			MyIP:        MyIP,
+			APIPort:     APIPort,
+		}
+		return pipeline.RunPipeline(ctx, body, pipeline.GetDefaultProcessors())
 	})
 
 	go func() {

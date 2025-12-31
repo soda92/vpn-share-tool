@@ -12,11 +12,18 @@ type contextKey string
 
 const OriginalHostKey contextKey = "originalHost"
 
+type PipelineServices struct {
+	CreateProxy func(url string, port int) (*SharedProxy, error)
+	MyIP        string
+	APIPort     int
+}
+
 type ProcessingContext struct {
 	ReqURL     *url.URL
 	ReqContext context.Context
 	RespHeader http.Header
 	Proxy      *SharedProxy
+	Services   PipelineServices
 }
 
 type SharedProxy struct {

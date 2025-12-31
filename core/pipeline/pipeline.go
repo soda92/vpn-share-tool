@@ -1,4 +1,4 @@
-package core
+package pipeline
 
 import (
 	_ "embed"
@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/soda92/vpn-share-tool/core/cache"
+	"github.com/soda92/vpn-share-tool/core/resources"
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
@@ -43,7 +43,7 @@ func InjectCaptchaSolver(ctx *models.ProcessingContext, body string) string {
 	if ctx.Proxy != nil && ctx.Proxy.GetEnableCaptcha() && reCaptchaImage.MatchString(body) {
 		log.Println("Injecting Captcha Solver Script")
 
-		return strings.Replace(body, "</body>", `<script>`+string(cache.SolverScript)+`</script>`+"</body>", 1)
+		return strings.Replace(body, "</body>", `<script>`+string(resources.SolverScript)+`</script>`+"</body>", 1)
 	}
 	return body
 }
@@ -66,11 +66,15 @@ func RunPipeline(ctx *models.ProcessingContext, body string, processors []Conten
 
 
 func InjectDebugScript(ctx *models.ProcessingContext, body string) string {
-	if ctx.Proxy != nil && ctx.Proxy.GetEnableDebug() && strings.Contains(ctx.RespHeader.Get("Content-Type"), "text/html") && MyIP != "" && APIPort != 0 {
-		debugURL := fmt.Sprintf("http://%s:%d/debug", MyIP, APIPort)
-		script := strings.Replace(string(cache.InjectorScript), "__DEBUG_URL__", debugURL, 1)
-		injectionHTML := "<script>" + string(script) + "</script>"
-		return strings.Replace(body, "</body>", injectionHTML+"</body>", 1)
+	if ctx.Proxy != nil && ctx.Proxy.GetEnableDebug() && strings.Contains(ctx.RespHeader.Get("Content-Type"), "text/html") {
+		myIP := ctx.Services.MyIP
+		apiPort := ctx.Services.APIPort
+		if myIP != "" && apiPort != 0 {
+			debugURL := fmt.Sprintf("http://%s:%d/debug", myIP, apiPort)
+			script := strings.Replace(string(resources.InjectorScript), "__DEBUG_URL__", debugURL, 1)
+			injectionHTML := "<script>" + string(script) + "</script>"
+			return strings.Replace(body, "</body>", injectionHTML+"</body>", 1)
+		}
 	}
 	return body
 }
@@ -110,11 +114,17 @@ func RewritePhisURLs(ctx *models.ProcessingContext, body string) string {
 			var err error
 
 			if originalPhisURL != "" {
-				newProxy, err = ShareUrlAndGetProxy(originalPhisURL, 0)
-				if err == nil {
+				// Use the CreateProxy service injected in the context
+				if ctx.Services.CreateProxy != nil {
+					newProxy, err = ctx.Services.CreateProxy(originalPhisURL, 0)
+				} else {
+					err = fmt.Errorf("CreateProxy service not available")
+				}
+				
+				if err == nil && newProxy != nil {
 					// We created a proxy for the anti-phishing redirect destination.
 					// Now we should rewrite the Location header to point to our proxy.
-					sharedURL := fmt.Sprintf("http://%s:%d%s", MyIP, newProxy.RemotePort, newProxy.Path)
+					sharedURL := fmt.Sprintf("http://%s:%d%s", ctx.Services.MyIP, newProxy.RemotePort, newProxy.Path)
 					ctx.RespHeader.Set("Location", sharedURL)
 					log.Printf("Rewrote anti-phishing redirect to: %s", sharedURL)
 				}
