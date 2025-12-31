@@ -84,17 +84,6 @@ func registerWithDiscoveryServer(apiPort int) {
 
 				break
 			}
-
-			// Fallback to Plaintext
-			conn, err = dialer.Dial("tcp", serverAddr)
-			if err == nil {
-				log.Printf("Connected to discovery server at %s (Plaintext)", serverAddr)
-
-				host, _, _ := net.SplitHostPort(serverAddr)
-				DiscoveryServerURL = fmt.Sprintf("http://%s:8080", host)
-
-				break
-			}
 		}
 		if err != nil {
 			log.Printf("Failed to connect to any discovery server. Retrying in 5 seconds.")
