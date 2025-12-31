@@ -4,7 +4,6 @@ import (
 	"embed"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -34,53 +32,9 @@ const (
 	startPort = 10081
 )
 
-func checkUpdate(w fyne.Window) {
-	info, err := core.CheckForUpdates()
-	if err != nil {
-		log.Printf("Failed to check for updates: %v", err)
-		return
-	}
-
-	if info.Version != Version && Version != "dev" {
-		dialog.ShowConfirm(
-			l("updateAvailableTitle"),
-			l("updateAvailableContent", map[string]interface{}{"version": info.Version}),
-			func(b bool) {
-				if b {
-					// Perform update via core logic
-					if err := core.ApplyUpdate(info); err != nil {
-						dialog.ShowError(err, w)
-					}
-					// ApplyUpdate exits on success, so we only reach here on error
-				}
-			},
-			w,
-		)
-	}
-}
-
-// safeMultiWriter writes to multiple writers, ignoring errors from individual writers
-type safeMultiWriter struct {
-	writers []io.Writer
-}
-
-func (t *safeMultiWriter) Write(p []byte) (n int, err error) {
-	for _, w := range t.writers {
-		_, _ = w.Write(p) // Ignore errors (e.g. from closed stdout)
-	}
-	return len(p), nil
-}
-
 func Run() {
 	// Setup Logging
-	logFile, err := os.OpenFile("vpn-share-tool.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		// Just print to stdout if file fails
-		fmt.Printf("Failed to open log file: %v\n", err)
-	} else {
-		defer logFile.Close()
-		log.SetOutput(&safeMultiWriter{writers: []io.Writer{os.Stdout, logFile}})
-	}
+	setupLogging()
 
 	// Clean up update script if present (from previous update).
 	// We ignore the error because the file usually doesn't exist, which is fine.
