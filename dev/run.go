@@ -38,7 +38,7 @@ func runRunDesktop() error {
 	}
 
 	// Build frontend
-	if err := buildFrontendIn(filepath.Join(rootDir, "core_web")); err != nil {
+	if err := buildFrontendIn(filepath.Join(rootDir, "core", "debug_web")); err != nil {
 		return err
 	}
 

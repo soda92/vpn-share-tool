@@ -182,13 +182,12 @@ func runBuildDesktop() error {
 	}
 
 	if err := copyCertsToCore(); err != nil {
-		return fmt.Errorf("failed to copy certs: %w", err)
-	}
-
-	// Build frontend
-	if !noFrontend {
-		if err := buildFrontendIn(filepath.Join(rootDir, "core_web")); err != nil {
-			return err
+		        return fmt.Errorf("failed to copy certs: %w", err)
+		    }
+		
+		    // Build frontend
+		    if !noFrontend {
+		        if err := buildFrontendIn(filepath.Join(rootDir, "core", "debug_web")); err != nil {			return err
 		}
 	} else {
 		fmt.Println("Skipping frontend build.")
@@ -230,7 +229,7 @@ func runBuildAAR() error {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
 	// Build frontend
-	if err := buildFrontendIn(filepath.Join(rootDir, "core_web")); err != nil {
+	if err := buildFrontendIn(filepath.Join(rootDir, "core", "debug_web")); err != nil {
 		return fmt.Errorf("failed to build frontend for AAR: %w", err)
 	}
 
@@ -274,7 +273,7 @@ func runBuildWindows() error {
 
 	// Build frontend
 	if !noFrontend {
-		if err := buildFrontendIn(filepath.Join(rootDir, "core_web")); err != nil {
+		if err := buildFrontendIn(filepath.Join(rootDir, "core", "debug_web")); err != nil {
 			return err
 		}
 	} else {

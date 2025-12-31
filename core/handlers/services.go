@@ -1,4 +1,4 @@
-package core
+package handlers
 
 import (
 	_ "embed"
@@ -6,12 +6,20 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
+
+	"github.com/soda92/vpn-share-tool/core/models"
 )
 
+type ServicesHandler struct {
+	Proxies     []*models.SharedProxy
+	ProxiesLock sync.RWMutex
+}
+
 // servicesHandler provides the list of currently shared proxies as a JSON response.
-func servicesHandler(w http.ResponseWriter, r *http.Request) {
-	ProxiesLock.RLock()
-	defer ProxiesLock.RUnlock()
+func (h *ServicesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.ProxiesLock.RLock()
+	defer h.ProxiesLock.RUnlock()
 
 	// Initialize with a non-nil empty slice to ensure the JSON output is `[]` instead of `null`.
 	response := make([]sharedURLInfo, 0)

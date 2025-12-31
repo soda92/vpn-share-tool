@@ -1,15 +1,20 @@
-package core
+package handlers
 
 import (
-	_ "embed"
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
-func handleToggleDebug(w http.ResponseWriter, r *http.Request) {
+type HandleToggleCaptcha struct {
+	Proxies     []*models.SharedProxy
+	ProxiesLock sync.RWMutex
+}
+
+func (h *HandleToggleCaptcha) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -25,24 +30,23 @@ func handleToggleDebug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ProxiesLock.RLock()
+	h.ProxiesLock.RLock()
 	var targetProxy *models.SharedProxy
-	for _, p := range Proxies {
+	for _, p := range h.Proxies {
 		if p.OriginalURL == req.URL {
 			targetProxy = p
 			break
 		}
 	}
-	ProxiesLock.RUnlock()
+	h.ProxiesLock.RUnlock()
 
 	if targetProxy == nil {
 		http.NotFound(w, r)
 		return
 	}
 
-	// Update the setting using thread-safe method
-	targetProxy.SetEnableDebug(req.Enable)
-	log.Printf("Updated debug for %s to %v", req.URL, req.Enable)
+	targetProxy.SetEnableCaptcha(req.Enable)
+	log.Printf("Updated captcha solver for %s to %v", req.URL, req.Enable)
 
 	w.WriteHeader(http.StatusOK)
 }
