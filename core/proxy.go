@@ -101,9 +101,11 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 		}
 		if existingURL.Host == host {
 			log.Printf("Proxy for %s already exists, returning existing one.", rawURL)
+			ProxiesLock.Unlock()
 			return p, nil
 		}
 	}
+	ProxiesLock.Unlock()
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Director = func(req *http.Request) {
@@ -174,7 +176,7 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 	}
 
 	remotePort := 0
-	
+
 	// Try requested port first
 	if requestedPort > 0 {
 		isUsed := false
@@ -191,6 +193,7 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 		}
 	}
 
+	ProxiesLock.Lock()
 	if remotePort == 0 {
 		port := startPort
 		for {
@@ -211,7 +214,8 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 			}
 		}
 	}
-	
+	ProxiesLock.Unlock()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	// Pre-create the struct to allow closure capture
 	newProxy := &SharedProxy{
@@ -248,11 +252,12 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 
 	go startHealthChecker(newProxy)
 	go startStatsUpdater(newProxy)
+	ProxiesLock.Lock()
 	Proxies = append(Proxies, newProxy)
+	ProxiesLock.Unlock()
 
 	ProxyAddedChan <- newProxy
 
-	ProxiesLock.Unlock()
 	SaveProxies()
 
 	return newProxy, nil
