@@ -1,6 +1,9 @@
 tagged_urls.json
 *.log
 
+/.ruff_cache
+/fyne-cross
+
 
 /vpn-share-tool
 *.exe
@@ -14,8 +17,6 @@ tagged_urls.json
 
 server.crt
 server.key
-
-/dev
 
 __debug_bin*
 
