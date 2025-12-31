@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/soheilhy/cmux"
 )
 
 //go:embed server.crt
@@ -215,14 +218,49 @@ func startHTTPServer() {
 		return
 	}
 
-	log.Printf("Embedded TLS certificates found. Serving HTTPS.")
-	server := &http.Server{
-		Addr:      ":" + httpListenPort,
-		Handler:   rootMux,
-		TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}},
+	log.Printf("Embedded TLS certificates found. Serving HTTPS and HTTP Redirect on same port.")
+
+	// Create the main listener
+	l, err := net.Listen("tcp", ":"+httpListenPort)
+	if err != nil {
+		log.Fatalf("Failed to listen on port %s: %v", httpListenPort, err)
 	}
 
-	if err := server.ListenAndServeTLS("", ""); err != nil {
-		log.Fatalf("Failed to start HTTPS server: %v", err)
+	// Create a multiplexer
+	m := cmux.New(l)
+
+	// Match TLS connections (HTTPS)
+	httpsL := m.Match(cmux.TLS())
+
+	// Match anything else as HTTP (for redirection)
+	httpL := m.Match(cmux.Any())
+
+	// Start HTTPS Server
+	go func() {
+		server := &http.Server{
+			Handler:   rootMux,
+			TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}},
+		}
+		if err := server.ServeTLS(httpsL, "", ""); err != nil {
+			log.Printf("HTTPS Server error: %v", err)
+		}
+	}()
+
+	// Start HTTP Redirect Server
+	go func() {
+		redirectServer := &http.Server{
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				target := "https://" + r.Host + r.RequestURI
+				http.Redirect(w, r, target, http.StatusMovedPermanently)
+			}),
+		}
+		if err := redirectServer.Serve(httpL); err != nil {
+			log.Printf("HTTP Redirect Server error: %v", err)
+		}
+	}()
+
+	// Start multiplexing
+	if err := m.Serve(); err != nil {
+		log.Fatalf("Multiplexer error: %v", err)
 	}
 }
