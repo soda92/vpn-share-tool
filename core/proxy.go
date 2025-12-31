@@ -296,5 +296,8 @@ func Shutdown() {
 func GetProxies() []*models.SharedProxy {
 	ProxiesLock.RLock()
 	defer ProxiesLock.RUnlock()
-	return Proxies
+	// Return a copy to ensure thread safety for the caller
+	result := make([]*models.SharedProxy, len(Proxies))
+	copy(result, Proxies)
+	return result
 }

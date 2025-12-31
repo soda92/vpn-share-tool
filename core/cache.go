@@ -14,6 +14,7 @@ import (
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/soda92/vpn-share-tool/core/models"
+	"github.com/soda92/vpn-share-tool/core/debug"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
 )
@@ -76,7 +77,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		resp.Header.Set("Content-Type", "application/javascript")
 		resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(calendarScript)))
 
-		CaptureRequest(req, resp, reqBody, calendarScript)
+		debug.CaptureRequest(req, resp, reqBody, calendarScript)
 		return resp, nil
 	}
 
@@ -118,7 +119,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		}
 
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
-		CaptureRequest(req, resp, reqBody, respBody)
+		debug.CaptureRequest(req, resp, reqBody, respBody)
 		return resp, nil
 	}
 
@@ -154,7 +155,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 				Body:       io.NopCloser(bytes.NewReader(entry.Body)),
 				Request:    req,
 			}
-			CaptureRequest(req, resp, reqBody, entry.Body)
+			debug.CaptureRequest(req, resp, reqBody, entry.Body)
 			return resp, nil
 		}
 		log.Printf("Cache MISS for static: %s", req.URL.String())
@@ -190,7 +191,7 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		if respBody != nil {
 			resp.Body = io.NopCloser(bytes.NewReader(respBody))
 		}
-		CaptureRequest(req, resp, reqBody, respBody)
+		debug.CaptureRequest(req, resp, reqBody, respBody)
 		return resp, nil
 	}
 
@@ -290,9 +291,9 @@ func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		}
 
 		resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
-		CaptureRequest(req, resp, reqBody, decompressedBody)
+		debug.CaptureRequest(req, resp, reqBody, decompressedBody)
 	} else {
-		CaptureRequest(req, resp, reqBody, nil)
+		debug.CaptureRequest(req, resp, reqBody, nil)
 	}
 
 	return resp, nil

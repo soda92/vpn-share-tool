@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/soda92/vpn-share-tool/core"
+	"github.com/soda92/vpn-share-tool/core/debug"
 )
 
 // EventCallback is the type for the Dart callback function.
@@ -127,5 +128,5 @@ func SetDeviceIP(ip string) {
 // SetStoragePath sets the directory where the app should store its files (e.g., database).
 
 func SetStoragePath(path string) {
-	core.DebugStoragePath = path
+	debug.DebugStoragePath = path
 }

@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/soda92/vpn-share-tool/core/debug"
 )
 
 type ProxyConfigItem struct {
@@ -15,12 +17,12 @@ type ProxyConfigItem struct {
 }
 
 func getConfigFile() (string, error) {
-	if DebugStoragePath != "" {
+	if debug.DebugStoragePath != "" {
 		// Ensure the directory exists
-		if err := os.MkdirAll(DebugStoragePath, 0755); err != nil {
+		if err := os.MkdirAll(debug.DebugStoragePath, 0755); err != nil {
 			return "", err
 		}
-		return filepath.Join(DebugStoragePath, "proxies.json"), nil
+		return filepath.Join(debug.DebugStoragePath, "proxies.json"), nil
 	}
 
 	configDir, err := os.UserConfigDir()

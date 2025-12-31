@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"sync"
 
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
 type ToggleCaptchaHandler struct {
-	Proxies     []*models.SharedProxy
-	ProxiesLock sync.RWMutex
+	GetProxies func() []*models.SharedProxy
 }
 
 func (h *ToggleCaptchaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -30,15 +28,14 @@ func (h *ToggleCaptchaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.ProxiesLock.RLock()
+	proxies := h.GetProxies()
 	var targetProxy *models.SharedProxy
-	for _, p := range h.Proxies {
+	for _, p := range proxies {
 		if p.OriginalURL == req.URL {
 			targetProxy = p
 			break
 		}
 	}
-	h.ProxiesLock.RUnlock()
 
 	if targetProxy == nil {
 		http.NotFound(w, r)
