@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 var (
@@ -66,6 +67,24 @@ func buildFrontendIn(frontendDir string) error {
 	// Build frontend
 	if err := execCmd(frontendDir, nil, "npm", "run", "build"); err != nil {
 		return fmt.Errorf("frontend build failed: %w", err)
+	}
+	// Check for companion code directory (e.g. core_web -> core)
+	cleanPath := filepath.Clean(frontendDir)
+	parent, folder := filepath.Split(cleanPath)
+
+	if strings.HasSuffix(folder, "_web") {
+		codeFolder := strings.TrimSuffix(folder, "_web")
+		targetDistDir := filepath.Join(parent, codeFolder, "dist")
+
+		// Clean target directory
+		if err := os.RemoveAll(targetDistDir); err != nil {
+			return fmt.Errorf("failed to clean target dist dir: %w", err)
+		}
+
+		// Copy built artifacts to target dist
+		if err := os.CopyFS(targetDistDir, os.DirFS(distDir)); err != nil {
+			return fmt.Errorf("failed to copy dist to code dir: %w", err)
+		}
 	}
 	return nil
 }

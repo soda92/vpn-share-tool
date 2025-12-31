@@ -182,7 +182,7 @@ func startHTTPServer() {
 	protectedMux.HandleFunc("/trigger-update-remote", handleTriggerUpdateRemote)
 
 	// Serve the Vue frontend (Protected)
-	fsys, err := fs.Sub(frontendDist, "frontend/dist")
+	fsys, err := fs.Sub(frontendDist, "dist")
 	if err != nil {
 		log.Fatal(err)
 	}

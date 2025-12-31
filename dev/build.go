@@ -80,7 +80,7 @@ func copyServerCerts() error {
 	files := []string{"server.crt", "server.key"}
 	for _, file := range files {
 		src := filepath.Join(rootDir, "certs", file)
-		dst := filepath.Join(rootDir, "discovery-server", file)
+		dst := filepath.Join(rootDir, "server", file)
 
 		data, err := os.ReadFile(src)
 		if err != nil {
@@ -119,7 +119,7 @@ func runBuildServer() error {
 	// Build server frontend
 	if !noFrontend {
 		fmt.Println("Building server frontend...")
-		if err := buildFrontendIn(filepath.Join(rootDir, "discovery-server", "frontend")); err != nil {
+		if err := buildFrontendIn(filepath.Join(rootDir, "server_web")); err != nil {
 			return fmt.Errorf("failed to build server frontend: %w", err)
 		}
 	} else {
@@ -128,7 +128,7 @@ func runBuildServer() error {
 
 	// Build Server Binary
 	fmt.Println("Building server binary...")
-	output := filepath.Join(rootDir, "dist", "discovery-server")
+	output := filepath.Join(rootDir, "dist", "server")
 	if runtime.GOOS == "windows" {
 		output += ".exe"
 	}
@@ -138,7 +138,7 @@ func runBuildServer() error {
 		return err
 	}
 
-	if err := execCmd(rootDir, nil, "go", "build", "-o", output, "./discovery-server"); err != nil {
+	if err := execCmd(rootDir, nil, "go", "build", "-o", output, "./server"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
@@ -187,7 +187,7 @@ func runBuildDesktop() error {
 
 	// Build frontend
 	if !noFrontend {
-		if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
+		if err := buildFrontendIn(filepath.Join(rootDir, "core_web")); err != nil {
 			return err
 		}
 	} else {
@@ -230,7 +230,7 @@ func runBuildAAR() error {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
 	// Build frontend
-	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
+	if err := buildFrontendIn(filepath.Join(rootDir, "core_web")); err != nil {
 		return fmt.Errorf("failed to build frontend for AAR: %w", err)
 	}
 
@@ -274,7 +274,7 @@ func runBuildWindows() error {
 
 	// Build frontend
 	if !noFrontend {
-		if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
+		if err := buildFrontendIn(filepath.Join(rootDir, "core_web")); err != nil {
 			return err
 		}
 	} else {
@@ -294,8 +294,8 @@ func runBuildTestProject() error {
 	if err != nil {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
-	testProjectDir := filepath.Join(rootDir, "test_project")
-	frontendDir := filepath.Join(testProjectDir, "frontend")
+	testProjectDir := filepath.Join(rootDir, "demo_site")
+	frontendDir := filepath.Join(rootDir, "demo_site_web")
 
 	// Build frontend
 	if err := buildFrontendIn(frontendDir); err != nil {

@@ -9,11 +9,11 @@ import (
 	"time"
 )
 
-//go:embed all:frontend/dist
+//go:embed all:dist
 var frontend embed.FS
 
 func main() {
-	fs, err := fs.Sub(frontend, "frontend/dist")
+	fs, err := fs.Sub(frontend, "dist")
 	if err != nil {
 		log.Fatal(err)
 	}

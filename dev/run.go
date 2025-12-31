@@ -38,7 +38,7 @@ func runRunDesktop() error {
 	}
 
 	// Build frontend
-	if err := buildFrontendIn(filepath.Join(rootDir, "core", "frontend")); err != nil {
+	if err := buildFrontendIn(filepath.Join(rootDir, "core_web")); err != nil {
 		return err
 	}
 
@@ -55,8 +55,8 @@ func runRunTestProject() error {
 	if err != nil {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
-	testProjectDir := filepath.Join(rootDir, "test_project")
-	frontendDir := filepath.Join(testProjectDir, "frontend")
+	testProjectDir := filepath.Join(rootDir, "demo_site")
+	frontendDir := filepath.Join(rootDir, "demo_site_web")
 
 	// Build frontend
 	if err := buildFrontendIn(frontendDir); err != nil {

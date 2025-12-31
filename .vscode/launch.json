@@ -6,8 +6,8 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/discovery-server",
-            "cwd": "${workspaceFolder}/discovery-server",
+            "program": "${workspaceFolder}/server",
+            "cwd": "${workspaceFolder}/server",
             "env": {
                 "BASIC_AUTH_USER": "admin",
                 "BASIC_AUTH_PASS": "password"
@@ -30,8 +30,8 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/test_project/main.go",
-            "cwd": "${workspaceFolder}/test_project"
+            "program": "${workspaceFolder}/demo_site/main.go",
+            "cwd": "${workspaceFolder}/demo_site"
         }
     ],
     "compounds": [

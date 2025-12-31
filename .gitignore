@@ -6,6 +6,7 @@ tagged_urls.json
 /.ruff_cache
 /fyne-cross
 
+dist
 
 /vpn-share-tool
 *.exe

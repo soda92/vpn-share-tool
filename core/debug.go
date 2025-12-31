@@ -26,7 +26,7 @@ const (
 
 var DebugStoragePath string
 
-//go:embed frontend/dist
+//go:embed dist
 var debugFrontend embed.FS
 
 // CapturedRequest holds details of an intercepted HTTP request and its response.
@@ -71,7 +71,7 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 	}
 
 	// Serve the embedded frontend for the /debug/ path
-	debugFS, err := fs.Sub(debugFrontend, "frontend/dist")
+	debugFS, err := fs.Sub(debugFrontend, "dist")
 	if err != nil {
 		log.Fatalf("Failed to create sub-filesystem for debug frontend: %v", err)
 	}
