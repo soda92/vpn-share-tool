@@ -11,12 +11,10 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/soda92/vpn-share-tool/core"
-	"github.com/soda92/vpn-share-tool/core/models"
 	"github.com/soda92/vpn-share-tool/core/proxy"
 )
 
@@ -106,23 +104,6 @@ func Run() {
 	urlEntry := widget.NewEntry()
 	urlEntry.SetPlaceHolder(l("urlPlaceholder"))
 
-	sharedListData := binding.NewStringList()
-
-	addProxyToUI := func(newProxy *models.SharedProxy) {
-		fyne.Do(func() {
-			if core.MyIP != "" {
-				sharedURL := fmt.Sprintf("http://%s:%d%s", core.MyIP, newProxy.RemotePort, newProxy.Path)
-				displayString := l("sharedUrlFormat", map[string]interface{}{
-					"originalUrl": newProxy.OriginalURL,
-					"sharedUrl":   sharedURL,
-				})
-				sharedListData.Append(displayString)
-			}
-		})
-		// NOTE: saveConfig() is removed from here to prevent saving during startup loops.
-		// The caller is now responsible for saving the config.
-	}
-
 	if *proxyURL != "" {
 		go func() {
 			// Wait for the IP address to be ready via our local broadcast channel
@@ -145,64 +126,7 @@ func Run() {
 		}()
 	}
 
-	removeProxyFromUI := func(p *models.SharedProxy) {
-		fyne.Do(func() {
-			currentList, _ := sharedListData.Get()
-			newList := []string{}
-			for _, item := range currentList {
-				// The display string is "original -> shared".
-				// If the original URL is in the string, we can assume it's the one to remove.
-				if !strings.Contains(item, p.OriginalURL) {
-					newList = append(newList, item)
-				}
-			}
-			sharedListData.Set(newList)
-		})
-	}
-
-	// Goroutine to handle UI updates from any part of the application
-	go func() {
-		for {
-			select {
-			case newProxy := <-proxy.ProxyAddedChan:
-				addProxyToUI(newProxy)
-			case removedProxy := <-proxy.ProxyRemovedChan:
-				removeProxyFromUI(removedProxy)
-			}
-		}
-	}()
-
-	sharedList := widget.NewListWithData(
-		sharedListData,
-		func() fyne.CanvasObject {
-			return widget.NewLabel("template")
-		},
-		func(i binding.DataItem, o fyne.CanvasObject) {
-			o.(*widget.Label).Bind(i.(binding.String))
-		},
-	)
-
-	sharedList.OnSelected = func(id widget.ListItemID) {
-		itemText, err := sharedListData.GetValue(id)
-		if err != nil {
-			return
-		}
-
-		parts := strings.Split(itemText, " -> ")
-		if len(parts) < 2 {
-			return
-		}
-		urlToCopy := parts[1]
-
-		myWindow.Clipboard().SetContent(urlToCopy)
-		fyne.CurrentApp().SendNotification(&fyne.Notification{
-			Title:   l("copiedTitle"),
-			Content: l("copiedContent"),
-		})
-
-		// Unselect the item so it can be clicked again.
-		sharedList.Unselect(id)
-	}
+	sharedList := setupProxyList(myWindow)
 
 	shareLogic := func(rawURL string) {
 		go func() {
