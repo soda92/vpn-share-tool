@@ -1,4 +1,4 @@
-package core
+package handlers
 
 import (
 	_ "embed"
@@ -6,14 +6,18 @@ import (
 	"net/http"
 )
 
-func canReachHandler(w http.ResponseWriter, r *http.Request) {
+type CanReachHandler struct {
+	IsURLReachable func(string) bool
+}
+
+func(h* CanReachHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("url")
 	if targetURL == "" {
 		http.Error(w, "url query parameter is required", http.StatusBadRequest)
 		return
 	}
 
-	reachable := IsURLReachable(targetURL)
+	reachable := h.IsURLReachable(targetURL)
 
 	response := struct {
 		Reachable bool `json:"reachable"`

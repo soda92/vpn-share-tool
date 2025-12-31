@@ -30,16 +30,19 @@ func StartApiServer(apiPort int) error {
 		}
 	}
 
-	myHandler := &handlers.AddProxyHandler{
-		GetIP: func()string {return MyIP},
+	addProxyHandler := &handlers.AddProxyHandler{
+		GetIP:       func() string { return MyIP },
 		CreateProxy: ShareUrlAndGetProxy,
+	}
+	canReachHandler := &handlers.CanReachHandler{
+		IsURLReachable: IsURLReachable,
 	}
 
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()
 	mux.HandleFunc("/services", servicesHandler)
-	mux.Handle("/proxies", myHandler)
-	mux.HandleFunc("/can-reach", canReachHandler)
+	mux.Handle("/proxies", addProxyHandler)
+	mux.Handle("/can-reach", canReachHandler)
 	mux.HandleFunc("/active-proxies", handleGetActiveProxies)
 	mux.HandleFunc("/toggle-debug", handleToggleDebug)
 	mux.HandleFunc("/trigger-update", handleTriggerUpdate)
