@@ -81,7 +81,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func listSessions(w http.ResponseWriter, r *http.Request) {
+func listSessions(w http.ResponseWriter, _ *http.Request) {
 	var sessions []map[string]string
 	err := db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(sessionsMetadataBucket))

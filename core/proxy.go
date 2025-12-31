@@ -116,11 +116,6 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 		req.Host = target.Host
 	}
 
-	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
 	// proxy.Transport will be assigned later after creating SharedProxy
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
@@ -242,7 +237,7 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 	}
 	newProxy.Server = server
 	// Assign transport here to pass the newProxy reference
-	proxy.Transport = NewCachingTransport(client.Transport, newProxy)
+	proxy.Transport = NewCachingTransport(nil, newProxy)
 
 	go func() {
 		log.Printf("Starting proxy for %s on port %d", rawURL, remotePort)

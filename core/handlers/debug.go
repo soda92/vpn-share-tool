@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	_ "embed"
 	"encoding/json"
 	"log"
 	"net/http"
