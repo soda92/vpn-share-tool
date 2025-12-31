@@ -1,4 +1,4 @@
-package core
+package proxy
 
 import (
 	"log"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/soda92/vpn-share-tool/core/models"
+	"github.com/soda92/vpn-share-tool/core/utils"
 )
 
 // startStatsUpdater updates the RequestRate every second.
@@ -50,7 +51,7 @@ func startHealthChecker(p *models.SharedProxy) {
 		select {
 		case <-healthCheckTicker.C:
 			log.Printf("Performing health check for %s", p.OriginalURL)
-			if !IsURLReachable(p.OriginalURL) {
+			if !utils.IsURLReachable(p.OriginalURL) {
 				failureCount++
 				log.Printf("Health check failed for %s (%d/%d).", p.OriginalURL, failureCount, maxFailures)
 				if failureCount >= maxFailures {

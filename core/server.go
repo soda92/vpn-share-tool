@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/soda92/vpn-share-tool/core/proxy"
 )
 
 //go:embed ca.crt
@@ -45,6 +47,7 @@ func GetHTTPClient() *http.Client {
 // SetMyIP allows external packages (like mobile bridge) to set the client IP.
 func SetMyIP(ip string) {
 	MyIP = ip
+	proxy.SetGlobalConfig(MyIP, APIPort, DiscoveryServerURL, GetHTTPClient)
 	log.Printf("Device IP set to: %s", MyIP)
 	// Trigger a signal? For now just logging.
 }

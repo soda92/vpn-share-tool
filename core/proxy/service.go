@@ -1,4 +1,4 @@
-package core
+package proxy
 
 import (
 	"context"
@@ -35,7 +35,18 @@ var (
 	ProxyAddedChan   = make(chan *models.SharedProxy)
 	ProxyRemovedChan = make(chan *models.SharedProxy)
 	IPReadyChan      = make(chan string, 1)
+	MyIP             string
+	APIPort          int
+	DiscoveryServerURL string
+	HTTPClientProvider func() *http.Client
 )
+
+func SetGlobalConfig(ip string, port int, discoveryURL string, clientProvider func() *http.Client) {
+	MyIP = ip
+	APIPort = port
+	DiscoveryServerURL = discoveryURL
+	HTTPClientProvider = clientProvider
+}
 
 // isPortAvailable checks if a TCP port is available to be listened on.
 func isPortAvailable(port int) bool {

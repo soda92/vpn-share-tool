@@ -1,4 +1,4 @@
-package core
+package proxy
 
 import (
 	"bytes"
@@ -43,12 +43,12 @@ func GetCaptchaSolution(clientIP string) string {
 }
 
 func SolveCaptcha(imgData []byte) string {
-	if DiscoveryServerURL != "" {
+	if DiscoveryServerURL != "" && HTTPClientProvider != nil {
 		log.Printf("trying to use server to solve...")
 
 		// 1. Format the endpoint URL
 		url := fmt.Sprintf("%s/solve-captcha", DiscoveryServerURL)
-		client := GetHTTPClient()
+		client := HTTPClientProvider()
 		// 2. Post the raw bytes
 		resp, err := client.Post(url, "application/octet-stream", bytes.NewBuffer(imgData))
 		if err != nil {

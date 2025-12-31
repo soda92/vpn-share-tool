@@ -19,6 +19,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/soda92/vpn-share-tool/core"
 	"github.com/soda92/vpn-share-tool/core/models"
+	"github.com/soda92/vpn-share-tool/core/proxy"
 )
 
 //go:embed i18n/*.json
@@ -131,7 +132,7 @@ func Run() {
 	startupProxyChan := make(chan string, 1)
 
 	go func() {
-		for ip := range core.IPReadyChan {
+		for ip := range proxy.IPReadyChan {
 			localIP := ip
 			fyne.Do(func() {
 				serverStatus.SetText(fmt.Sprintf("Server running on: %s", localIP))
@@ -173,7 +174,7 @@ func Run() {
 			// Wait for the IP address to be ready via our local broadcast channel
 			ip := <-startupProxyChan
 
-			newProxy, err := core.ShareUrlAndGetProxy(*proxyURL, 0)
+			newProxy, err := proxy.ShareUrlAndGetProxy(*proxyURL, 0)
 			if err != nil {
 				log.Printf("Error sharing URL from command line: %v", err)
 				return
@@ -209,9 +210,9 @@ func Run() {
 	go func() {
 		for {
 			select {
-			case newProxy := <-core.ProxyAddedChan:
+			case newProxy := <-proxy.ProxyAddedChan:
 				addProxyToUI(newProxy)
-			case removedProxy := <-core.ProxyRemovedChan:
+			case removedProxy := <-proxy.ProxyRemovedChan:
 				removeProxyFromUI(removedProxy)
 			}
 		}
@@ -251,7 +252,7 @@ func Run() {
 
 	shareLogic := func(rawURL string) {
 		go func() {
-			_, err := core.ShareUrlAndGetProxy(rawURL, 0)
+			_, err := proxy.ShareUrlAndGetProxy(rawURL, 0)
 			if err != nil {
 				// The error might be that it already exists, which is not a critical failure for the user.
 				log.Printf("Error sharing URL: %v", err)
@@ -313,7 +314,7 @@ func Run() {
 		myWindow.Hide()
 	})
 	myWindow.SetOnClosed(func() {
-		core.Shutdown()
+		proxy.Shutdown()
 	})
 
 	myWindow.Resize(fyne.NewSize(600, 400))

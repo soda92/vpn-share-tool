@@ -8,6 +8,8 @@ import (
 
 	"github.com/soda92/vpn-share-tool/core/debug"
 	"github.com/soda92/vpn-share-tool/core/handlers"
+	"github.com/soda92/vpn-share-tool/core/proxy"
+	"github.com/soda92/vpn-share-tool/core/utils"
 )
 
 // StartApiServer starts the HTTP server to provide the API endpoints.
@@ -16,7 +18,7 @@ func StartApiServer(apiPort int) error {
 
 	// Try to auto-detect IP on startup for Desktop/CLI usage
 	if MyIP == "" {
-		ips, err := GetLocalIPs()
+		ips, err := utils.GetLocalIPs()
 		if err == nil {
 			for _, ip := range ips {
 				if strings.HasPrefix(ip, "192.168.") {
@@ -30,31 +32,33 @@ func StartApiServer(apiPort int) error {
 			}
 		}
 	}
+	
+	proxy.SetGlobalConfig(MyIP, APIPort, DiscoveryServerURL, GetHTTPClient)
 
 	addProxyHandler := &handlers.AddProxyHandler{
 		GetIP:       func() string { return MyIP },
-		CreateProxy: ShareUrlAndGetProxy,
+		CreateProxy: proxy.ShareUrlAndGetProxy,
 	}
 	canReachHandler := &handlers.CanReachHandler{
-		IsURLReachable: IsURLReachable,
+		IsURLReachable: utils.IsURLReachable,
 	}
 	servicesHandler := &handlers.ServicesHandler{
-		GetProxies: GetProxies,
-		MyIP:       MyIP,
+		GetProxies:  proxy.GetProxies,
+		MyIP:        MyIP,
 	}
 
 	activeProxiesHandler := &handlers.GetActiveProxiesHandler{
-		GetProxies: GetProxies,
+		GetProxies: proxy.GetProxies,
 	}
 
 	toggleDebugHandler := &handlers.ToggleDebugHandler{
-		GetProxies: GetProxies,
+		GetProxies:  proxy.GetProxies,
 	}
 	toggleCaptchaHandler := &handlers.ToggleCaptchaHandler{
-		GetProxies: GetProxies,
+		GetProxies:  proxy.GetProxies,
 	}
 
-	triggerUpdatehandler := &handlers.TriggerUpdateHandler{
+	triggerUpdatehandler := handlers.TriggerUpdateHandler{
 		TriggerUpdate: TriggerUpdate,
 	}
 
@@ -66,7 +70,7 @@ func StartApiServer(apiPort int) error {
 	mux.Handle("/active-proxies", activeProxiesHandler)
 	mux.Handle("/toggle-debug", toggleDebugHandler)
 	mux.Handle("/toggle-captcha", toggleCaptchaHandler)
-	mux.Handle("/trigger-update", triggerUpdatehandler)
+	mux.Handle("/trigger-update", &triggerUpdatehandler)
 
 	debug.RegisterDebugRoutes(mux)
 
@@ -78,7 +82,7 @@ func StartApiServer(apiPort int) error {
 	log.Printf("Starting API server on port %d", apiPort)
 
 	// Restore saved proxies
-	LoadProxies()
+	proxy.LoadProxies()
 
 	go registerWithDiscoveryServer(apiPort)
 	if err := apiServer.ListenAndServe(); err != http.ErrServerClosed {
