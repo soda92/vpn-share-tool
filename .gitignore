@@ -1,6 +1,8 @@
 tagged_urls.json
 *.log
 
+/bin
+
 /.ruff_cache
 /fyne-cross
 
@@ -34,8 +36,6 @@ docs.fyne.io
 fyne_metadata_init.go
 
 fyne_cross
-
-discovery-server/discovery-server
 
 flutter_gui/linux/libcore*
 certs/
