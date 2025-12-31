@@ -33,14 +33,6 @@ var buildAARCmd = &cobra.Command{
 	},
 }
 
-var buildLinuxCmd = &cobra.Command{
-	Use:   "linux",
-	Short: "Build Linux C-shared library",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runBuildLinux()
-	},
-}
-
 var buildWindowsCmd = &cobra.Command{
 	Use:   "windows",
 	Short: "Build Windows application (fyne-cross)",
@@ -72,7 +64,6 @@ func init() {
 	rootCmd.AddCommand(buildCmd)
 	buildCmd.AddCommand(buildAndroidCmd)
 	buildCmd.AddCommand(buildAARCmd)
-	buildCmd.AddCommand(buildLinuxCmd)
 	buildCmd.AddCommand(buildWindowsCmd)
 	buildCmd.AddCommand(buildTestCmd)
 	buildCmd.AddCommand(buildServerCmd)
@@ -256,18 +247,6 @@ func runBuildAAR() error {
 	return nil
 }
 
-func runBuildLinux() error {
-	fmt.Println("Building Linux C-shared library for Flutter...")
-	rootDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get cwd: %w", err)
-	}
-	if err := execCmd(rootDir, nil, "go", "build", "-buildmode=c-shared", "-o", "flutter_gui/linux/libcore.so", "./linux_bridge"); err != nil {
-		return fmt.Errorf("go build failed: %w", err)
-	}
-	fmt.Println("✅ Linux build successful.")
-	return nil
-}
 
 func runBuildWindows() error {
 	fmt.Println("Building Windows application (cross-compile)...")

@@ -1,6 +1,6 @@
 //go:build !windows
 
-package pythonenv
+package common
 
 import (
 	"os"

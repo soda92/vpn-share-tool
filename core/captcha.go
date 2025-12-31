@@ -8,7 +8,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/soda92/vpn-share-tool/pkg/pythonenv"
+	"github.com/soda92/vpn-share-tool/common"
 )
 
 var (
@@ -53,7 +53,7 @@ func SolveCaptcha(imgData []byte) string {
 		resp, err := client.Post(url, "application/octet-stream", bytes.NewBuffer(imgData))
 		if err != nil {
 			log.Printf("server request failed: %v", err)
-			return pythonenv.SolveCaptchaLocal(imgData)
+			return common.SolveCaptchaLocal(imgData)
 		}
 		defer resp.Body.Close()
 
@@ -61,12 +61,12 @@ func SolveCaptcha(imgData []byte) string {
 		solution, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Printf("failed to read server response: %v", err)
-			return pythonenv.SolveCaptchaLocal(imgData)
+			return common.SolveCaptchaLocal(imgData)
 		}
 
 		return string(solution)
 	}
 
 	log.Printf("no discovery server. trying locally...")
-	return pythonenv.SolveCaptchaLocal(imgData)
+	return common.SolveCaptchaLocal(imgData)
 }
