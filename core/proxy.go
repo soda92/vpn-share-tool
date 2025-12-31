@@ -91,7 +91,6 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 	}
 
 	ProxiesLock.Lock()
-	defer ProxiesLock.Unlock()
 
 	// Prevent adding duplicate Proxies by checking inside the lock
 	host := target.Host
@@ -253,6 +252,7 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 
 	ProxyAddedChan <- newProxy
 
+	ProxiesLock.Unlock()
 	SaveProxies()
 
 	return newProxy, nil
@@ -260,9 +260,17 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 
 func Shutdown() {
 	ProxiesLock.Lock()
-	defer ProxiesLock.Unlock()
+	proxiesToShutdown := make([]*SharedProxy, len(Proxies))
+	copy(proxiesToShutdown, Proxies)
+	ProxiesLock.Unlock()
+
 	var wg sync.WaitGroup
-	for _, p := range Proxies {
+	for _, p := range proxiesToShutdown {
+		// Cancel background tasks (Stats, HealthCheck)
+		if p.cancel != nil {
+			p.cancel()
+		}
+
 		if p.Server != nil {
 			wg.Add(1)
 			go func(s *http.Server) {
