@@ -37,6 +37,9 @@ func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	mutex.Unlock()
 
+	var lastError string
+	reachableNodeFound := false
+
 	for _, instance := range activeInstances {
 		// Check if the instance can reach the URL
 		canReachURL := fmt.Sprintf("http://%s/can-reach?url=%s", instance.Address, url.QueryEscape(req.URL))
@@ -58,12 +61,16 @@ func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 		resp.Body.Close()
 
 		if canReachResp.Reachable {
+			reachableNodeFound = true
 			// This instance can reach the URL, so create the proxy here
 			createProxyURL := fmt.Sprintf("http://%s/proxies", instance.Address)
 			proxyReqBody, _ := json.Marshal(map[string]string{"url": req.URL})
-			resp, err := http.Post(createProxyURL, "application/json", bytes.NewBuffer(proxyReqBody))
+			
+			postClient := &http.Client{Timeout: 10 * time.Second}
+			resp, err := postClient.Post(createProxyURL, "application/json", bytes.NewBuffer(proxyReqBody))
 			if err != nil {
 				log.Printf("Error creating proxy on %s: %v", instance.Address, err)
+				lastError = fmt.Sprintf("Node %s reachable but failed to connect: %v", instance.Address, err)
 				continue
 			}
 
@@ -82,13 +89,25 @@ func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 				json.NewEncoder(w).Encode(proxyResp)
 				return
 			} else {
+				// Read error body
+				buf := new(bytes.Buffer)
+				buf.ReadFrom(resp.Body)
 				resp.Body.Close()
+				errorMsg := buf.String()
+				log.Printf("Failed to create proxy on %s. Status: %d, Body: %s", instance.Address, resp.StatusCode, errorMsg)
+				lastError = fmt.Sprintf("Node %s reachable but refused creation (%d): %s", instance.Address, resp.StatusCode, errorMsg)
 			}
 		}
 	}
 
 	// If no instance can reach the URL
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotFound)
-	json.NewEncoder(w).Encode(map[string]string{"error": "No available instance can reach the target URL."})
+	
+	if reachableNodeFound {
+		w.WriteHeader(http.StatusBadGateway) // Or 502/500
+		json.NewEncoder(w).Encode(map[string]string{"error": lastError})
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "No available instance can reach the target URL."})
+	}
 }
