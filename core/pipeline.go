@@ -240,7 +240,7 @@ func RewritePhisURLs(ctx *ProcessingContext, body string) string {
 					log.Printf("Rewrote anti-phishing redirect to: %s", sharedURL)
 				}
 			}
-			
+
 			if err != nil {
 				log.Printf("Error creating proxy for phis URL: %v", err)
 			} else if newProxy != nil {

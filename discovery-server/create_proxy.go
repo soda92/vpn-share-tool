@@ -65,7 +65,7 @@ func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 			// This instance can reach the URL, so create the proxy here
 			createProxyURL := fmt.Sprintf("http://%s/proxies", instance.Address)
 			proxyReqBody, _ := json.Marshal(map[string]string{"url": req.URL})
-			
+
 			postClient := &http.Client{Timeout: 10 * time.Second}
 			resp, err := postClient.Post(createProxyURL, "application/json", bytes.NewBuffer(proxyReqBody))
 			if err != nil {
@@ -102,7 +102,7 @@ func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
 
 	// If no instance can reach the URL
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	if reachableNodeFound {
 		w.WriteHeader(http.StatusBadGateway) // Or 502/500
 		json.NewEncoder(w).Encode(map[string]string{"error": lastError})

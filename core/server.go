@@ -22,7 +22,7 @@ const (
 )
 
 var (
-	// Fallback IPs if scanning fails. 
+	// Fallback IPs if scanning fails.
 	// 127.0.0.1 is prioritized for local testing.
 	ServerIPs          = []string{"127.0.0.1", "192.168.0.81", "192.168.1.81"}
 	APIPort            int

@@ -18,4 +18,3 @@ func getClientIP(req *http.Request) string {
 
 	return clientIP
 }
-
