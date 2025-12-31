@@ -4,10 +4,12 @@ import (
 	"log"
 	"sync/atomic"
 	"time"
+
+	"github.com/soda92/vpn-share-tool/core/models"
 )
 
 // startStatsUpdater updates the RequestRate every second.
-func startStatsUpdater(p *SharedProxy) {
+func startStatsUpdater(p *models.SharedProxy) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -17,10 +19,10 @@ func startStatsUpdater(p *SharedProxy) {
 		select {
 		case <-ticker.C:
 			// Calculate rate
-			count := atomic.SwapInt64(&p.reqCounter, 0)
+			count := atomic.SwapInt64(&p.ReqCounter, 0)
 			currentRate := float64(count)
 
-			p.mu.Lock()
+			p.Mu.Lock()
 			// EMA: NewVal = (Current * alpha) + (OldVal * (1 - alpha))
 			p.RequestRate = (currentRate * alpha) + (p.RequestRate * (1 - alpha))
 
@@ -28,8 +30,8 @@ func startStatsUpdater(p *SharedProxy) {
 			if p.RequestRate < 0.01 {
 				p.RequestRate = 0
 			}
-			p.mu.Unlock()
-		case <-p.ctx.Done():
+			p.Mu.Unlock()
+		case <-p.Ctx.Done():
 			// Context cancelled, stop the updater
 			return
 		}
@@ -37,7 +39,7 @@ func startStatsUpdater(p *SharedProxy) {
 }
 
 // startHealthChecker runs in a goroutine to periodically check if a URL is reachable.
-func startHealthChecker(p *SharedProxy) {
+func startHealthChecker(p *models.SharedProxy) {
 	healthCheckTicker := time.NewTicker(1 * time.Minute) // Check more frequently
 	defer healthCheckTicker.Stop()
 
@@ -64,7 +66,7 @@ func startHealthChecker(p *SharedProxy) {
 					log.Printf("Health check successful for %s", p.OriginalURL)
 				}
 			}
-		case <-p.ctx.Done():
+		case <-p.Ctx.Done():
 			// Context cancelled, stop the health checker
 			return
 		}

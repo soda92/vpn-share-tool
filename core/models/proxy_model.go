@@ -1,4 +1,4 @@
-package core
+package models
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 type contextKey string
 
-const originalHostKey contextKey = "originalHost"
+const OriginalHostKey contextKey = "originalHost"
 
 type SharedProxy struct {
 	OriginalURL   string                 `json:"original_url"`
@@ -21,32 +21,32 @@ type SharedProxy struct {
 	EnableCaptcha bool                   `json:"enable_captcha"`
 	RequestRate   float64                `json:"request_rate"`
 	TotalRequests int64                  `json:"total_requests"`
-	mu            sync.RWMutex
-	reqCounter    int64              // Atomic counter for current second
-	ctx           context.Context    // Context for lifecycle management
-	cancel        context.CancelFunc // Function to cancel the context
+	Mu            sync.RWMutex
+	ReqCounter    int64              // Atomic counter for current second
+	Ctx           context.Context    // Context for lifecycle management
+	Cancel        context.CancelFunc // Function to cancel the context
 }
 
 func (p *SharedProxy) SetEnableDebug(enable bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.Mu.Lock()
+	defer p.Mu.Unlock()
 	p.EnableDebug = enable
 }
 
 func (p *SharedProxy) GetEnableDebug() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.Mu.RLock()
+	defer p.Mu.RUnlock()
 	return p.EnableDebug
 }
 
 func (p *SharedProxy) SetEnableCaptcha(enable bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.Mu.Lock()
+	defer p.Mu.Unlock()
 	p.EnableCaptcha = enable
 }
 
 func (p *SharedProxy) GetEnableCaptcha() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.Mu.RLock()
+	defer p.Mu.RUnlock()
 	return p.EnableCaptcha
 }

@@ -12,6 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/soda92/vpn-share-tool/core/models"
 )
 
 const (
@@ -19,10 +21,10 @@ const (
 )
 
 var (
-	Proxies          []*SharedProxy
+	Proxies          []*models.SharedProxy
 	ProxiesLock      sync.RWMutex
-	ProxyAddedChan   = make(chan *SharedProxy)
-	ProxyRemovedChan = make(chan *SharedProxy)
+	ProxyAddedChan   = make(chan *models.SharedProxy)
+	ProxyRemovedChan = make(chan *models.SharedProxy)
 	IPReadyChan      = make(chan string, 1)
 )
 
@@ -38,12 +40,12 @@ func isPortAvailable(port int) bool {
 }
 
 // removeProxy shuts down a proxy server and removes it from the list.
-func removeProxy(p *SharedProxy) {
+func removeProxy(p *models.SharedProxy) {
 	log.Printf("Removing proxy for unreachable URL: %s", p.OriginalURL)
 
 	// 0. Cancel the context to stop background tasks (Stats, HealthCheck)
-	if p.cancel != nil {
-		p.cancel()
+	if p.Cancel != nil {
+		p.Cancel()
 	}
 
 	// 1. Shutdown the HTTP server
@@ -57,7 +59,7 @@ func removeProxy(p *SharedProxy) {
 
 	// 2. Remove from the global Proxies slice
 	ProxiesLock.Lock()
-	newProxies := []*SharedProxy{}
+	newProxies := []*models.SharedProxy{}
 	for _, proxy := range Proxies {
 		if proxy != p {
 			newProxies = append(newProxies, proxy)
@@ -73,7 +75,7 @@ func removeProxy(p *SharedProxy) {
 	SaveProxies()
 }
 
-func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error) {
+func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy, error) {
 	if rawURL == "" {
 		return nil, fmt.Errorf("URL cannot be empty")
 	}
@@ -139,7 +141,7 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 			}
 
 			ProxiesLock.RLock()
-			var existingProxy *SharedProxy
+			var existingProxy *models.SharedProxy
 			for _, p := range Proxies {
 				if p.OriginalURL == locationURL.String() {
 					existingProxy = p
@@ -148,7 +150,7 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 			}
 			ProxiesLock.RUnlock()
 
-			originalHost, ok := resp.Request.Context().Value(originalHostKey).(string)
+			originalHost, ok := resp.Request.Context().Value(models.OriginalHostKey).(string)
 			if !ok {
 				log.Println("Error: could not retrieve originalHost from context or it's not a string")
 				return nil
@@ -218,23 +220,23 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// Pre-create the struct to allow closure capture
-	newProxy := &SharedProxy{
+	newProxy := &models.SharedProxy{
 		OriginalURL:   rawURL,
 		RemotePort:    remotePort,
 		Path:          target.Path,
 		Handler:       proxy,
 		EnableDebug:   true,
 		EnableCaptcha: true,
-		ctx:           ctx,
-		cancel:        cancel,
+		Ctx:           ctx,
+		Cancel:        cancel,
 	}
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", remotePort),
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Update metrics
-			atomic.AddInt64(&newProxy.reqCounter, 1)
+			atomic.AddInt64(&newProxy.ReqCounter, 1)
 			atomic.AddInt64(&newProxy.TotalRequests, 1)
-			ctx := context.WithValue(r.Context(), originalHostKey, r.Host)
+			ctx := context.WithValue(r.Context(), models.OriginalHostKey, r.Host)
 			proxy.ServeHTTP(w, r.WithContext(ctx))
 		}),
 	}
@@ -265,15 +267,15 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*SharedProxy, error)
 
 func Shutdown() {
 	ProxiesLock.Lock()
-	proxiesToShutdown := make([]*SharedProxy, len(Proxies))
+	proxiesToShutdown := make([]*models.SharedProxy, len(Proxies))
 	copy(proxiesToShutdown, Proxies)
 	ProxiesLock.Unlock()
 
 	var wg sync.WaitGroup
 	for _, p := range proxiesToShutdown {
 		// Cancel background tasks (Stats, HealthCheck)
-		if p.cancel != nil {
-			p.cancel()
+		if p.Cancel != nil {
+			p.Cancel()
 		}
 
 		if p.Server != nil {
@@ -291,7 +293,7 @@ func Shutdown() {
 	wg.Wait()
 }
 
-func GetProxies() []*SharedProxy {
+func GetProxies() []*models.SharedProxy {
 	ProxiesLock.RLock()
 	defer ProxiesLock.RUnlock()
 	return Proxies

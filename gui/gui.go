@@ -18,6 +18,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/soda92/vpn-share-tool/core"
+	"github.com/soda92/vpn-share-tool/core/models"
 )
 
 //go:embed i18n/*.json
@@ -152,7 +153,7 @@ func Run() {
 
 	sharedListData := binding.NewStringList()
 
-	addProxyToUI := func(newProxy *core.SharedProxy) {
+	addProxyToUI := func(newProxy *models.SharedProxy) {
 		fyne.Do(func() {
 			if core.MyIP != "" {
 				sharedURL := fmt.Sprintf("http://%s:%d%s", core.MyIP, newProxy.RemotePort, newProxy.Path)
@@ -189,7 +190,7 @@ func Run() {
 		}()
 	}
 
-	removeProxyFromUI := func(p *core.SharedProxy) {
+	removeProxyFromUI := func(p *models.SharedProxy) {
 		fyne.Do(func() {
 			currentList, _ := sharedListData.Get()
 			newList := []string{}

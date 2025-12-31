@@ -1,13 +1,22 @@
-package core
+package handlers
 
 import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/soda92/vpn-share-tool/core/models"
 )
 
-func addProxyHandler(w http.ResponseWriter, r *http.Request) {
+type AddProxyHandler struct {
+	GetIP func() string
+	CreateProxy func(url string, port int) (*models.SharedProxy, error)
+}
+
+func (h *AddProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	IP := h.GetIP()
+	MyIP := IP
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -27,7 +36,7 @@ func addProxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newProxy, err := ShareUrlAndGetProxy(req.URL, 0)
+	newProxy, err := h.CreateProxy(req.URL, 0)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create proxy: %v", err), http.StatusInternalServerError)
 		return

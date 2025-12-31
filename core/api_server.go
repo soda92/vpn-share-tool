@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/soda92/vpn-share-tool/core/handlers"
 )
 
 // StartApiServer starts the HTTP server to provide the API endpoints.
@@ -28,10 +30,15 @@ func StartApiServer(apiPort int) error {
 		}
 	}
 
+	myHandler := &handlers.AddProxyHandler{
+		GetIP: func()string {return MyIP},
+		CreateProxy: ShareUrlAndGetProxy,
+	}
+
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()
 	mux.HandleFunc("/services", servicesHandler)
-	mux.HandleFunc("/proxies", addProxyHandler)
+	mux.Handle("/proxies", myHandler)
 	mux.HandleFunc("/can-reach", canReachHandler)
 	mux.HandleFunc("/active-proxies", handleGetActiveProxies)
 	mux.HandleFunc("/toggle-debug", handleToggleDebug)

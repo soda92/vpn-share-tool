@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/soda92/vpn-share-tool/core/models"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
 )
@@ -33,10 +34,10 @@ type cacheEntry struct {
 type CachingTransport struct {
 	Transport http.RoundTripper
 	Cache     *lru.Cache[string, cacheEntry]
-	Proxy     *SharedProxy
+	Proxy     *models.SharedProxy
 }
 
-func NewCachingTransport(transport http.RoundTripper, proxy *SharedProxy) *CachingTransport {
+func NewCachingTransport(transport http.RoundTripper, proxy *models.SharedProxy) *CachingTransport {
 	cache, err := lru.New[string, cacheEntry](2560)
 	if err != nil {
 		// This should not happen with a static size

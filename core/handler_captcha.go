@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"github.com/soda92/vpn-share-tool/core/models"
 )
 
 func handleToggleCaptcha(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +26,7 @@ func handleToggleCaptcha(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ProxiesLock.RLock()
-	var targetProxy *SharedProxy
+	var targetProxy *models.SharedProxy
 	for _, p := range Proxies {
 		if p.OriginalURL == req.URL {
 			targetProxy = p
