@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/soda92/vpn-share-tool/core/debug"
 	"github.com/soda92/vpn-share-tool/core/handlers"
 )
 
@@ -37,18 +38,40 @@ func StartApiServer(apiPort int) error {
 	canReachHandler := &handlers.CanReachHandler{
 		IsURLReachable: IsURLReachable,
 	}
+	servicesHandler := &handlers.ServicesHandler{
+		Proxies:     Proxies,
+		ProxiesLock: ProxiesLock,
+		MyIP:        MyIP,
+	}
+
+	activeProxiesHandler := &handlers.GetActiveProxiesHandler{
+		GetProxies: GetProxies,
+	}
+
+	toggleDebugHandler := &handlers.ToggleDebugHandler{
+		Proxies:     Proxies,
+		ProxiesLock: ProxiesLock,
+	}
+	toggleCaptchaHandler := handlers.ToggleCaptchaHandler{
+		Proxies:     Proxies,
+		ProxiesLock: ProxiesLock,
+	}
+
+	triggerUpdatehandler := handlers.TriggerUpdateHandler{
+		TriggerUpdate: TriggerUpdate,
+	}
 
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()
-	mux.HandleFunc("/services", servicesHandler)
+	mux.Handle("/services", servicesHandler)
 	mux.Handle("/proxies", addProxyHandler)
 	mux.Handle("/can-reach", canReachHandler)
-	mux.HandleFunc("/active-proxies", handleGetActiveProxies)
-	mux.HandleFunc("/toggle-debug", handleToggleDebug)
-	mux.HandleFunc("/trigger-update", handleTriggerUpdate)
-	mux.HandleFunc("/toggle-captcha", handleToggleCaptcha)
+	mux.Handle("/active-proxies", activeProxiesHandler)
+	mux.Handle("/toggle-debug", toggleDebugHandler)
+	mux.Handle("/toggle-captcha", toggleCaptchaHandler)
+	mux.Handle("/trigger-update", triggerUpdatehandler)
 
-	RegisterDebugRoutes(mux)
+	debug.RegisterDebugRoutes(mux)
 
 	apiServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", apiPort),

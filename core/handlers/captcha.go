@@ -9,12 +9,12 @@ import (
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
-type HandleToggleCaptcha struct {
+type ToggleCaptchaHandler struct {
 	Proxies     []*models.SharedProxy
 	ProxiesLock sync.RWMutex
 }
 
-func (h *HandleToggleCaptcha) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *ToggleCaptchaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return

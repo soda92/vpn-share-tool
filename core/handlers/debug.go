@@ -10,12 +10,12 @@ import (
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
-type HandleToggleDebug struct {
+type ToggleDebugHandler struct {
 	Proxies     []*models.SharedProxy
 	ProxiesLock sync.RWMutex
 }
 
-func (h *HandleToggleDebug) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *ToggleDebugHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return

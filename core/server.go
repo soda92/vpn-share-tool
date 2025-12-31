@@ -12,10 +12,7 @@ import (
 //go:embed ca.crt
 var rootCACert []byte
 
-type sharedURLInfo struct {
-	OriginalURL string `json:"original_url"`
-	SharedURL   string `json:"shared_url"`
-}
+
 
 const (
 	discoverySrvPort = "45679"

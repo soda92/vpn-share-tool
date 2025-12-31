@@ -14,10 +14,17 @@ import (
 type ServicesHandler struct {
 	Proxies     []*models.SharedProxy
 	ProxiesLock sync.RWMutex
+	MyIP string
+}
+
+type sharedURLInfo struct {
+	OriginalURL string `json:"original_url"`
+	SharedURL   string `json:"shared_url"`
 }
 
 // servicesHandler provides the list of currently shared proxies as a JSON response.
 func (h *ServicesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	MyIP := h.MyIP
 	h.ProxiesLock.RLock()
 	defer h.ProxiesLock.RUnlock()
 
@@ -26,7 +33,7 @@ func (h *ServicesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if MyIP != "" {
 		// Just use the first LAN IP for the response. The client can substitute it if needed.
 		ip := MyIP
-		for _, p := range Proxies {
+		for _, p := range h.Proxies {
 			sharedURL := fmt.Sprintf("http://%s:%d%s", ip, p.RemotePort, p.Path)
 			response = append(response, sharedURLInfo{
 				OriginalURL: p.OriginalURL,

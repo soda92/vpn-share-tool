@@ -9,11 +9,11 @@ import (
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
-type HandleGetActiveProxies struct {
+type GetActiveProxiesHandler struct {
 	GetProxies func()     []*models.SharedProxy
 }
 
-func(h *HandleGetActiveProxies) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func(h *GetActiveProxiesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxies := h.GetProxies()
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(proxies); err != nil {

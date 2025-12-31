@@ -6,11 +6,11 @@ import (
 	"net/http"
 )
 
-type HandleTriggerUpdate struct {
+type TriggerUpdateHandler struct {
 	TriggerUpdate func() (bool, error)
 }
 
-func (h *HandleTriggerUpdate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *TriggerUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
