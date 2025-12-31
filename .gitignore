@@ -1,3 +1,7 @@
+tagged_urls.json
+*.log
+
+
 /vpn-share-tool
 *.exe
 *.db
