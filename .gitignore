@@ -1,6 +1,7 @@
 tagged_urls.json
 *.log
 
+/Icon.png
 /bin
 
 /.ruff_cache

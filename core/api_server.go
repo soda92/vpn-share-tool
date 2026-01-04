@@ -32,7 +32,7 @@ func StartApiServer(apiPort int) error {
 			}
 		}
 	}
-	
+
 	proxy.SetGlobalConfig(MyIP, APIPort, DiscoveryServerURL, GetHTTPClient)
 
 	addProxyHandler := &handlers.AddProxyHandler{
@@ -43,8 +43,8 @@ func StartApiServer(apiPort int) error {
 		IsURLReachable: utils.IsURLReachable,
 	}
 	servicesHandler := &handlers.ServicesHandler{
-		GetProxies:  proxy.GetProxies,
-		MyIP:        MyIP,
+		GetProxies: proxy.GetProxies,
+		MyIP:       MyIP,
 	}
 
 	activeProxiesHandler := &handlers.GetActiveProxiesHandler{
@@ -52,10 +52,10 @@ func StartApiServer(apiPort int) error {
 	}
 
 	toggleDebugHandler := &handlers.ToggleDebugHandler{
-		GetProxies:  proxy.GetProxies,
+		GetProxies: proxy.GetProxies,
 	}
 	toggleCaptchaHandler := &handlers.ToggleCaptchaHandler{
-		GetProxies:  proxy.GetProxies,
+		GetProxies: proxy.GetProxies,
 	}
 
 	triggerUpdatehandler := handlers.TriggerUpdateHandler{

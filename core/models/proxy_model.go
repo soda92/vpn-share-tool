@@ -36,10 +36,10 @@ type SharedProxy struct {
 	EnableCaptcha bool                   `json:"enable_captcha"`
 	RequestRate   float64                `json:"request_rate"`
 	TotalRequests int64                  `json:"total_requests"`
-	Mu            sync.RWMutex
-	ReqCounter    int64              // Atomic counter for current second
-	Ctx           context.Context    // Context for lifecycle management
-	Cancel        context.CancelFunc // Function to cancel the context
+	Mu            sync.RWMutex           `json:"-"`
+	ReqCounter    int64                  `json:"-"` // Atomic counter for current second
+	Ctx           context.Context        `json:"-"` // Context for lifecycle management
+	Cancel        context.CancelFunc     `json:"-"` // Function to cancel the context
 }
 
 func (p *SharedProxy) SetEnableDebug(enable bool) {

@@ -6,8 +6,8 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/server",
-            "cwd": "${workspaceFolder}/server",
+            "program": "${workspaceFolder}/cmd/discovery/main.go",
+            "cwd": "${workspaceFolder}/cmd/discovery",
             "env": {
                 "BASIC_AUTH_USER": "admin",
                 "BASIC_AUTH_PASS": "password"
@@ -18,12 +18,8 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/main.go",
-            "cwd": "${workspaceFolder}",
-            "args": [
-                "--proxy-url",
-                ""
-            ]
+            "program": "${workspaceFolder}/cmd/vpn-share-tool/main.go",
+            "cwd": "${workspaceFolder}/cmd/vpn-share-tool",
         },
         {
             "name": "Launch Test Site (Port 8888)",

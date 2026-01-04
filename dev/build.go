@@ -80,7 +80,7 @@ func copyServerCerts() error {
 	files := []string{"server.crt", "server.key"}
 	for _, file := range files {
 		src := filepath.Join(rootDir, "certs", file)
-		dst := filepath.Join(rootDir, "discovery", file)
+		dst := filepath.Join(rootDir, "discovery", "resources", file)
 
 		data, err := os.ReadFile(src)
 		if err != nil {
@@ -180,7 +180,6 @@ func copyCertsToCore() error {
 	return os.WriteFile(dst, data, 0644)
 }
 
-
 func runBuildDesktop() error {
 	fmt.Println("Building main application (Desktop)...")
 	rootDir, err := os.Getwd()
@@ -189,19 +188,22 @@ func runBuildDesktop() error {
 	}
 
 	if err := copyCertsToCore(); err != nil {
-		        return fmt.Errorf("failed to copy certs: %w", err)
-		    }
-		
-		    // Build frontend
-		    if !noFrontend {
-		        if err := buildFrontendIn(filepath.Join(rootDir, "core", "debug_web")); err != nil {			return err
+		return fmt.Errorf("failed to copy certs: %w", err)
+	}
+
+	// Build frontend
+	if !noFrontend {
+		if err := buildFrontendIn(filepath.Join(rootDir, "core", "debug_web")); err != nil {
+			return err
 		}
 	} else {
 		fmt.Println("Skipping frontend build.")
 	}
 
+	toolCmdDir := filepath.Join(rootDir, "cmd", "vpn-share-tool")
+
 	// Build Go binary
-	if err := execCmd(rootDir, nil, "go", "build", "-o", "vpn-share-tool", "./cmd/vpn-share-tool"); err != nil {
+	if err := execCmd(toolCmdDir, nil, "go", "build", "-o", "vpn-share-tool"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
@@ -252,7 +254,6 @@ func runBuildAAR() error {
 	fmt.Println("✅ AAR build successful.")
 	return nil
 }
-
 
 func runBuildWindows() error {
 	fmt.Println("Building Windows application (cross-compile)...")

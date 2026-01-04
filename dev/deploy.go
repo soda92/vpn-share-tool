@@ -39,8 +39,9 @@ func runDeploy(target string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
-	discoveryDir := filepath.Join(rootDir, "discovery-server")
-	frontendDir := filepath.Join(discoveryDir, "frontend")
+	discoveryDir := filepath.Join(rootDir, "discovery")
+	frontendDir := filepath.Join(rootDir, "discovery_web")
+	discoveryEntryDir := filepath.Join(rootDir, "cmd", "discovery")
 
 	// Build frontend
 	if err := buildFrontendIn(frontendDir); err != nil {
@@ -48,12 +49,12 @@ func runDeploy(target string) error {
 	}
 
 	// Build Go binary
-	if err := execCmd(discoveryDir, nil, "go", "build", "-o", "discovery-server"); err != nil {
+	if err := execCmd(discoveryEntryDir, nil, "go", "build", "-o", "discovery-server"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
 	fmt.Printf("Copying executable to %s...\n", target)
-	binaryPath := filepath.Join(discoveryDir, "discovery-server")
+	binaryPath := filepath.Join(discoveryEntryDir, "discovery-server")
 	if err := execCmd(rootDir, nil, "scp", binaryPath, fmt.Sprintf("%s:~", target)); err != nil {
 		return fmt.Errorf("scp binary failed: %w", err)
 	}
