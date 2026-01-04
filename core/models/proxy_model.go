@@ -26,6 +26,11 @@ type ProcessingContext struct {
 	Services   PipelineServices
 }
 
+type ProxySettings struct {
+	EnableContentMod bool `json:"enable_content_mod"`
+	EnableUrlRewrite bool `json:"enable_url_rewrite"`
+}
+
 type SharedProxy struct {
 	OriginalURL   string                 `json:"original_url"`
 	RemotePort    int                    `json:"remote_port"`
@@ -34,6 +39,8 @@ type SharedProxy struct {
 	Server        *http.Server           `json:"-"`
 	EnableDebug   bool                   `json:"enable_debug"`
 	EnableCaptcha bool                   `json:"enable_captcha"`
+	Settings      ProxySettings          `json:"settings"`
+	ActiveSystems []string               `json:"active_systems"`
 	RequestRate   float64                `json:"request_rate"`
 	TotalRequests int64                  `json:"total_requests"`
 	Mu            sync.RWMutex           `json:"-"`

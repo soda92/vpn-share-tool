@@ -2,30 +2,44 @@
   <div class="container">
     <h1 class="app-title">{{ $t('title') }}</h1>
 
-    <div class="main-grid">
+    <div class="main-grid" :class="{ 'single-column': !showAllProxies }">
       <!-- Left Column: Tagged URLs (Primary Action) -->
-      <TaggedList
-        :tagged-urls="taggedUrls"
-        :add-form="newTag"
-        :creating-proxy-urls="creatingProxyUrls"
-        @save-tag="saveTaggedUrl"
-        @create-proxy="createProxy"
-        @toggle-debug="toggleDebug"
-        @toggle-captcha="toggleCaptcha"
-        @rename-tag="renameTag"
-        @delete-tag="deleteTag"
-      />
+      <div class="left-column">
+        <TaggedList
+          :tagged-urls="taggedUrls"
+          :add-form="newTag"
+          :creating-proxy-urls="creatingProxyUrls"
+          @save-tag="saveTaggedUrl"
+          @create-proxy="createProxy"
+          @open-settings="openSettings"
+          @rename-tag="renameTag"
+          @delete-tag="deleteTag"
+        />
+        
+        <div class="toggle-section">
+           <el-button @click="showAllProxies = !showAllProxies">
+             {{ showAllProxies ? 'Hide All Active Proxies' : 'Show All Active Proxies' }}
+           </el-button>
+        </div>
+      </div>
 
       <!-- Right Column: All Active Proxies (Quick Access) -->
-      <ProxyList
-        :cluster-proxies="clusterProxies"
-        @toggle-debug="toggleDebug"
-        @toggle-captcha="toggleCaptcha"
-      />
+      <div v-if="showAllProxies" class="right-column">
+        <ProxyList
+          :cluster-proxies="clusterProxies"
+          @open-settings="openSettings"
+        />
+      </div>
     </div>
 
     <!-- Bottom Section: Active Servers (Info) -->
     <ServerInfo :servers="servers" :latest-version="latestVersion" @update-server="handleUpdateServer" />
+
+    <SettingsDialog
+      v-model="settingsVisible"
+      :proxy-data="currentSettingsProxy"
+      @save="handleSaveSettings"
+    />
   </div>
 </template>
 
@@ -36,13 +50,60 @@ import { ElNotification } from 'element-plus';
 import TaggedList from './components/TaggedList.vue';
 import ProxyList from './components/ProxyList.vue';
 import ServerInfo from './components/ServerInfo.vue';
+import SettingsDialog from './components/SettingsDialog.vue';
 
 const servers = ref([]);
 const taggedUrls = ref([]);
 const clusterProxies = ref([]);
+const showAllProxies = ref(false);
 const newTag = ref({ tag: '', url: '' });
 const creatingProxyUrls = ref({});
 const latestVersion = ref('');
+
+// Settings Dialog State
+const settingsVisible = ref(false);
+const currentSettingsProxy = ref(null);
+
+const openSettings = (proxy) => {
+  currentSettingsProxy.value = proxy;
+  settingsVisible.value = true;
+};
+
+const handleSaveSettings = async (data) => {
+  let success = false;
+  // 1. Try New Settings
+  try {
+    await axios.post('/update-proxy-settings', { 
+        url: data.url, 
+        settings: data.settings 
+    });
+    success = true;
+  } catch (err) {
+    console.warn("New settings API failed (legacy client?):", err);
+  }
+
+  // 2. Update Legacy Settings (Best Effort)
+  try {
+      if (currentSettingsProxy.value.enable_debug !== data.legacy.enable_debug) {
+         await axios.post('/toggle-debug-proxy', { url: data.url, enable: data.legacy.enable_debug });
+         success = true;
+      }
+      if (currentSettingsProxy.value.enable_captcha !== data.legacy.enable_captcha) {
+         await axios.post('/toggle-captcha-proxy', { url: data.url, enable: data.legacy.enable_captcha });
+         success = true;
+      }
+  } catch (err) {
+      console.error("Legacy toggle failed:", err);
+  }
+  
+  if (success) {
+      ElNotification({ title: 'Success', message: 'Settings updated.', type: 'success' });
+      fetchTaggedURLs();
+      fetchClusterProxies();
+  } else {
+      ElNotification({ title: 'Error', message: 'Failed to update settings. Check client connection.', type: 'error' });
+  }
+};
 
 const fetchServers = async () => {
   try {
@@ -166,14 +227,8 @@ body {
   background-color: #f4f7f6;
   margin: 0;
   padding: 0;
-  height: 100%;
+  min-height: 100vh;
   box-sizing: border-box;
-  /* overflow: hidden;  <-- Removed to allow fallback scrolling */
-  /* Desktop default */
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
 }
 
 *,
@@ -181,51 +236,26 @@ body {
 *::after {
   box-sizing: border-box;
 }
-
-@media (max-width: 768px) {
-
-  html,
-  body {
-    height: auto !important;
-    overflow: visible !important;
-    /* Ensure document scroll */
-    display: block;
-  }
-}
-
-@media (max-height: 600px) {
-
-  html,
-  body {
-    height: auto !important;
-    overflow: auto !important;
-    display: block;
-  }
-}
 </style>
-
-
 
 <style scoped>
 .container {
   max-width: 1400px;
   width: 100%;
-  height: 100vh; /* Full viewport height */
-  max-height: 100vh;
+  min-height: 100vh;
   background-color: #ffffff;
   padding: 1rem;
-  /* border-radius: 8px; */ /* Removed for full-screen feel consistency, or keep if preferred. Keeping basic structure but ensuring sizing */
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  /* Prevent container scroll */
+  margin: 0 auto; /* Center naturally */
 }
 
 @media (min-width: 769px) {
   .container {
     width: calc(100% - 2rem);
-    height: calc(100vh - 2rem);
+    min-height: auto; /* Allow content to dictate height, but keep min for look */
+    margin: 1rem auto;
     border-radius: 8px;
   }
 }
@@ -236,53 +266,36 @@ body {
   margin: 0 0 1rem 0;
   font-size: 1.5rem;
   font-weight: 700;
-  flex-shrink: 0;
 }
 
 .main-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
-  flex-grow: 1;
-  overflow: hidden;
-  /* Contains the scrollable sections */
+  /* Removed overflow and flex-grow */
+}
 
-  min-height: 0;
-  /* Crucial for nested scrolling */
+.main-grid.single-column {
+  grid-template-columns: 1fr;
+}
 
+.toggle-section {
+  margin-top: 1rem;
+  text-align: center;
 }
 
 @media (max-width: 768px) {
   .container {
-    height: auto;
-    /* Grow with content */
-    min-height: 100vh;
-    padding: 1rem;
-    overflow: visible;
-    border-radius: 0;
-    /* Full width look */
-    box-shadow: none;
     width: 100%;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
   }
 
   .main-grid {
     grid-template-columns: 1fr;
-    /* Single column */
-    overflow: visible;
-    /* Allow page scroll */
     display: flex;
     flex-direction: column;
-  }
-}
-
-@media (max-height: 600px) {
-  .container {
-    height: auto;
-    overflow: visible;
-  }
-
-  .main-grid {
-    overflow: visible;
   }
 }
 </style>

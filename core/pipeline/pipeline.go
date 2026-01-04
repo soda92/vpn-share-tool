@@ -48,19 +48,40 @@ func InjectCaptchaSolver(ctx *models.ProcessingContext, body string) string {
 	return body
 }
 
-func RunPipeline(ctx *models.ProcessingContext, body string, processors []ContentProcessor) string {
+func RunPipeline(ctx *models.ProcessingContext, body string, _ []ContentProcessor) string {
 	// Skip processing for specific dynamic JS patterns or large libraries
 	path := strings.ToLower(ctx.ReqURL.Path)
 	if path == "*.js" {
 		return body
 	}
-	if !ctx.Proxy.GetEnableCaptcha() {
-		return body
+
+	// 1. Internal URL Rewrite (Default to true if settings not initialized, or check explicit flag)
+	// For backward compatibility, we might want this enabled by default.
+	// But let's respect the flag. If Settings is zero-value, bools are false.
+	// We might need to initialize Settings to true defaults in proxy creation.
+	if ctx.Proxy.Settings.EnableUrlRewrite {
+		body = RewriteInternalURLs(ctx, body)
 	}
 
-	for _, p := range processors {
-		body = p(ctx, body)
+	// 2. Debug Script (Legacy Flag)
+	if ctx.Proxy.GetEnableDebug() {
+		body = InjectDebugScript(ctx, body)
 	}
+
+	// 3. System Specific Content Modification
+	if ctx.Proxy.Settings.EnableContentMod {
+		// Use a map for O(1) lookup if optimization needed, but slice is small
+		for _, activeSysID := range ctx.Proxy.ActiveSystems {
+			for _, defSys := range DefinedSystems {
+				if defSys.ID == activeSysID {
+					for _, p := range defSys.Processors {
+						body = p(ctx, body)
+					}
+				}
+			}
+		}
+	}
+
 	return body
 }
 

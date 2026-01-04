@@ -11,16 +11,7 @@
               <span class="stats-badge" :title="'Total Requests: ' + proxy.total_requests">
                 ⚡ {{ proxy.request_rate ? proxy.request_rate.toFixed(1) : 0 }}/s
               </span>
-              <label class="debug-toggle" title="Toggle Debugger">
-                <input type="checkbox" :checked="proxy.enable_debug"
-                  @change="$emit('toggle-debug', proxy.original_url, $event.target.checked)">
-                🐞
-              </label>
-              <label class="captcha-toggle" title="Toggle Captcha">
-                <input type="checkbox" :checked="proxy.enable_captcha"
-                  @change="$emit('toggle-captcha', proxy.original_url, $event.target.checked)">
-                🤖
-              </label>
+              <button @click="$emit('open-settings', proxy)" class="action-btn settings" title="Settings">⚙️</button>
             </div>
           </div>
         </div>
@@ -38,7 +29,7 @@ defineProps({
   }
 });
 
-defineEmits(['toggle-debug']);
+defineEmits(['open-settings']);
 </script>
 
 <style scoped>
@@ -142,15 +133,21 @@ h2 {
   cursor: help;
 }
 
-.debug-toggle {
+.action-btn {
+  padding: 0.2rem 0.5rem;
+  border: none;
+  border-radius: 3px;
   cursor: pointer;
-  user-select: none;
-  display: inline-flex;
+  font-size: 0.8rem;
+  min-width: 24px;
+  display: flex;
   align-items: center;
+  justify-content: center;
 }
 
-.debug-toggle input {
-  margin-right: 2px;
+.settings {
+  background-color: #909399;
+  color: white;
 }
 
 .empty-msg {

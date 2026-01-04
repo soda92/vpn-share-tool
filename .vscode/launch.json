@@ -10,8 +10,11 @@
             "cwd": "${workspaceFolder}/cmd/discovery",
             "env": {
                 "BASIC_AUTH_USER": "admin",
-                "BASIC_AUTH_PASS": "password"
-            }
+                "BASIC_AUTH_PASS": "admin"
+            },
+            "args": [
+                "--insecure"
+            ]
         },
         {
             "name": "Launch VPN Client Node",

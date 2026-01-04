@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/soda92/vpn-share-tool/core/models"
 	"github.com/soda92/vpn-share-tool/core/cache"
+	"github.com/soda92/vpn-share-tool/core/models"
 	"github.com/soda92/vpn-share-tool/core/pipeline"
 )
 
@@ -30,13 +30,13 @@ const (
 )
 
 var (
-	Proxies          []*models.SharedProxy
-	ProxiesLock      sync.RWMutex
-	ProxyAddedChan   = make(chan *models.SharedProxy)
-	ProxyRemovedChan = make(chan *models.SharedProxy)
-	IPReadyChan      = make(chan string, 1)
-	MyIP             string
-	APIPort          int
+	Proxies            []*models.SharedProxy
+	ProxiesLock        sync.RWMutex
+	ProxyAddedChan     = make(chan *models.SharedProxy)
+	ProxyRemovedChan   = make(chan *models.SharedProxy)
+	IPReadyChan        = make(chan string, 1)
+	MyIP               string
+	APIPort            int
 	DiscoveryServerURL string
 	HTTPClientProvider func() *http.Client
 )
@@ -242,8 +242,12 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 		Handler:       proxy,
 		EnableDebug:   true,
 		EnableCaptcha: true,
-		Ctx:           ctx,
-		Cancel:        cancel,
+		Settings: models.ProxySettings{
+			EnableContentMod: true,
+			EnableUrlRewrite: true,
+		},
+		Ctx:    ctx,
+		Cancel: cancel,
 	}
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", remotePort),
@@ -277,6 +281,7 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 
 	go startHealthChecker(newProxy)
 	go startStatsUpdater(newProxy)
+	go StartSystemDetector(newProxy)
 	ProxiesLock.Lock()
 	Proxies = append(Proxies, newProxy)
 	ProxiesLock.Unlock()

@@ -50,27 +50,27 @@ func AddTaggedURL(tag, urlStr string) (*TaggedURL, error) {
 
 func UpdateTaggedURL(id, tag string) error {
 	taggedURLsMutex.Lock()
-	defer taggedURLsMutex.Unlock()
-	
 	urlToUpdate, ok := taggedURLs[id]
 	if !ok {
+		taggedURLsMutex.Unlock()
 		return fmt.Errorf("not found")
 	}
 	urlToUpdate.Tag = tag
 	taggedURLs[id] = urlToUpdate
+	taggedURLsMutex.Unlock()
 
 	return saveTaggedURLs()
 }
 
 func DeleteTaggedURL(id string) error {
 	taggedURLsMutex.Lock()
-	defer taggedURLsMutex.Unlock()
-	
 	_, ok := taggedURLs[id]
 	if !ok {
+		taggedURLsMutex.Unlock()
 		return fmt.Errorf("not found")
 	}
 	delete(taggedURLs, id)
+	taggedURLsMutex.Unlock()
 
 	return saveTaggedURLs()
 }

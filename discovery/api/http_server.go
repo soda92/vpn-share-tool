@@ -174,7 +174,7 @@ func handleGetInstances(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func StartHTTPServer() {
+func StartHTTPServer(insecure bool) {
 	// Protected Mux for Dashboard and Management APIs
 	protectedMux := http.NewServeMux()
 
@@ -186,6 +186,7 @@ func StartHTTPServer() {
 	protectedMux.HandleFunc("/cluster-proxies", proxy.HandleClusterProxies)
 	protectedMux.HandleFunc("/toggle-debug-proxy", handleToggleDebugProxy)
 	protectedMux.HandleFunc("/toggle-captcha-proxy", handleCaptchaProxy)
+	protectedMux.HandleFunc("/update-proxy-settings", HandleUpdateProxySettings)
 	protectedMux.HandleFunc("/trigger-update-remote", handleTriggerUpdateRemote)
 
 	// Serve the Vue frontend (Protected)
@@ -212,6 +213,18 @@ func StartHTTPServer() {
 
 	// Delegate everything else to Protected Mux
 	rootMux.Handle("/", BasicAuth(protectedMux))
+
+	if insecure {
+		log.Printf("Starting discovery HTTP server (INSECURE) on port %s", httpListenPort)
+		server := &http.Server{
+			Addr:    ":" + httpListenPort,
+			Handler: rootMux,
+		}
+		if err := server.ListenAndServe(); err != nil {
+			log.Fatalf("HTTP Server error: %v", err)
+		}
+		return
+	}
 
 	log.Printf("Starting discovery HTTP server on port %s", httpListenPort)
 

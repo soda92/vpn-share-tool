@@ -19,16 +19,7 @@
               <span class="stats-badge" :title="'Total Requests: ' + url.total_requests">
                 ⚡ {{ url.request_rate ? url.request_rate.toFixed(1) : 0 }}/s
               </span>
-              <label class="debug-toggle" title="Toggle Debugger">
-                <input type="checkbox" :checked="url.enable_debug"
-                  @change="$emit('toggle-debug', url.url, $event.target.checked)">
-                🐞
-              </label>
-              <label class="captcha-toggle" title="Toggle Captcha">
-                <input type="checkbox" :checked="url.enable_captcha"
-                  @change="$emit('toggle-captcha', url.url, $event.target.checked)">
-                🤖
-              </label>
+              <button @click="$emit('open-settings', url)" class="action-btn settings" title="Settings">⚙️</button>
             </div>
             <div v-else class="proxy-status inactive">
               Not proxied ({{ url.url.replace('http://', '').replace('https://', '') }})
@@ -295,6 +286,11 @@ h2 {
 .create:disabled {
   background-color: #e1f3d8;
   cursor: not-allowed;
+}
+
+.settings {
+  background-color: #909399;
+  color: white;
 }
 
 .rename {

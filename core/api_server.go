@@ -54,23 +54,28 @@ func StartApiServer(apiPort int) error {
 	toggleDebugHandler := &handlers.ToggleDebugHandler{
 		GetProxies: proxy.GetProxies,
 	}
-	toggleCaptchaHandler := &handlers.ToggleCaptchaHandler{
-		GetProxies: proxy.GetProxies,
-	}
-
-	triggerUpdatehandler := handlers.TriggerUpdateHandler{
-		TriggerUpdate: TriggerUpdate,
-	}
-
-	// Start the HTTP server to provide the list of services
-	mux := http.NewServeMux()
-	mux.Handle("/services", servicesHandler)
-	mux.Handle("/proxies", addProxyHandler)
-	mux.Handle("/can-reach", canReachHandler)
-	mux.Handle("/active-proxies", activeProxiesHandler)
-	mux.Handle("/toggle-debug", toggleDebugHandler)
-	mux.Handle("/toggle-captcha", toggleCaptchaHandler)
-	mux.Handle("/trigger-update", &triggerUpdatehandler)
+		toggleCaptchaHandler := &handlers.ToggleCaptchaHandler{
+			GetProxies:  proxy.GetProxies,
+		}
+		
+		updateSettingsHandler := &handlers.UpdateSettingsHandler{
+			GetProxies: proxy.GetProxies,
+		}
+	
+		triggerUpdatehandler := handlers.TriggerUpdateHandler{
+			TriggerUpdate: TriggerUpdate,
+		}
+	
+		// Start the HTTP server to provide the list of services
+		mux := http.NewServeMux()
+		mux.Handle("/services", servicesHandler)
+		mux.Handle("/proxies", addProxyHandler)
+		mux.Handle("/can-reach", canReachHandler)
+		mux.Handle("/active-proxies", activeProxiesHandler)
+		mux.Handle("/toggle-debug", toggleDebugHandler)
+		mux.Handle("/toggle-captcha", toggleCaptchaHandler)
+		mux.Handle("/update-settings", updateSettingsHandler)
+		mux.Handle("/trigger-update", &triggerUpdatehandler)
 
 	debug.RegisterDebugRoutes(mux)
 
