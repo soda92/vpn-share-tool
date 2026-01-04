@@ -1,9 +1,7 @@
 package registry
 
 import (
-	"encoding/json"
 	"log"
-	"net/http"
 	"sync"
 	"time"
 )

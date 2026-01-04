@@ -15,14 +15,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/soheilhy/cmux"
-	"github.com/soda92/vpn-share-tool/discovery/resources"
-	"github.com/soda92/vpn-share-tool/discovery/registry"
 	"github.com/soda92/vpn-share-tool/discovery/proxy"
+	"github.com/soda92/vpn-share-tool/discovery/registry"
+	"github.com/soda92/vpn-share-tool/discovery/resources"
+	"github.com/soheilhy/cmux"
 )
 
-//go:embed all:dist
-var frontendDist embed.FS
 
 const (
 	httpListenPort = "8080"

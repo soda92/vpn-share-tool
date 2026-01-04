@@ -122,6 +122,13 @@ func runBuildServer() error {
 		if err := buildFrontendIn(filepath.Join(rootDir, "discovery_web")); err != nil {
 			return fmt.Errorf("failed to build server frontend: %w", err)
 		}
+		// Move dist to api/dist because frontend_embed.go is in api package
+		srcDist := filepath.Join(rootDir, "discovery", "dist")
+		dstDist := filepath.Join(rootDir, "discovery", "api", "dist")
+		os.RemoveAll(dstDist) // Clean
+		if err := os.Rename(srcDist, dstDist); err != nil {
+			return fmt.Errorf("failed to move dist to api/dist: %w", err)
+		}
 	} else {
 		fmt.Println("Skipping server frontend build.")
 	}
