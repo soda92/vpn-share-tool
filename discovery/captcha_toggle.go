@@ -1,4 +1,4 @@
-package main
+package discovery
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-func handleToggleDebugProxy(w http.ResponseWriter, r *http.Request) {
+func handleCaptchaProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -45,7 +45,7 @@ func handleToggleDebugProxy(w http.ResponseWriter, r *http.Request) {
 
 	found := false
 	for _, instance := range activeInstances {
-		toggleURL := fmt.Sprintf("http://%s/toggle-debug", instance.Address)
+		toggleURL := fmt.Sprintf("http://%s/toggle-captcha", instance.Address)
 		resp, err := http.Post(toggleURL, "application/json", bytes.NewBuffer(reqBody))
 		if err != nil {
 			// Log but continue to other instances
@@ -56,7 +56,7 @@ func handleToggleDebugProxy(w http.ResponseWriter, r *http.Request) {
 
 		if resp.StatusCode == http.StatusOK {
 			found = true
-			log.Printf("Successfully toggled debug for %s on %s", req.URL, instance.Address)
+			log.Printf("Successfully toggled captcha for %s on %s", req.URL, instance.Address)
 		}
 	}
 
