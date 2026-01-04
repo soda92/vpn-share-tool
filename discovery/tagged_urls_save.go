@@ -9,7 +9,7 @@ import (
 
 const storageFilePath = "tagged_urls.json"
 
-func loadTaggedURLs() {
+func LoadTaggedURLs() {
 	taggedURLsMutex.Lock()
 	defer taggedURLsMutex.Unlock()
 

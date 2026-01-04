@@ -80,7 +80,7 @@ func copyServerCerts() error {
 	files := []string{"server.crt", "server.key"}
 	for _, file := range files {
 		src := filepath.Join(rootDir, "certs", file)
-		dst := filepath.Join(rootDir, "server", file)
+		dst := filepath.Join(rootDir, "discovery", file)
 
 		data, err := os.ReadFile(src)
 		if err != nil {
@@ -119,7 +119,7 @@ func runBuildServer() error {
 	// Build server frontend
 	if !noFrontend {
 		fmt.Println("Building server frontend...")
-		if err := buildFrontendIn(filepath.Join(rootDir, "server_web")); err != nil {
+		if err := buildFrontendIn(filepath.Join(rootDir, "discovery_web")); err != nil {
 			return fmt.Errorf("failed to build server frontend: %w", err)
 		}
 	} else {
@@ -128,7 +128,7 @@ func runBuildServer() error {
 
 	// Build Server Binary
 	fmt.Println("Building server binary...")
-	output := filepath.Join(rootDir, "dist", "server")
+	output := filepath.Join(rootDir, "dist", "discovery")
 	if runtime.GOOS == "windows" {
 		output += ".exe"
 	}
@@ -138,7 +138,7 @@ func runBuildServer() error {
 		return err
 	}
 
-	if err := execCmd(rootDir, nil, "go", "build", "-o", output, "./server"); err != nil {
+	if err := execCmd(rootDir, nil, "go", "build", "-o", output, "./cmd/discovery"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
@@ -194,7 +194,7 @@ func runBuildDesktop() error {
 	}
 
 	// Build Go binary
-	if err := execCmd(rootDir, nil, "go", "build"); err != nil {
+	if err := execCmd(rootDir, nil, "go", "build", "-o", "vpn-share-tool", "./cmd/vpn-share-tool"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 

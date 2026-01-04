@@ -8,7 +8,7 @@ import (
 
 const listenPort = "45679"
 
-func startTCPServer() {
+func StartTCPServer() {
 	log.Printf("Starting discovery TCP server on port %s", listenPort)
 
 	var listener net.Listener

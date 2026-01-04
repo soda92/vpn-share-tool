@@ -167,7 +167,7 @@ func BasicAuth(next http.Handler) http.Handler {
 	})
 }
 
-func startHTTPServer() {
+func StartHTTPServer() {
 	// Protected Mux for Dashboard and Management APIs
 	protectedMux := http.NewServeMux()
 

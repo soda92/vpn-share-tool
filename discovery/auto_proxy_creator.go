@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func startAutoProxyCreator() {
+func StartAutoProxyCreator() {
 	// Initial delay to allow instances to register
 	time.Sleep(30 * time.Second)
 
