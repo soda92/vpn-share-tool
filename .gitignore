@@ -1,3 +1,16 @@
+tagged_urls.json
+*.log
+
+/.env
+
+/Icon.png
+/bin
+
+/.ruff_cache
+/fyne-cross
+
+dist
+
 /vpn-share-tool
 *.exe
 *.db
@@ -6,12 +19,10 @@
 *.aar
 *.txt
 /dist
-/vendor
+/vendor*
 
 server.crt
 server.key
-
-/dev
 
 __debug_bin*
 
@@ -29,8 +40,6 @@ docs.fyne.io
 fyne_metadata_init.go
 
 fyne_cross
-
-discovery-server/discovery-server
 
 flutter_gui/linux/libcore*
 certs/

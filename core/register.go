@@ -9,6 +9,9 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/soda92/vpn-share-tool/core/proxy"
+	"github.com/soda92/vpn-share-tool/core/utils"
 )
 
 func registerWithDiscoveryServer(apiPort int) {
@@ -20,7 +23,7 @@ func registerWithDiscoveryServer(apiPort int) {
 		// If MyIP is set (Mobile pushed it, or Desktop detected it), use it to scan.
 		if MyIP != "" {
 			log.Printf("MyIP is set to %s. Scanning subnet...", MyIP)
-			found := ScanSubnet(MyIP, discoverySrvPort)
+			found := utils.ScanSubnet(MyIP, discoverySrvPort)
 			if len(found) > 0 {
 				log.Printf("Found servers via scanning: %v", found)
 				candidateIPs = append(candidateIPs, found...)
@@ -28,7 +31,7 @@ func registerWithDiscoveryServer(apiPort int) {
 		} else {
 			// If MyIP is not set, try to detect local IPs (Desktop mode)
 			log.Println("MyIP not set. Attempting to detect local IPs...")
-			localIPs, err := GetLocalIPs()
+			localIPs, err := utils.GetLocalIPs()
 			if err == nil && len(localIPs) > 0 {
 				for _, ip := range localIPs {
 					// Heuristic: Prefer 192.168.x.x for setting MyIP initially if finding nothing else
@@ -37,7 +40,7 @@ func registerWithDiscoveryServer(apiPort int) {
 					}
 
 					log.Printf("Scanning subnet of %s...", ip)
-					found := ScanSubnet(ip, discoverySrvPort)
+					found := utils.ScanSubnet(ip, discoverySrvPort)
 					if len(found) > 0 {
 						log.Printf("Found servers via scanning %s: %v", ip, found)
 						candidateIPs = append(candidateIPs, found...)
@@ -51,7 +54,7 @@ func registerWithDiscoveryServer(apiPort int) {
 		}
 
 		// Append hardcoded fallbacks at the end
-		candidateIPs = append(candidateIPs, SERVER_IPs...)
+		candidateIPs = append(candidateIPs, ServerIPs...)
 
 		var conn net.Conn
 		var err error
@@ -81,17 +84,6 @@ func registerWithDiscoveryServer(apiPort int) {
 
 				host, _, _ := net.SplitHostPort(serverAddr)
 				DiscoveryServerURL = fmt.Sprintf("https://%s:8080", host)
-
-				break
-			}
-
-			// Fallback to Plaintext
-			conn, err = dialer.Dial("tcp", serverAddr)
-			if err == nil {
-				log.Printf("Connected to discovery server at %s (Plaintext)", serverAddr)
-
-				host, _, _ := net.SplitHostPort(serverAddr)
-				DiscoveryServerURL = fmt.Sprintf("http://%s:8080", host)
 
 				break
 			}
@@ -130,7 +122,7 @@ func registerWithDiscoveryServer(apiPort int) {
 					SetMyIP(detectedIP)
 				}
 				log.Printf("Successfully registered with discovery server. My IP is %s", MyIP)
-				IPReadyChan <- MyIP // Signal that the IP is ready
+				proxy.IPReadyChan <- MyIP // Signal that the IP is ready
 			} else {
 				log.Printf("Failed to register with discovery server, response: %s.", response)
 				return // Exit closure, trigger reconnect

@@ -5,15 +5,20 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/soda92/vpn-share-tool/core/debug"
+	"github.com/soda92/vpn-share-tool/core/handlers"
+	"github.com/soda92/vpn-share-tool/core/proxy"
+	"github.com/soda92/vpn-share-tool/core/utils"
 )
 
 // StartApiServer starts the HTTP server to provide the API endpoints.
 func StartApiServer(apiPort int) error {
-	ApiPort = apiPort
+	APIPort = apiPort
 
 	// Try to auto-detect IP on startup for Desktop/CLI usage
 	if MyIP == "" {
-		ips, err := GetLocalIPs()
+		ips, err := utils.GetLocalIPs()
 		if err == nil {
 			for _, ip := range ips {
 				if strings.HasPrefix(ip, "192.168.") {
@@ -28,17 +33,51 @@ func StartApiServer(apiPort int) error {
 		}
 	}
 
+	proxy.SetGlobalConfig(MyIP, APIPort, DiscoveryServerURL, GetHTTPClient)
+
+	addProxyHandler := &handlers.AddProxyHandler{
+		GetIP:       func() string { return MyIP },
+		CreateProxy: proxy.ShareUrlAndGetProxy,
+	}
+	canReachHandler := &handlers.CanReachHandler{
+		IsURLReachable: utils.IsURLReachable,
+	}
+	servicesHandler := &handlers.ServicesHandler{
+		GetProxies: proxy.GetProxies,
+		MyIP:       MyIP,
+	}
+
+	activeProxiesHandler := &handlers.GetActiveProxiesHandler{
+		GetProxies: proxy.GetProxies,
+	}
+
+	toggleDebugHandler := &handlers.ToggleDebugHandler{
+		GetProxies: proxy.GetProxies,
+	}
+	toggleCaptchaHandler := &handlers.ToggleCaptchaHandler{
+		GetProxies: proxy.GetProxies,
+	}
+
+	updateSettingsHandler := &handlers.UpdateSettingsHandler{
+		GetProxies: proxy.GetProxies,
+	}
+
+	triggerUpdateHandler := &handlers.TriggerUpdateHandler{
+		TriggerUpdate: TriggerUpdate,
+	}
+
 	// Start the HTTP server to provide the list of services
 	mux := http.NewServeMux()
-	mux.HandleFunc("/services", servicesHandler)
-	mux.HandleFunc("/proxies", addProxyHandler)
-	mux.HandleFunc("/can-reach", canReachHandler)
-	mux.HandleFunc("/active-proxies", handleGetActiveProxies)
-	mux.HandleFunc("/toggle-debug", handleToggleDebug)
-	mux.HandleFunc("/trigger-update", handleTriggerUpdate)
-	mux.HandleFunc("/toggle-captcha", handleToggleCaptcha)
+	mux.Handle("/services", servicesHandler)
+	mux.Handle("/proxies", addProxyHandler)
+	mux.Handle("/can-reach", canReachHandler)
+	mux.Handle("/active-proxies", activeProxiesHandler)
+	mux.Handle("/toggle-debug", toggleDebugHandler)
+	mux.Handle("/toggle-captcha", toggleCaptchaHandler)
+	mux.Handle("/update-settings", updateSettingsHandler)
+	mux.Handle("/trigger-update", triggerUpdateHandler)
 
-	RegisterDebugRoutes(mux)
+	debug.RegisterDebugRoutes(mux)
 
 	apiServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", apiPort),
@@ -46,6 +85,10 @@ func StartApiServer(apiPort int) error {
 	}
 
 	log.Printf("Starting API server on port %d", apiPort)
+
+	// Restore saved proxies
+	proxy.LoadProxies()
+
 	go registerWithDiscoveryServer(apiPort)
 	if err := apiServer.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("API server stopped with error: %w", err)

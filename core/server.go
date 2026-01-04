@@ -7,24 +7,22 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/soda92/vpn-share-tool/core/proxy"
 )
 
 //go:embed ca.crt
 var rootCACert []byte
-
-type sharedURLInfo struct {
-	OriginalURL string `json:"original_url"`
-	SharedURL   string `json:"shared_url"`
-}
 
 const (
 	discoverySrvPort = "45679"
 )
 
 var (
-	// Fallback IPs if scanning fails
-	SERVER_IPs         = []string{"192.168.0.81", "192.168.1.81"}
-	ApiPort            int
+	// Fallback IPs if scanning fails.
+	// 127.0.0.1 is prioritized for local testing.
+	ServerIPs          = []string{"127.0.0.1", "192.168.0.81", "192.168.1.81"}
+	APIPort            int
 	MyIP               string
 	DiscoveryServerURL string
 	Version            string
@@ -49,6 +47,7 @@ func GetHTTPClient() *http.Client {
 // SetMyIP allows external packages (like mobile bridge) to set the client IP.
 func SetMyIP(ip string) {
 	MyIP = ip
+	proxy.SetGlobalConfig(MyIP, APIPort, DiscoveryServerURL, GetHTTPClient)
 	log.Printf("Device IP set to: %s", MyIP)
 	// Trigger a signal? For now just logging.
 }

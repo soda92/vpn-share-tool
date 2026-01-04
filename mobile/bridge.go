@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/soda92/vpn-share-tool/core"
+	"github.com/soda92/vpn-share-tool/core/debug"
 )
 
 // EventCallback is the type for the Dart callback function.
@@ -103,7 +104,7 @@ func StartGoBackendWithPort(port int) {
 
 // ShareURL shares a URL.
 func ShareURL(url string) {
-	go core.ShareUrlAndGetProxy(url)
+	go core.ShareUrlAndGetProxy(url, 0)
 }
 
 // GetProxies returns the list of shared proxies as a JSON string.
@@ -127,5 +128,5 @@ func SetDeviceIP(ip string) {
 // SetStoragePath sets the directory where the app should store its files (e.g., database).
 
 func SetStoragePath(path string) {
-	core.DebugStoragePath = path
+	debug.DebugStoragePath = path
 }
