@@ -8,10 +8,7 @@
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/discovery/main.go",
             "cwd": "${workspaceFolder}/cmd/discovery",
-            "env": {
-                "BASIC_AUTH_USER": "admin",
-                "BASIC_AUTH_PASS": "admin"
-            },
+            "envFile": "${workspaceFolder}/cmd/discovery/.env",
             "args": [
                 "--insecure"
             ]

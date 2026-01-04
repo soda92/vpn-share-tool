@@ -1,6 +1,8 @@
 tagged_urls.json
 *.log
 
+/.env
+
 /Icon.png
 /bin
 
