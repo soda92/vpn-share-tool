@@ -1,4 +1,4 @@
-package discovery
+package registry
 
 import (
 	"bufio"
@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func handleConnection(conn net.Conn) {
+func HandleConnection(conn net.Conn) {
 	var instanceAddress string
 	remoteAddr := conn.RemoteAddr().(*net.TCPAddr).IP.String()
 

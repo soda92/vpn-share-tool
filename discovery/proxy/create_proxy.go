@@ -1,4 +1,4 @@
-package discovery
+package proxy
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func handleCreateProxy(w http.ResponseWriter, r *http.Request) {
+func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return

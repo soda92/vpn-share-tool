@@ -1,4 +1,4 @@
-package discovery
+package api
 
 import (
 	"bytes"
@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"github.com/soda92/vpn-share-tool/discovery/registry"
 )
 
-func handleCaptchaProxy(w http.ResponseWriter, r *http.Request) {
+func handleToggleDebugProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -30,12 +31,7 @@ func handleCaptchaProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the instance hosting this proxy
-	mutex.Lock()
-	activeInstances := make([]Instance, 0, len(instances))
-	for _, instance := range instances {
-		activeInstances = append(activeInstances, instance)
-	}
-	mutex.Unlock()
+	activeInstances := registry.GetActiveInstances()
 
 	reqBody, err := json.Marshal(req)
 	if err != nil {
@@ -45,7 +41,7 @@ func handleCaptchaProxy(w http.ResponseWriter, r *http.Request) {
 
 	found := false
 	for _, instance := range activeInstances {
-		toggleURL := fmt.Sprintf("http://%s/toggle-captcha", instance.Address)
+		toggleURL := fmt.Sprintf("http://%s/toggle-debug", instance.Address)
 		resp, err := http.Post(toggleURL, "application/json", bytes.NewBuffer(reqBody))
 		if err != nil {
 			// Log but continue to other instances
@@ -56,7 +52,7 @@ func handleCaptchaProxy(w http.ResponseWriter, r *http.Request) {
 
 		if resp.StatusCode == http.StatusOK {
 			found = true
-			log.Printf("Successfully toggled captcha for %s on %s", req.URL, instance.Address)
+			log.Printf("Successfully toggled debug for %s on %s", req.URL, instance.Address)
 		}
 	}
 

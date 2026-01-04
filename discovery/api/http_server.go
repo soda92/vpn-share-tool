@@ -1,4 +1,4 @@
-package discovery
+package api
 
 import (
 	"crypto/tls"
@@ -16,13 +16,14 @@ import (
 	"strings"
 
 	"github.com/soheilhy/cmux"
+	"github.com/soda92/vpn-share-tool/discovery/resources"
+	"github.com/soda92/vpn-share-tool/discovery/registry"
+	"github.com/soda92/vpn-share-tool/discovery/proxy"
+	"github.com/soda92/vpn-share-tool/discovery/store"
 )
 
-//go:embed server.crt
-var serverCert []byte
-
-//go:embed server.key
-var serverKey []byte
+//go:embed all:dist
+var frontendDist embed.FS
 
 const (
 	httpListenPort = "8080"
@@ -167,16 +168,25 @@ func BasicAuth(next http.Handler) http.Handler {
 	})
 }
 
+func handleGetInstances(w http.ResponseWriter, r *http.Request) {
+	activeInstances := registry.GetActiveInstances()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(activeInstances); err != nil {
+		log.Printf("Failed to encode instances to JSON: %v", err)
+		http.Error(w, "Failed to encode instances", http.StatusInternalServerError)
+	}
+}
+
 func StartHTTPServer() {
 	// Protected Mux for Dashboard and Management APIs
 	protectedMux := http.NewServeMux()
 
 	// API routes (Protected)
-	protectedMux.HandleFunc("/create-proxy", handleCreateProxy)
+	protectedMux.HandleFunc("/create-proxy", proxy.HandleCreateProxy)
 	protectedMux.HandleFunc("/instances", handleGetInstances)
-	protectedMux.HandleFunc("/tagged-urls", handleTaggedURLs)
-	protectedMux.HandleFunc("/tagged-urls/", handleTaggedURLs)
-	protectedMux.HandleFunc("/cluster-proxies", handleClusterProxies)
+	protectedMux.HandleFunc("/tagged-urls", store.HandleTaggedURLs)
+	protectedMux.HandleFunc("/tagged-urls/", store.HandleTaggedURLs)
+	protectedMux.HandleFunc("/cluster-proxies", proxy.HandleClusterProxies)
 	protectedMux.HandleFunc("/toggle-debug-proxy", handleToggleDebugProxy)
 	protectedMux.HandleFunc("/toggle-captcha-proxy", handleCaptchaProxy)
 	protectedMux.HandleFunc("/trigger-update-remote", handleTriggerUpdateRemote)
@@ -208,14 +218,10 @@ func StartHTTPServer() {
 
 	log.Printf("Starting discovery HTTP server on port %s", httpListenPort)
 
-	// Load embedded certificates
-	cert, err := tls.X509KeyPair(serverCert, serverKey)
+	// Load embedded certs
+	cert, err := tls.X509KeyPair(resources.ServerCert, resources.ServerKey)
 	if err != nil {
-		log.Printf("Failed to load embedded certs: %v. Falling back to HTTP.", err)
-		if err := http.ListenAndServe(":"+httpListenPort, rootMux); err != nil {
-			log.Fatalf("Failed to start HTTP server: %v", err)
-		}
-		return
+		log.Fatalf("Failed to load embedded server certs: %v", err)
 	}
 
 	log.Printf("Embedded TLS certificates found. Serving HTTPS and HTTP Redirect on same port.")

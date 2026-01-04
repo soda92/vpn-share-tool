@@ -1,4 +1,4 @@
-package discovery
+package proxy
 
 import (
 	"encoding/json"
@@ -74,7 +74,7 @@ func fetchAllClusterProxies() (map[string]ProxyInfo, []ProxyInfo) {
 	return hostnameMap, rawList
 }
 
-func handleClusterProxies(w http.ResponseWriter, r *http.Request) {
+func HandleClusterProxies(w http.ResponseWriter, r *http.Request) {
 	_, rawList := fetchAllClusterProxies()
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(rawList); err != nil {

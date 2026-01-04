@@ -1,4 +1,4 @@
-package discovery
+package store
 
 import (
 	"encoding/json"
@@ -24,7 +24,7 @@ var (
 	taggedURLsMutex = &sync.Mutex{}
 )
 
-func handleTaggedURLs(w http.ResponseWriter, r *http.Request) {
+func HandleTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		getTaggedURLs(w, r)

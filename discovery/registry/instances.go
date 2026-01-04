@@ -1,4 +1,4 @@
-package discovery
+package registry
 
 import (
 	"encoding/json"
@@ -22,7 +22,7 @@ var (
 	mutex     = &sync.Mutex{}
 )
 
-func handleGetInstances(w http.ResponseWriter, r *http.Request) {
+func GetActiveInstances() []Instance {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -30,15 +30,10 @@ func handleGetInstances(w http.ResponseWriter, r *http.Request) {
 	for _, instance := range instances {
 		activeInstances = append(activeInstances, instance)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(activeInstances); err != nil {
-		log.Printf("Failed to encode instances to JSON: %v", err)
-		http.Error(w, "Failed to encode instances", http.StatusInternalServerError)
-	}
+	return activeInstances
 }
 
-func cleanupStaleInstances() {
+func StartCleanupTask() {
 	for {
 		time.Sleep(cleanupInterval)
 		mutex.Lock()

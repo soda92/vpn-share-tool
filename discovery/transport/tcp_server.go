@@ -1,9 +1,11 @@
-package discovery
+package transport
 
 import (
 	"crypto/tls"
 	"log"
 	"net"
+	"github.com/soda92/vpn-share-tool/discovery/resources"
+	"github.com/soda92/vpn-share-tool/discovery/registry"
 )
 
 const listenPort = "45679"
@@ -14,7 +16,7 @@ func StartTCPServer() {
 	var listener net.Listener
 	var err error
 
-	cer, errLoad := tls.X509KeyPair(serverCert, serverKey)
+	cer, errLoad := tls.X509KeyPair(resources.ServerCert, resources.ServerKey)
 	if errLoad == nil {
 		log.Printf("Embedded TLS certificates found. Starting Secure TCP Server.")
 		config := &tls.Config{Certificates: []tls.Certificate{cer}}
@@ -30,7 +32,7 @@ func StartTCPServer() {
 	defer listener.Close()
 
 	// Periodically clean up stale instances
-	go cleanupStaleInstances()
+	go registry.StartCleanupTask()
 
 	for {
 		conn, err := listener.Accept()
@@ -38,6 +40,6 @@ func StartTCPServer() {
 			log.Printf("Failed to accept connection: %v", err)
 			continue
 		}
-		go handleConnection(conn)
+		go registry.HandleConnection(conn)
 	}
 }
