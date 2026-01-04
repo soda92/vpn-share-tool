@@ -3,6 +3,8 @@ package proxy
 import (
 	"log"
 	"time"
+
+	"github.com/soda92/vpn-share-tool/discovery/store"
 )
 
 func StartAutoProxyCreator() {
@@ -12,12 +14,7 @@ func StartAutoProxyCreator() {
 	for {
 		log.Println("Running auto-proxy creator...")
 
-		taggedURLsMutex.Lock()
-		urlsToCheck := make([]TaggedURL, 0, len(taggedURLs))
-		for _, u := range taggedURLs {
-			urlsToCheck = append(urlsToCheck, u)
-		}
-		taggedURLsMutex.Unlock()
+		urlsToCheck := store.GetTaggedURLs()
 
 		// This is a simplified version. A more robust implementation would be needed here.
 		// For now, we just log the intent.

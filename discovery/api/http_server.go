@@ -19,7 +19,6 @@ import (
 	"github.com/soda92/vpn-share-tool/discovery/resources"
 	"github.com/soda92/vpn-share-tool/discovery/registry"
 	"github.com/soda92/vpn-share-tool/discovery/proxy"
-	"github.com/soda92/vpn-share-tool/discovery/store"
 )
 
 //go:embed all:dist
@@ -184,8 +183,8 @@ func StartHTTPServer() {
 	// API routes (Protected)
 	protectedMux.HandleFunc("/create-proxy", proxy.HandleCreateProxy)
 	protectedMux.HandleFunc("/instances", handleGetInstances)
-	protectedMux.HandleFunc("/tagged-urls", store.HandleTaggedURLs)
-	protectedMux.HandleFunc("/tagged-urls/", store.HandleTaggedURLs)
+	protectedMux.HandleFunc("/tagged-urls", HandleTaggedURLs)
+	protectedMux.HandleFunc("/tagged-urls/", HandleTaggedURLs)
 	protectedMux.HandleFunc("/cluster-proxies", proxy.HandleClusterProxies)
 	protectedMux.HandleFunc("/toggle-debug-proxy", handleToggleDebugProxy)
 	protectedMux.HandleFunc("/toggle-captcha-proxy", handleCaptchaProxy)

@@ -21,22 +21,15 @@ type ProxyInfo struct {
 	TotalRequests int64   `json:"total_requests"`
 }
 
-// fetchAllClusterProxies queries all registered instances for their active proxies.
-// It returns a map where the key is the normalized Hostname of the OriginalURL,
-// and the value is the ProxyInfo struct.
-// It also returns a raw list of all proxies for display purposes.
-func fetchAllClusterProxies() (map[string]ProxyInfo, []ProxyInfo) {
-	mutex.Lock()
-	activeInstances := make([]Instance, 0, len(instances))
-	for _, instance := range instances {
-		activeInstances = append(activeInstances, instance)
-	}
-	mutex.Unlock()
-
-	hostnameMap := make(map[string]ProxyInfo)
-	var rawList []ProxyInfo
+// FetchAllClusterProxies queries all active instances for their proxy lists.
+// Returns a map of normalized URL host -> ProxyInfo
+func FetchAllClusterProxies() (map[string]ProxyInfo, error) {
+	activeInstances := registry.GetActiveInstances()
+	allProxies := make(map[string]ProxyInfo)
+	var mu sync.Mutex
 	var wg sync.WaitGroup
-	var resultMutex sync.Mutex
+
+	client := &http.Client{Timeout: 5 * time.Second}
 
 	for _, instance := range activeInstances {
 		wg.Add(1)

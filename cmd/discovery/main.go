@@ -1,13 +1,18 @@
 package main
 
-import "github.com/soda92/vpn-share-tool/discovery"
+import (
+	"github.com/soda92/vpn-share-tool/discovery/api"
+	"github.com/soda92/vpn-share-tool/discovery/proxy"
+	"github.com/soda92/vpn-share-tool/discovery/store"
+	"github.com/soda92/vpn-share-tool/discovery/transport"
+)
 
 func main() {
-	discovery.LoadTaggedURLs()
+	store.LoadTaggedURLs()
 	// Start TCP server for vpn-share-tool instances
-	go discovery.StartTCPServer()
+	go transport.StartTCPServer()
 	// Start the automatic proxy creator
-	go discovery.StartAutoProxyCreator()
+	go proxy.StartAutoProxyCreator()
 	// Start HTTP server for the web UI
-	discovery.StartHTTPServer()
+	api.StartHTTPServer()
 }

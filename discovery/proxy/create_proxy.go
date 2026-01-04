@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+	"github.com/soda92/vpn-share-tool/discovery/registry"
 )
 
 func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
@@ -30,12 +31,7 @@ func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mutex.Lock()
-	activeInstances := make([]Instance, 0, len(instances))
-	for _, instance := range instances {
-		activeInstances = append(activeInstances, instance)
-	}
-	mutex.Unlock()
+	activeInstances := registry.GetActiveInstances()
 
 	var lastError string
 	reachableNodeFound := false
