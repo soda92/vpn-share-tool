@@ -214,7 +214,7 @@ func runBuildAndroidFyne() error {
 		"ANDROID_NDK_HOME="+androidNdkHome,
 	)
 
-	if err := execCmd(rootDir, env, "fyne", "package", "-os", "android", "-app-id", "com.example.vpnsharetool", "-icon", "Icon.png"); err != nil {
+	if err := execCmd(filepath.Join(rootDir, "cmd", "vpn-share-tool"), env, "fyne", "package", "-os", "android", "-app-id", "com.example.vpnsharetool", "-icon", "Icon.png"); err != nil {
 		return fmt.Errorf("fyne package failed: %w", err)
 	}
 
@@ -280,7 +280,7 @@ func runBuildWindows() error {
 		fmt.Println("Skipping frontend build.")
 	}
 
-	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool"); err != nil {
+	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool", "./cmd/vpn-share-tool"); err != nil {
 		return fmt.Errorf("fyne-cross failed: %w", err)
 	}
 	fmt.Println("✅ Windows build successful.")

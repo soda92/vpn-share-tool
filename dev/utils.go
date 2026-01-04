@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,6 +57,20 @@ func execCmd(dir string, env []string, name string, args ...string) error {
 	return cmd.Run()
 }
 
+func execCmdSilent(dir string, env []string, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	if env != nil {
+		cmd.Env = env
+	} else {
+		cmd.Env = os.Environ()
+	}
+	cmd.Stdout = io.Discard // Suppress stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
+}
+
 func buildFrontendIn(frontendDir string) error {
 	distDir := filepath.Join(frontendDir, "dist")
 
@@ -64,8 +79,8 @@ func buildFrontendIn(frontendDir string) error {
 		return fmt.Errorf("failed to clean dist dir: %w", err)
 	}
 
-	// Build frontend
-	if err := execCmd(frontendDir, nil, "npm", "run", "build"); err != nil {
+	// Build frontend (Silent)
+	if err := execCmdSilent(frontendDir, nil, "npm", "run", "build"); err != nil {
 		return fmt.Errorf("frontend build failed: %w", err)
 	}
 	// Check for companion code directory (e.g. core_web -> core)
