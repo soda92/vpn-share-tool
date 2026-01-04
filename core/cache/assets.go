@@ -95,11 +95,7 @@ func (t *CachingTransport) handleDynamicAsset(req *http.Request, reqBody []byte)
 		resp.Header.Del("Content-Encoding")
 		resp.Header.Del("Content-Length")
 	} else {
-		respBody = decompressedBody // Use decompressed version if we want to serve plain text, or keep original? 
-		// The original logic replaced body with decompressed version regardless if not modified? 
-		// Wait, original logic:
-		// if modified { respBody = newBody ... } else { respBody = decompressedBody; Del(Encoding) }
-		// So it always serves decompressed.
+		respBody = decompressedBody
 		resp.Header.Del("Content-Encoding")
 		resp.Header.Del("Content-Length")
 	}
