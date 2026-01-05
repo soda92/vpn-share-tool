@@ -12,6 +12,8 @@ import subprocess
 import re
 import platform
 import ssl
+import os
+from pathlib import Path
 
 # Fallback addresses if scanning fails
 DISCOVERY_SERVER_HOSTS = ["192.168.0.81", "192.168.1.81"]
@@ -19,6 +21,42 @@ DISCOVERY_SERVER_PORT = 45679
 
 # Placeholder for CA Cert injection
 CA_CERT_PEM = """__CA_CERT_PLACEHOLDER__"""
+
+
+def get_cache_path():
+    """Returns the path to the cache file."""
+    if platform.system() == "Windows":
+        base_dir = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    else:
+        base_dir = Path.home() / ".config"
+
+    return base_dir / "vpn-share-tool" / "libproxy_cache.json"
+
+
+def load_cache():
+    """Loads the proxy cache from disk."""
+    path = get_cache_path()
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        logging.debug(f"Failed to load cache: {e}")
+        return {}
+
+
+def save_to_cache(target_url, proxy_url):
+    """Saves a discovered proxy to the cache."""
+    path = get_cache_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cache = load_cache()
+        cache[target_url] = proxy_url
+        with open(path, "w") as f:
+            json.dump(cache, f)
+    except Exception as e:
+        logging.debug(f"Failed to save cache: {e}")
 
 
 def get_local_ip():
@@ -115,10 +153,12 @@ def get_instance_list(timeout: int = 5):
     if CA_CERT_PEM and "__CA_CERT_PLACEHOLDER__" not in CA_CERT_PEM:
         try:
             context = ssl.create_default_context(cadata=CA_CERT_PEM)
-            context.check_hostname = False # Discovery uses IP/different hostname often
+            context.check_hostname = True
             logging.debug("Using embedded CA certificate for TLS.")
         except Exception as e:
-            logging.error(f"Failed to load embedded CA cert: {e}. Exiting for security.")
+            logging.error(
+                f"Failed to load embedded CA cert: {e}. Exiting for security."
+            )
             sys.exit(1)
     else:
         logging.error("No embedded CA certificate found. Exiting for security.")
@@ -190,7 +230,7 @@ def is_url_reachable_locally(target_url, timeout=3):
         return False
 
 
-def discover_proxy(target_url, timeout=10):
+def discover_proxy(target_url, timeout=10, remote_only: bool=False):
     """
     Discovers a proxy for a given URL by querying the central discovery server.
     First, it checks if the URL is reachable locally.
@@ -203,11 +243,27 @@ def discover_proxy(target_url, timeout=10):
     if not urlparse(schemed_target_url).scheme:
         schemed_target_url = f"http://{schemed_target_url}"
 
-    if is_url_reachable_locally(schemed_target_url, timeout=timeout):
-        logging.info(f"URL {target_url} is directly reachable. No proxy needed.")
-        return target_url  # Return the original URL
+    if not remote_only:
+        if is_url_reachable_locally(schemed_target_url, timeout=timeout):
+            logging.info(f"URL {target_url} is directly reachable. No proxy needed.")
+            return target_url  # Return the original URL
 
-    logging.debug(f"URL {target_url} not reachable locally. Starting discovery...")
+    # 0.5 Check cache
+    cache = load_cache()
+    if schemed_target_url in cache:
+        cached_proxy = cache[schemed_target_url]
+        logging.debug(f"Found cached proxy: {cached_proxy}")
+        # Verify the cached proxy is still reachable
+        if is_url_reachable_locally(cached_proxy, timeout=2):
+            logging.info(f"Using cached proxy: {cached_proxy}")
+            return cached_proxy
+        else:
+            logging.debug("Cached proxy not reachable, discarding.")
+            # We could remove it from cache here, but overwrite later handles it
+
+    logging.debug(
+        f"URL {target_url} not reachable locally and no valid cache. Starting discovery..."
+    )
 
     # 1. Get the list of all available API servers from the central server
     instance_addresses = get_instance_list(timeout=timeout)
@@ -243,6 +299,7 @@ def discover_proxy(target_url, timeout=10):
                         logging.debug(
                             f"Found existing proxy: {proxy_url} on server {api_url}"
                         )
+                        save_to_cache(schemed_target_url, proxy_url)
                         return proxy_url
         except Exception as e:
             logging.warning(f"Could not check services on {api_url}: {e}")
@@ -288,6 +345,7 @@ def discover_proxy(target_url, timeout=10):
                     new_proxy_data = json.loads(response.read())
                     proxy_url = new_proxy_data.get("shared_url")
                     logging.debug(f"Successfully created proxy: {proxy_url}")
+                    save_to_cache(schemed_target_url, proxy_url)
                     return proxy_url
                 else:
                     logging.error(
