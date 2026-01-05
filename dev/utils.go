@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 var (
@@ -69,6 +71,51 @@ func execCmdSilent(dir string, env []string, name string, args ...string) error 
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
+}
+
+// execCmdFiltered runs a command and filters its output (stdout and stderr) to remove specific strings
+// (specifically "../../" to improve VSCode terminal experience).
+func execCmdFiltered(dir string, env []string, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	if env != nil {
+		cmd.Env = env
+	} else {
+		cmd.Env = os.Environ()
+	}
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	filter := func(r io.Reader, w io.Writer) {
+		defer wg.Done()
+		scanner := bufio.NewScanner(r)
+		for scanner.Scan() {
+			line := scanner.Text()
+			// Remove "../../" for cleaner paths in terminal
+			line = strings.ReplaceAll(line, "../../", "")
+			fmt.Fprintln(w, line)
+		}
+	}
+
+	go filter(stdoutPipe, os.Stdout)
+	go filter(stderrPipe, os.Stderr)
+
+	wg.Wait()
+	return cmd.Wait()
 }
 
 func buildFrontendIn(frontendDir string) error {

@@ -159,7 +159,7 @@ func copyCertsToCore() error {
 		return err
 	}
 	src := filepath.Join(rootDir, "certs", "ca.crt")
-	dst := filepath.Join(rootDir, "core", "ca.crt")
+	dst := filepath.Join(rootDir, "core", "resources", "ca.crt")
 
 	data, err := os.ReadFile(src)
 	if err != nil {
@@ -203,7 +203,7 @@ func runBuildDesktop() error {
 	toolCmdDir := filepath.Join(rootDir, "cmd", "vpn-share-tool")
 
 	// Build Go binary
-	if err := execCmd(toolCmdDir, nil, "go", "build", "-o", "vpn-share-tool"); err != nil {
+	if err := execCmdFiltered(toolCmdDir, nil, "go", "build", "-o", "vpn-share-tool"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
