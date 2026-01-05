@@ -9,6 +9,8 @@ import (
 	"github.com/soda92/vpn-share-tool/core/debug"
 	"github.com/soda92/vpn-share-tool/core/handlers"
 	"github.com/soda92/vpn-share-tool/core/proxy"
+	"github.com/soda92/vpn-share-tool/core/register"
+	"github.com/soda92/vpn-share-tool/core/resources"
 	"github.com/soda92/vpn-share-tool/core/utils"
 )
 
@@ -80,7 +82,22 @@ func StartApiServer(apiPort int) error {
 	// Restore saved proxies
 	proxy.LoadProxies()
 
-	go registerWithDiscoveryServer(apiPort)
+	regCfg := register.Config{
+		MyIP:              MyIP,
+		SetMyIP:           SetMyIP,
+		Version:           Version,
+		APIPort:           apiPort,
+		DiscoverySrvPort:  discoverySrvPort,
+		FallbackServerIPs: ServerIPs,
+		RootCACert:        resources.RootCACert,
+		IPReadyChan:       proxy.IPReadyChan,
+		UpdateDiscoveryURL: func(url string) {
+			DiscoveryServerURL = url
+			proxy.SetGlobalConfig(MyIP, APIPort, DiscoveryServerURL, GetHTTPClient)
+		},
+	}
+	go register.Start(regCfg)
+
 	if err := apiServer.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("API server stopped with error: %w", err)
 	}

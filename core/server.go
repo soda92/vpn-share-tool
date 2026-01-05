@@ -9,10 +9,8 @@ import (
 	"time"
 
 	"github.com/soda92/vpn-share-tool/core/proxy"
+	"github.com/soda92/vpn-share-tool/core/resources"
 )
-
-//go:embed ca.crt
-var rootCACert []byte
 
 const (
 	discoverySrvPort = "45679"
@@ -30,7 +28,7 @@ var (
 
 func GetHTTPClient() *http.Client {
 	caCertPool := x509.NewCertPool()
-	if ok := caCertPool.AppendCertsFromPEM(rootCACert); !ok {
+	if ok := caCertPool.AppendCertsFromPEM(resources.RootCACert); !ok {
 		log.Println("Failed to append CA cert")
 	}
 
