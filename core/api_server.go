@@ -51,13 +51,6 @@ func StartApiServer(apiPort int) error {
 		GetProxies: proxy.GetProxies,
 	}
 
-	toggleDebugHandler := &handlers.ToggleDebugHandler{
-		GetProxies: proxy.GetProxies,
-	}
-	toggleCaptchaHandler := &handlers.ToggleCaptchaHandler{
-		GetProxies: proxy.GetProxies,
-	}
-
 	updateSettingsHandler := &handlers.UpdateSettingsHandler{
 		GetProxies: proxy.GetProxies,
 	}
@@ -72,8 +65,6 @@ func StartApiServer(apiPort int) error {
 	mux.Handle("/proxies", addProxyHandler)
 	mux.Handle("/can-reach", canReachHandler)
 	mux.Handle("/active-proxies", activeProxiesHandler)
-	mux.Handle("/toggle-debug", toggleDebugHandler)
-	mux.Handle("/toggle-captcha", toggleCaptchaHandler)
 	mux.Handle("/update-settings", updateSettingsHandler)
 	mux.Handle("/trigger-update", triggerUpdateHandler)
 

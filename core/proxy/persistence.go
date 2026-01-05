@@ -7,13 +7,16 @@ import (
 	"path/filepath"
 
 	"github.com/soda92/vpn-share-tool/core/debug"
+	"github.com/soda92/vpn-share-tool/core/models"
 )
 
 type ProxyConfigItem struct {
-	OriginalURL   string `json:"original_url"`
-	RemotePort    int    `json:"remote_port"`
-	EnableDebug   bool   `json:"enable_debug"`
-	EnableCaptcha bool   `json:"enable_captcha"`
+	OriginalURL string               `json:"original_url"`
+	RemotePort  int                  `json:"remote_port"`
+	Settings    models.ProxySettings `json:"settings"`
+	// Legacy fields for migration
+	LegacyEnableDebug   bool `json:"enable_debug,omitempty"`
+	LegacyEnableCaptcha bool `json:"enable_captcha,omitempty"`
 }
 
 func getConfigFile() (string, error) {
@@ -49,10 +52,9 @@ func SaveProxies() {
 	var config []ProxyConfigItem
 	for _, p := range Proxies {
 		config = append(config, ProxyConfigItem{
-			OriginalURL:   p.OriginalURL,
-			RemotePort:    p.RemotePort,
-			EnableDebug:   p.EnableDebug,
-			EnableCaptcha: p.EnableCaptcha,
+			OriginalURL: p.OriginalURL,
+			RemotePort:  p.RemotePort,
+			Settings:    p.Settings,
 		})
 	}
 
@@ -97,8 +99,31 @@ func LoadProxies() {
 			log.Printf("Failed to restore proxy for %s: %v", item.OriginalURL, err)
 			continue
 		}
+		
 		// Restore settings
-		proxy.SetEnableDebug(item.EnableDebug)
-		proxy.SetEnableCaptcha(item.EnableCaptcha)
+		// Check if Settings is populated, otherwise try legacy
+		if item.Settings == (models.ProxySettings{}) {
+			// Zero value settings, check if we should migrate legacy
+			if item.LegacyEnableDebug {
+				// Legacy EnableDebug mapped to what? Maybe EnableContentMod?
+				// Since legacy debug script is controlled by EnableDebug flag in RunPipeline...
+				// But we removed EnableDebug from SharedProxy model!
+				// So we must map it to Settings.EnableContentMod? Or ignore it?
+				// The prompt said "Legacy Debug Script" is enabled by "EnableDebug" property in Settings? No.
+				// In RunPipeline:
+				/*
+					// 2. Debug Script (Legacy Flag)
+					if ctx.Proxy.GetEnableDebug() { ... }
+				*/
+				// But I removed GetEnableDebug() method and field!
+				// So RunPipeline is broken now. I need to fix it.
+			}
+			
+			// Map legacy to new settings
+			proxy.Settings.EnableContentMod = item.LegacyEnableCaptcha || item.LegacyEnableDebug
+			proxy.Settings.EnableUrlRewrite = true // Default true
+		} else {
+			proxy.Settings = item.Settings
+		}
 	}
 }

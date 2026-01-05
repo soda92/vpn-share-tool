@@ -240,8 +240,6 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 		RemotePort:    remotePort,
 		Path:          target.Path,
 		Handler:       proxy,
-		EnableDebug:   true,
-		EnableCaptcha: true,
 		Settings: models.ProxySettings{
 			EnableContentMod: true,
 			EnableUrlRewrite: true,

@@ -40,7 +40,7 @@ func GetDefaultProcessors() []ContentProcessor {
 type ContentProcessor func(ctx *models.ProcessingContext, body string) string
 
 func InjectCaptchaSolver(ctx *models.ProcessingContext, body string) string {
-	if ctx.Proxy != nil && ctx.Proxy.GetEnableCaptcha() && reCaptchaImage.MatchString(body) {
+	if reCaptchaImage.MatchString(body) {
 		log.Println("Injecting Captcha Solver Script")
 
 		return strings.Replace(body, "</body>", `<script>`+string(resources.SolverScript)+`</script>`+"</body>", 1)
@@ -55,22 +55,17 @@ func RunPipeline(ctx *models.ProcessingContext, body string, _ []ContentProcesso
 		return body
 	}
 
-	// 1. Internal URL Rewrite (Default to true if settings not initialized, or check explicit flag)
-	// For backward compatibility, we might want this enabled by default.
-	// But let's respect the flag. If Settings is zero-value, bools are false.
-	// We might need to initialize Settings to true defaults in proxy creation.
+	// 1. Internal URL Rewrite
 	if ctx.Proxy.Settings.EnableUrlRewrite {
 		body = RewriteInternalURLs(ctx, body)
 	}
 
-	// 2. Debug Script (Legacy Flag)
-	if ctx.Proxy.GetEnableDebug() {
-		body = InjectDebugScript(ctx, body)
-	}
-
-	// 3. System Specific Content Modification
+	// 2. Content Modification (System Specific & Debug)
 	if ctx.Proxy.Settings.EnableContentMod {
-		// Use a map for O(1) lookup if optimization needed, but slice is small
+		// Run Debug Script injection (if it's HTML)
+		body = InjectDebugScript(ctx, body)
+
+		// Run System Specific Processors
 		for _, activeSysID := range ctx.Proxy.ActiveSystems {
 			for _, defSys := range DefinedSystems {
 				if defSys.ID == activeSysID {
@@ -87,7 +82,7 @@ func RunPipeline(ctx *models.ProcessingContext, body string, _ []ContentProcesso
 
 
 func InjectDebugScript(ctx *models.ProcessingContext, body string) string {
-	if ctx.Proxy != nil && ctx.Proxy.GetEnableDebug() && strings.Contains(ctx.RespHeader.Get("Content-Type"), "text/html") {
+	if strings.Contains(ctx.RespHeader.Get("Content-Type"), "text/html") {
 		myIP := ctx.Services.MyIP
 		apiPort := ctx.Services.APIPort
 		if myIP != "" && apiPort != 0 {

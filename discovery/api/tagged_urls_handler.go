@@ -9,6 +9,7 @@ import (
 
 	"github.com/soda92/vpn-share-tool/discovery/proxy"
 	"github.com/soda92/vpn-share-tool/discovery/store"
+	"github.com/soda92/vpn-share-tool/core/models"
 )
 
 func HandleTaggedURLs(w http.ResponseWriter, r *http.Request) {
@@ -48,11 +49,11 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	// Enrich the tagged URLs with their proxy status
 	type EnrichedTaggedURL struct {
 		store.TaggedURL
-		ProxyURL      string  `json:"proxy_url,omitempty"`
-		EnableDebug   bool    `json:"enable_debug"`
-		EnableCaptcha bool    `json:"enable_captcha"`
-		RequestRate   float64 `json:"request_rate"`
-		TotalRequests int64   `json:"total_requests"`
+		ProxyURL      string               `json:"proxy_url,omitempty"`
+		Settings      models.ProxySettings `json:"settings"`
+		ActiveSystems []string             `json:"active_systems"`
+		RequestRate   float64              `json:"request_rate"`
+		TotalRequests int64                `json:"total_requests"`
 	}
 
 	enrichedUrls := make([]EnrichedTaggedURL, len(urls))
@@ -61,8 +62,8 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 		// Check against Hostname (keys in allProxies are normalized hostnames)
 		if proxyInfo, ok := allProxies[normalizeHost(u.URL)]; ok {
 			enrichedUrls[i].ProxyURL = proxyInfo.SharedURL
-			enrichedUrls[i].EnableDebug = proxyInfo.EnableDebug
-			enrichedUrls[i].EnableCaptcha = proxyInfo.EnableCaptcha
+			enrichedUrls[i].Settings = proxyInfo.Settings
+			enrichedUrls[i].ActiveSystems = proxyInfo.ActiveSystems
 			enrichedUrls[i].RequestRate = proxyInfo.RequestRate
 			enrichedUrls[i].TotalRequests = proxyInfo.TotalRequests
 		}

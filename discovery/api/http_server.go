@@ -184,8 +184,6 @@ func StartHTTPServer(insecure bool) {
 	protectedMux.HandleFunc("/tagged-urls", HandleTaggedURLs)
 	protectedMux.HandleFunc("/tagged-urls/", HandleTaggedURLs)
 	protectedMux.HandleFunc("/cluster-proxies", proxy.HandleClusterProxies)
-	protectedMux.HandleFunc("/toggle-debug-proxy", handleToggleDebugProxy)
-	protectedMux.HandleFunc("/toggle-captcha-proxy", handleCaptchaProxy)
 	protectedMux.HandleFunc("/update-proxy-settings", HandleUpdateProxySettings)
 	protectedMux.HandleFunc("/trigger-update-remote", handleTriggerUpdateRemote)
 
