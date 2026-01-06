@@ -9,6 +9,9 @@ import (
 )
 
 func InjectDebugScript(ctx *models.ProcessingContext, body string) string {
+	if !ctx.Proxy.Settings.EnableDebugScript {
+		return body
+	}
 	if strings.Contains(ctx.RespHeader.Get("Content-Type"), "text/html") {
 		myIP := ctx.Services.MyIP
 		apiPort := ctx.Services.APIPort

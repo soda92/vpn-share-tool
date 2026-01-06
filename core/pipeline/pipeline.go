@@ -7,16 +7,6 @@ import (
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
-func GetDefaultProcessors() []ContentProcessor {
-	return []ContentProcessor{
-		InjectDebugScript,
-		FixLegacyJS,
-		RewriteInternalURLs,
-		RewritePhisURLs,
-		InjectCaptchaSolver,
-	}
-}
-
 type ContentProcessor func(ctx *models.ProcessingContext, body string) string
 
 func RunPipeline(ctx *models.ProcessingContext, body string) string {

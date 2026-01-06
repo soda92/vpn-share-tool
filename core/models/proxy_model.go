@@ -27,8 +27,9 @@ type ProcessingContext struct {
 }
 
 type ProxySettings struct {
-	EnableContentMod bool `json:"enable_content_mod"`
-	EnableUrlRewrite bool `json:"enable_url_rewrite"`
+	EnableContentMod  bool `json:"enable_content_mod"`
+	EnableUrlRewrite  bool `json:"enable_url_rewrite"`
+	EnableDebugScript bool `json:"enable_debug_script"`
 }
 
 type SharedProxy struct {

@@ -11,6 +11,11 @@
         <div class="help-text">Enables system-specific fixes (e.g. Legacy JS fixes, Captcha injection).</div>
       </el-form-item>
 
+      <el-form-item label="Debug Script">
+        <el-switch v-model="form.enable_debug_script" />
+        <div class="help-text">Injects a visual debug overlay for development/testing.</div>
+      </el-form-item>
+
       <el-divider v-if="activeSystems.length > 0" content-position="left">Detected Systems</el-divider>
       <div v-if="activeSystems.length > 0">
         <el-tag v-for="sys in activeSystems" :key="sys" type="success" style="margin-right: 5px">{{ sys }}</el-tag>
@@ -40,6 +45,7 @@ const visible = ref(false);
 const form = ref({
   enable_url_rewrite: true,
   enable_content_mod: true,
+  enable_debug_script: false,
 });
 const activeSystems = ref([]);
 
@@ -51,6 +57,7 @@ watch(() => props.modelValue, (val) => {
     form.value = {
       enable_url_rewrite: s.enable_url_rewrite !== undefined ? s.enable_url_rewrite : true,
       enable_content_mod: s.enable_content_mod !== undefined ? s.enable_content_mod : true,
+      enable_debug_script: s.enable_debug_script !== undefined ? s.enable_debug_script : false,
     };
     activeSystems.value = props.proxyData.active_systems || [];
   }
@@ -66,6 +73,7 @@ const save = () => {
     settings: {
         enable_url_rewrite: form.value.enable_url_rewrite,
         enable_content_mod: form.value.enable_content_mod,
+        enable_debug_script: form.value.enable_debug_script,
     }
   });
   visible.value = false;
