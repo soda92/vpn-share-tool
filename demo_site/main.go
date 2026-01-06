@@ -51,7 +51,7 @@ func main() {
 		if len(parts) >= 2 {
 			codePart := parts[1]
 			code := strings.TrimSuffix(codePart, ".jpeg")
-			
+
 			// Set expected code in cookie (plain text for demo simplicity)
 			http.SetCookie(w, &http.Cookie{
 				Name:  "expected_captcha",
@@ -125,7 +125,7 @@ func main() {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 			return
 		}
-		
+
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Failed to parse form", http.StatusBadRequest)
 			return
@@ -136,7 +136,7 @@ func main() {
 			http.Error(w, "Captcha session expired", http.StatusBadRequest)
 			return
 		}
-		
+
 		submitted := r.FormValue("verifyCode") // Must match input name in frontend
 		if submitted == "" {
 			// Try "captcha" or other common names if needed, but let's stick to one
@@ -149,7 +149,7 @@ func main() {
 			http.Error(w, "Incorrect Captcha", http.StatusForbidden)
 			return
 		}
-		
+
 		log.Printf("Received valid form submission: %v", r.PostForm)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Form received"))
