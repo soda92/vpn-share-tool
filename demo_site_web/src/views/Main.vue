@@ -4,6 +4,11 @@
     <p>Welcome!</p>
     <button @click="logout">Logout</button>
 
+    <h1>
+      <a href="/captcha">Captcha solver</a>
+    </h1>
+
+
     <hr>
     <h2>Test Form Submission</h2>
     <form @submit.prevent="submitForm">
