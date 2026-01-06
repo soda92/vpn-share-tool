@@ -1,6 +1,5 @@
 package pipeline
 
-
 type SystemDefinition struct {
 	ID         string
 	Name       string

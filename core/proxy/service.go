@@ -236,10 +236,10 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 	ctx, cancel := context.WithCancel(context.Background())
 	// Pre-create the struct to allow closure capture
 	newProxy := &models.SharedProxy{
-		OriginalURL:   rawURL,
-		RemotePort:    remotePort,
-		Path:          target.Path,
-		Handler:       proxy,
+		OriginalURL: rawURL,
+		RemotePort:  remotePort,
+		Path:        target.Path,
+		Handler:     proxy,
 		Settings: models.ProxySettings{
 			EnableContentMod: true,
 			EnableUrlRewrite: true,

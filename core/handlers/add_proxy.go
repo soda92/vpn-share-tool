@@ -10,7 +10,7 @@ import (
 )
 
 type AddProxyHandler struct {
-	GetIP func() string
+	GetIP       func() string
 	CreateProxy func(url string, port int) (*models.SharedProxy, error)
 }
 

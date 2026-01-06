@@ -12,7 +12,6 @@ import (
 //go:embed ocr_solver.py
 var ocrSolverScript []byte
 
-
 // SolveCaptchaLocal attempts to solve the image locally using Python.
 func SolveCaptchaLocal(imgData []byte) string {
 	log.Printf("Solving captcha locally... (%d bytes)", len(imgData))

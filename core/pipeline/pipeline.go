@@ -7,10 +7,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/soda92/vpn-share-tool/core/resources"
 	"github.com/soda92/vpn-share-tool/core/models"
+	"github.com/soda92/vpn-share-tool/core/resources"
 )
-
 
 var (
 	rePhisUrl            = regexp.MustCompile(`phisUrl\s*:\s*['"](.*?)['"]`)
@@ -80,7 +79,6 @@ func RunPipeline(ctx *models.ProcessingContext, body string, _ []ContentProcesso
 	return body
 }
 
-
 func InjectDebugScript(ctx *models.ProcessingContext, body string) string {
 	if strings.Contains(ctx.RespHeader.Get("Content-Type"), "text/html") {
 		myIP := ctx.Services.MyIP
@@ -136,7 +134,7 @@ func RewritePhisURLs(ctx *models.ProcessingContext, body string) string {
 				} else {
 					err = fmt.Errorf("CreateProxy service not available")
 				}
-				
+
 				if err == nil && newProxy != nil {
 					// We created a proxy for the anti-phishing redirect destination.
 					// Now we should rewrite the Location header to point to our proxy.

@@ -42,7 +42,7 @@ func detectSystems(p *models.SharedProxy) {
 			if err != nil {
 				continue
 			}
-			
+
 			// We can use IsURLReachable from utils, but we might want more specific check (200 OK)
 			// IsURLReachable returns true for 403/401 too.
 			// For asset probing, we usually expect 200.

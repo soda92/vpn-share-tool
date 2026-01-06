@@ -99,7 +99,7 @@ func LoadProxies() {
 			log.Printf("Failed to restore proxy for %s: %v", item.OriginalURL, err)
 			continue
 		}
-		
+
 		// Restore settings
 		// Check if Settings is populated, otherwise try legacy
 		if item.Settings == (models.ProxySettings{}) {
@@ -118,7 +118,7 @@ func LoadProxies() {
 				// But I removed GetEnableDebug() method and field!
 				// So RunPipeline is broken now. I need to fix it.
 			}
-			
+
 			// Map legacy to new settings
 			proxy.Settings.EnableContentMod = item.LegacyEnableCaptcha || item.LegacyEnableDebug
 			proxy.Settings.EnableUrlRewrite = true // Default true

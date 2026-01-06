@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/soda92/vpn-share-tool/discovery/registry"
 	"github.com/soda92/vpn-share-tool/core/models"
+	"github.com/soda92/vpn-share-tool/discovery/registry"
 )
 
 func HandleUpdateProxySettings(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +70,7 @@ func HandleUpdateProxySettings(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	} else {
 		// Fallback: If no instance supported the new endpoint, maybe it's an old client?
-		// We could try to map "EnableContentMod" to "/toggle-captcha"? 
+		// We could try to map "EnableContentMod" to "/toggle-captcha"?
 		// But that's messy. Let's return 404/501 and let the UI handle the graceful degradation msg.
 		http.Error(w, "Proxy not found or client does not support settings update", http.StatusNotFound)
 	}

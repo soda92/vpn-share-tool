@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/soda92/vpn-share-tool/discovery/registry"
 	"log"
 	"net/http"
 	"net/url"
 	"time"
-	"github.com/soda92/vpn-share-tool/discovery/registry"
 )
 
 func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {

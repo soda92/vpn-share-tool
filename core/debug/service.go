@@ -3,6 +3,7 @@ package debug
 import (
 	"embed"
 	"encoding/json"
+	"go.etcd.io/bbolt"
 	"io"
 	"io/fs"
 	"log"
@@ -11,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"go.etcd.io/bbolt"
 )
 
 const (

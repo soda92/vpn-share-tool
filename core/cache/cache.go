@@ -13,8 +13,6 @@ import (
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
-
-
 // cacheEntry holds the cached response data and headers.
 type cacheEntry struct {
 	Header http.Header
@@ -65,7 +63,6 @@ func (t *CachingTransport) readRequestBody(req *http.Request) ([]byte, error) {
 	req.Body = io.NopCloser(bytes.NewBuffer(reqBody)) // Restore body for the actual request
 	return reqBody, nil
 }
-
 
 func (t *CachingTransport) decompressBody(encoding string, body []byte) ([]byte, error) {
 	var reader io.ReadCloser

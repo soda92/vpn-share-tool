@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/soda92/vpn-share-tool/discovery/registry"
 	"github.com/soda92/vpn-share-tool/core/models"
+	"github.com/soda92/vpn-share-tool/discovery/registry"
 )
 
 type ProxyInfo struct {

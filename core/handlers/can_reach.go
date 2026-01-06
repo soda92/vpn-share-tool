@@ -10,7 +10,7 @@ type CanReachHandler struct {
 	IsURLReachable func(string) bool
 }
 
-func(h* CanReachHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *CanReachHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("url")
 	if targetURL == "" {
 		http.Error(w, "url query parameter is required", http.StatusBadRequest)

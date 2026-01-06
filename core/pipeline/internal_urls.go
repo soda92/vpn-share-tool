@@ -39,7 +39,7 @@ func RewriteInternalURLs(ctx *models.ProcessingContext, body string) string {
 				if ctx.Services.MyIP != "" && strings.Contains(match, ctx.Services.MyIP) {
 					continue
 				}
-				
+
 				var newProxy *models.SharedProxy
 				var err error
 

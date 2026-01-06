@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/soda92/vpn-share-tool/core/models"
 	"github.com/soda92/vpn-share-tool/discovery/proxy"
 	"github.com/soda92/vpn-share-tool/discovery/store"
-	"github.com/soda92/vpn-share-tool/core/models"
 )
 
 func HandleTaggedURLs(w http.ResponseWriter, r *http.Request) {
