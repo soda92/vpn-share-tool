@@ -33,4 +33,12 @@ var DefinedSystems = []SystemDefinition{
 			InjectCaptchaSolver,
 		},
 	},
+	{
+		ID:        "DEMO",
+		Name:      "Demo Site",
+		ProbeURLs: []string{"demo/probe.png"},
+		Processors: []ContentProcessor{
+			InjectCaptchaSolver,
+		},
+	},
 }
