@@ -9,6 +9,13 @@ import (
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
+var (
+	reLocalhost  = regexp.MustCompile(`(https?://)(localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?`)
+	rePrivate10  = regexp.MustCompile(`(https?://)(10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?`)
+	rePrivate172 = regexp.MustCompile(`(https?://)(172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?`)
+	rePrivate192 = regexp.MustCompile(`(https?://)(192\.168\.\d{1,3}\.\d{1,3})(:\d+)?`)
+)
+
 func RewriteInternalURLs(ctx *models.ProcessingContext, body string) string {
 	// 1. Rewrite specific internal URLs (e.g. 10.x.x.x)
 	contentType := ctx.RespHeader.Get("Content-Type")

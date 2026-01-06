@@ -28,6 +28,7 @@ var DefinedSystems = []SystemDefinition{
 		Name:      "Public Health",
 		ProbeURLs: []string{"phis/static/images/logins/bg-denglu.png"},
 		Processors: []ContentProcessor{
+			FixLegacyJS,
 			RewritePhisURLs,
 			InjectCaptchaSolver,
 		},
