@@ -266,7 +266,7 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 			MyIP:        MyIP,
 			APIPort:     APIPort,
 		}
-		return pipeline.RunPipeline(ctx, body, pipeline.GetDefaultProcessors())
+		return pipeline.RunPipeline(ctx, body)
 	})
 
 	go func() {

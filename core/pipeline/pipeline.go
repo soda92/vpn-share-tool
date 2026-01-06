@@ -47,7 +47,7 @@ func InjectCaptchaSolver(ctx *models.ProcessingContext, body string) string {
 	return body
 }
 
-func RunPipeline(ctx *models.ProcessingContext, body string, _ []ContentProcessor) string {
+func RunPipeline(ctx *models.ProcessingContext, body string) string {
 	// Skip processing for specific dynamic JS patterns or large libraries
 	path := strings.ToLower(ctx.ReqURL.Path)
 	if path == "*.js" {
