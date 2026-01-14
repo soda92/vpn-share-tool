@@ -3,6 +3,6 @@
   LinuxPath = "/mnt/samba_share/VPN共享工具"
 
 [Version]
-  CurrentDate = "2026-01-06"
-  Counter = 31
-  Suffix = "b"
+  CurrentDate = "2026-01-14"
+  Counter = 32
+  Suffix = "a"
