@@ -362,10 +362,7 @@ func runBuildPylib() error {
 	// Replace placeholder
 	contentStr := string(srcContent)
 	certStr := string(certContent)
-	
-	// Escape backslashes and double quotes if necessary, but usually PEM cert is safe in python triple quotes blocks if it doesn't contain triple quotes.
-	// However, we should check if the cert ends with a newline.
-	
+
 	newContent := strings.Replace(contentStr, "__CA_CERT_PLACEHOLDER__", certStr, 1)
 
 	// Ensure dist dir exists

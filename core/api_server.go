@@ -1,12 +1,12 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"net/http/pprof"
 	"strings"
-	"encoding/json"
 
 	"github.com/soda92/vpn-share-tool/core/debug"
 	"github.com/soda92/vpn-share-tool/core/handlers"
