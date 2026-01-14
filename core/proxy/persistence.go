@@ -121,6 +121,7 @@ func LoadProxies() {
 
 			// Map legacy to new settings
 			proxy.Settings.EnableContentMod = item.LegacyEnableCaptcha || item.LegacyEnableDebug
+			proxy.Settings.EnableDebugScript = item.LegacyEnableDebug
 			proxy.Settings.EnableUrlRewrite = true // Default true
 		} else {
 			proxy.Settings = item.Settings
