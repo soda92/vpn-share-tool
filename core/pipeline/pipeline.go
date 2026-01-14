@@ -40,7 +40,3 @@ func RunPipeline(ctx *models.ProcessingContext, body string) string {
 
 	return body
 }
-
-
-
-

@@ -50,15 +50,15 @@ func TestFixLegacyJS(t *testing.T) {
 	// However, if the first regex matches and inserts 'return', the rest of the code is effectively dead but still present unless we remove it.
 	// Wait, the current implementation of FixLegacyJS does REPLACE the function signature line.
 	// But it also runs `reEhrWindowOpen.ReplaceAllString`.
-	
+
 	// Let's verify if `reEhrWindowOpen` also matched and replaced the specific window.open call later in the string.
 	// In the original input: `window.open(url,"", ...)` is present.
 	// In the output, it should be replaced by `window.open(url, "_blank");`.
-	
+
 	expectedWindowOpen := `window.open(url, "_blank");`
 	// The output should contain this string at least once (inserted at the top)
 	// and potentially twice if the one in the `else` block was also replaced.
-	
+
 	if !strings.Contains(output, expectedWindowOpen) {
 		t.Errorf("FixLegacyJS failed to inject window.open replacement.")
 	}

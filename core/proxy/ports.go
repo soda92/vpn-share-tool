@@ -31,7 +31,7 @@ func SelectAvailablePort(requestedPort int, startPort int, proxiesCount int) (in
 			}
 		}
 		ProxiesLock.RUnlock()
-		
+
 		if !isUsed && isPortAvailable(requestedPort) {
 			remotePort = requestedPort
 		} else {
@@ -43,7 +43,7 @@ func SelectAvailablePort(requestedPort int, startPort int, proxiesCount int) (in
 		port := startPort
 		ProxiesLock.Lock()
 		defer ProxiesLock.Unlock()
-		
+
 		for {
 			isUsed := false
 			for _, p := range Proxies {
@@ -53,12 +53,12 @@ func SelectAvailablePort(requestedPort int, startPort int, proxiesCount int) (in
 				}
 			}
 			// Release lock temporarily to check port availability (avoid holding lock during system call)
-			// But wait, checking usage requires lock. 
+			// But wait, checking usage requires lock.
 			// We can check usage in memory quickly.
 			// isPortAvailable might take a few ms.
 			// It is safer to keep lock if we want to guarantee no race condition within our own app,
 			// but we can't guarantee other apps don't take it.
-			
+
 			if !isUsed && isPortAvailable(port) {
 				remotePort = port
 				break
