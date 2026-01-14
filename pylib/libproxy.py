@@ -168,7 +168,9 @@ def get_instance_list(timeout: int = 5):
                 f"Failed to load embedded CA cert: {e}. Exiting for security."
             )
             sys.exit(1)
-
+    else:
+        logging.error("No CA certificate configured. Exiting for security.")
+        sys.exit(1)
 
     # 3. Try to connect to candidates
     for host in candidate_hosts:
