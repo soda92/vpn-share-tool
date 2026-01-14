@@ -15,7 +15,7 @@ import (
 const releaseConfigName = "Release.toml"
 
 var releaseCmd = &cobra.Command{
-	Use:   "release",
+	Use:   "release-windows",
 	Short: "Release the Windows binary to the share folder",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runRelease()
