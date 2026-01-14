@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"runtime/trace"
+	"time"
 
 	"github.com/soda92/vpn-share-tool/core/debug"
 )
@@ -61,11 +62,23 @@ func (t *CachingTransport) handleStaticAsset(req *http.Request, reqBody []byte) 
 }
 
 func (t *CachingTransport) handleDynamicAsset(req *http.Request, reqBody []byte) (*http.Response, error) {
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start)
+		if duration > 1*time.Second {
+			log.Printf("SLOW REQUEST: %s took %v", req.URL.String(), duration)
+		}
+	}()
 	defer trace.StartRegion(req.Context(), "handleDynamicAsset").End()
 	transport := t.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
+
+	// Force a full fetch by removing cache validation headers
+	// This ensures we always get the body to run the pipeline on (rewriting URLs, etc.)
+	req.Header.Del("If-Modified-Since")
+	req.Header.Del("If-None-Match")
 
 	netRegion := trace.StartRegion(req.Context(), "NetworkWait")
 	resp, err := transport.RoundTrip(req)
@@ -75,12 +88,22 @@ func (t *CachingTransport) handleDynamicAsset(req *http.Request, reqBody []byte)
 		return nil, err
 	}
 
+	// Prevent browser caching of dynamic/modified content
+	resp.Header.Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0")
+	resp.Header.Del("ETag")
+	resp.Header.Del("Last-Modified")
+	resp.Header.Del("Expires")
+	resp.Header.Del("Pragma")
+
 	if resp.Body == nil {
 		debug.CaptureRequest(req, resp, reqBody, nil)
 		return resp, nil
 	}
 
+	readRegion := trace.StartRegion(req.Context(), "ReadBody")
 	respBody, err := io.ReadAll(resp.Body)
+	readRegion.End()
+	
 	if err != nil {
 		log.Printf("Error reading response body: %v", err)
 		return nil, err

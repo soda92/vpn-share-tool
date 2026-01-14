@@ -61,3 +61,12 @@ Ehr.openChrome = function(url){
 		window.open(url,"", "height=600, width=1200, top=10, left=150, toolbar=y, menubar=no, scrollbars=yes, resizable=no,location=no, status=no");
 	}
 }
+
+var openObject = {
+		open : function(url,height,width){
+//			window.showModalDialog(Ehr.urls.DiagnosisProofUrl,diagnosisProof,"status:Yes;scroll:Yes;help:No;resizable:No;center:Yes;dialogWidth:900px;dialogHeight:510px;");
+			var iTop = (window.screen.availHeight-30-height)/2;       //获得窗口的垂直位置;
+		    var iLeft = (window.screen.availWidth-10-width)/2;           //获得窗口的水平位置;
+			window.open(url,"", "height="+height+", width="+width+", top="+iTop+", left="+iLeft+", toolbar=y, menubar=no, scrollbars=yes, resizable=no,location=no, status=no");
+		}
+}

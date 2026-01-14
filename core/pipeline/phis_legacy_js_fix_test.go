@@ -69,4 +69,17 @@ func TestFixLegacyJS(t *testing.T) {
 	if !strings.Contains(outputModal, "if(true)") {
 		t.Errorf("FixLegacyJS failed to replace showModalDialog check.")
 	}
+
+	// Test openObject.open replacement
+	inputOpenObject := `var openObject = {
+		open : function(url,height,width){
+			var iTop = (window.screen.availHeight-30-height)/2;
+		    var iLeft = (window.screen.availWidth-10-width)/2;
+			window.open(url,"", "height="+height+", width="+width+", top="+iTop+", left="+iLeft+", toolbar=y, menubar=no, scrollbars=yes, resizable=no,location=no, status=no");
+		}
+}`
+	outputOpenObject := FixLegacyJS(ctx, inputOpenObject)
+	if !strings.Contains(outputOpenObject, `window.open(url, "_blank");`) {
+		t.Errorf("FixLegacyJS failed to replace window.open inside openObject.open.\nGot:\n%s", outputOpenObject)
+	}
 }

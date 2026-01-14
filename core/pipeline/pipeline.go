@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	_ "embed"
+	"log"
 	"strings"
 
 	"github.com/soda92/vpn-share-tool/core/models"
@@ -10,11 +11,13 @@ import (
 type ContentProcessor func(ctx *models.ProcessingContext, body string) string
 
 func RunPipeline(ctx *models.ProcessingContext, body string) string {
-	// Skip processing for specific dynamic JS patterns or large libraries
+	// Skip processing for a specific system that use "*.js?name=xxx" for dynamic streaming js
 	path := strings.ToLower(ctx.ReqURL.Path)
-	if path == "*.js" {
+	if strings.HasPrefix(path, "*.js") {
 		return body
 	}
+
+	log.Printf("RunPipeline: %s (Active Systems: %v)", ctx.ReqURL.Path, ctx.Proxy.ActiveSystems)
 
 	// 1. Internal URL Rewrite
 	if ctx.Proxy.Settings.EnableUrlRewrite {
