@@ -38,6 +38,7 @@ var DefinedSystems = []SystemDefinition{
 		Name:      "Demo Site",
 		ProbeURLs: []string{"/demo/probe.png"},
 		Processors: []ContentProcessor{
+			FixLegacyJS,
 			InjectCaptchaSolver,
 		},
 	},
