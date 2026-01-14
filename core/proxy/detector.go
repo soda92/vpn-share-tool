@@ -36,12 +36,19 @@ func detectSystems(p *models.SharedProxy) {
 		baseURL += "/"
 	}
 
+	baseParsed, err := url.Parse(baseURL)
+	if err != nil {
+		log.Printf("Invalid base URL for detection: %s", baseURL)
+		return
+	}
+
 	for _, sys := range pipeline.DefinedSystems {
 		for _, probe := range sys.ProbeURLs {
-			targetURL, err := url.JoinPath(baseURL, probe)
+			probeURL, err := url.Parse(probe)
 			if err != nil {
 				continue
 			}
+			targetURL := baseParsed.ResolveReference(probeURL).String()
 
 			// We can use IsURLReachable from utils, but we might want more specific check (200 OK)
 			// IsURLReachable returns true for 403/401 too.

@@ -18,7 +18,7 @@ var DefinedSystems = []SystemDefinition{
 	{
 		ID:        "HIS",
 		Name:      "Legacy HIS",
-		ProbeURLs: []string{"cis/images/img/LOGO-HIS-LOGIN.png"},
+		ProbeURLs: []string{"/cis/images/img/LOGO-HIS-LOGIN.png"},
 		Processors: []ContentProcessor{
 			FixLegacyJS,
 		},
@@ -26,7 +26,7 @@ var DefinedSystems = []SystemDefinition{
 	{
 		ID:        "PHIS",
 		Name:      "Public Health",
-		ProbeURLs: []string{"phis/static/images/logins/bg-denglu.png"},
+		ProbeURLs: []string{"/phis/static/images/logins/bg-denglu.png"},
 		Processors: []ContentProcessor{
 			FixLegacyJS,
 			RewritePhisURLs,
@@ -36,7 +36,7 @@ var DefinedSystems = []SystemDefinition{
 	{
 		ID:        "DEMO",
 		Name:      "Demo Site",
-		ProbeURLs: []string{"demo/probe.png"},
+		ProbeURLs: []string{"/demo/probe.png"},
 		Processors: []ContentProcessor{
 			InjectCaptchaSolver,
 		},
