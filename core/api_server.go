@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -47,7 +48,7 @@ func StartApiServer(apiPort int) error {
 	}
 	servicesHandler := &handlers.ServicesHandler{
 		GetProxies: proxy.GetProxies,
-		MyIP:       MyIP,
+		GetIP:      func() string { return MyIP },
 	}
 
 	activeProxiesHandler := &handlers.GetActiveProxiesHandler{
@@ -70,6 +71,13 @@ func StartApiServer(apiPort int) error {
 	mux.Handle("/active-proxies", activeProxiesHandler)
 	mux.Handle("/update-settings", updateSettingsHandler)
 	mux.Handle("/trigger-update", triggerUpdateHandler)
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		response := map[string]string{"version": Version}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "Failed to encode version", http.StatusInternalServerError)
+		}
+	})
 
 	// Profiling endpoints
 	mux.HandleFunc("/debug/pprof/", pprof.Index)

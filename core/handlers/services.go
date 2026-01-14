@@ -11,7 +11,7 @@ import (
 
 type ServicesHandler struct {
 	GetProxies func() []*models.SharedProxy
-	MyIP       string
+	GetIP      func() string
 }
 
 type sharedURLInfo struct {
@@ -21,7 +21,7 @@ type sharedURLInfo struct {
 
 // servicesHandler provides the list of currently shared proxies as a JSON response.
 func (h *ServicesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	MyIP := h.MyIP
+	MyIP := h.GetIP()
 
 	proxies := h.GetProxies()
 

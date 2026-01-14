@@ -150,7 +150,15 @@ def get_instance_list(timeout: int = 5):
     candidate_hosts.extend(DISCOVERY_SERVER_HOSTS)
 
     # Setup SSL context
-    if CA_CERT_PEM and "__CA_CERT_PLACEHOLDER__" not in CA_CERT_PEM:
+    global CA_CERT_PEM
+    if CA_CERT_PEM:
+        if "__CA_CERT_PLACEHOLDER__" in CA_CERT_PEM:
+            CA_FILE = Path(os.environ.get("VPN_SHARE_TOOL_CA_PATH", Path(__file__).resolve().parent.parent.joinpath("certs/ca.crt")))
+            if CA_FILE.exists():
+                CA_CERT_PEM = CA_FILE.read_text(encoding='utf8')
+            else:
+                logging.error("No CA certificate found. Exiting for security.")
+                sys.exit(1)
         try:
             context = ssl.create_default_context(cadata=CA_CERT_PEM)
             context.check_hostname = False # Discovery uses IP/different hostname often
@@ -161,7 +169,7 @@ def get_instance_list(timeout: int = 5):
             )
             sys.exit(1)
     else:
-        logging.error("No embedded CA certificate found. Exiting for security.")
+        logging.error("No CA certificate configured. Exiting for security.")
         sys.exit(1)
 
     # 3. Try to connect to candidates
