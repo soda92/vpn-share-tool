@@ -99,7 +99,7 @@ func RewriteInternalURLs(ctx *models.ProcessingContext, body string) string {
 				if ctx.Services.MyIP != "" && strings.Contains(match, ctx.Services.MyIP) {
 					continue
 				}
-				
+
 				// Verify if the detected internal URL is actually reachable (Fast Cached Check)
 				if !isReachableFast(match) {
 					continue

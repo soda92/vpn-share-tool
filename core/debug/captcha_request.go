@@ -25,7 +25,7 @@ func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []
 	timestamp := time.Now()
 	method := req.Method
 	urlStr := req.URL.String()
-	
+
 	reqHeaders := make(http.Header)
 	for k, v := range req.Header {
 		reqHeaders[k] = v
@@ -36,7 +36,7 @@ func CaptureRequest(req *http.Request, resp *http.Response, reqBody, respBody []
 	for k, v := range resp.Header {
 		respHeaders[k] = v
 	}
-	
+
 	// Create copies of bodies if they are not already (they are slices, but underlying arrays might be large or shared?)
 	// In the calling code (assets.go), they are results of io.ReadAll, so they are distinct allocations.
 	// But passing them to goroutine is safe.

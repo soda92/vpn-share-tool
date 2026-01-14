@@ -103,7 +103,7 @@ func (t *CachingTransport) handleDynamicAsset(req *http.Request, reqBody []byte)
 	readRegion := trace.StartRegion(req.Context(), "ReadBody")
 	respBody, err := io.ReadAll(resp.Body)
 	readRegion.End()
-	
+
 	if err != nil {
 		log.Printf("Error reading response body: %v", err)
 		return nil, err
