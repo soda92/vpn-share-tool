@@ -5,11 +5,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"runtime/trace"
 
 	"github.com/soda92/vpn-share-tool/core/debug"
 )
 
 func (t *CachingTransport) handleStaticAsset(req *http.Request, reqBody []byte) (*http.Response, error) {
+	defer trace.StartRegion(req.Context(), "handleStaticAsset").End()
 	if entry, ok := t.Cache.Get(req.URL.String()); ok {
 		log.Printf("Cache HIT for static: %s", req.URL.String())
 		resp := &http.Response{
@@ -59,6 +61,7 @@ func (t *CachingTransport) handleStaticAsset(req *http.Request, reqBody []byte) 
 }
 
 func (t *CachingTransport) handleDynamicAsset(req *http.Request, reqBody []byte) (*http.Response, error) {
+	defer trace.StartRegion(req.Context(), "handleDynamicAsset").End()
 	transport := t.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
@@ -88,7 +91,9 @@ func (t *CachingTransport) handleDynamicAsset(req *http.Request, reqBody []byte)
 	}
 
 	// Run Pipeline
+	pipelineRegion := trace.StartRegion(req.Context(), "Pipeline")
 	newBody, modified := t.runPipeline(req, resp.Header, decompressedBody)
+	pipelineRegion.End()
 
 	if modified {
 		respBody = newBody

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/pprof"
 	"strings"
 
 	"github.com/soda92/vpn-share-tool/core/debug"
@@ -69,6 +70,13 @@ func StartApiServer(apiPort int) error {
 	mux.Handle("/active-proxies", activeProxiesHandler)
 	mux.Handle("/update-settings", updateSettingsHandler)
 	mux.Handle("/trigger-update", triggerUpdateHandler)
+
+	// Profiling endpoints
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	debug.RegisterDebugRoutes(mux)
 
