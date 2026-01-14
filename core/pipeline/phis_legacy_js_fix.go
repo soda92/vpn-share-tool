@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"regexp"
+	"runtime/trace"
 
 	"github.com/soda92/vpn-share-tool/core/models"
 )
@@ -15,6 +16,7 @@ var (
 )
 
 func FixLegacyJS(ctx *models.ProcessingContext, body string) string {
+	defer trace.StartRegion(ctx.ReqContext, "FixLegacyJS").End()
 	// Remove disable_backspace script using regex
 	body = reStopItBlock.ReplaceAllString(body, "")
 

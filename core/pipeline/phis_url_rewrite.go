@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"runtime/trace"
 	"strings"
 
 	"github.com/soda92/vpn-share-tool/core/models"
@@ -15,6 +16,7 @@ var (
 )
 
 func RewritePhisURLs(ctx *models.ProcessingContext, body string) string {
+	defer trace.StartRegion(ctx.ReqContext, "RewritePhisURLs").End()
 	if strings.Contains(ctx.ReqURL.Path, "showView.jsp") {
 		matchesHttpPhis := reHttpPhis.FindStringSubmatch(body)
 		matchesPhisUrl := rePhisUrl.FindStringSubmatch(body)

@@ -66,7 +66,11 @@ func (t *CachingTransport) handleDynamicAsset(req *http.Request, reqBody []byte)
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
+
+	netRegion := trace.StartRegion(req.Context(), "NetworkWait")
 	resp, err := transport.RoundTrip(req)
+	netRegion.End()
+
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +88,10 @@ func (t *CachingTransport) handleDynamicAsset(req *http.Request, reqBody []byte)
 	resp.Body.Close()
 
 	// Decompress
+	decompRegion := trace.StartRegion(req.Context(), "Decompress")
 	decompressedBody, err := t.decompressBody(resp.Header.Get("Content-Encoding"), respBody)
+	decompRegion.End()
+
 	if err != nil {
 		log.Printf("Error decompressing response body: %v", err)
 		return nil, err

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"runtime/trace"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/soda92/vpn-share-tool/core/models"
@@ -52,6 +53,7 @@ func NewCachingTransport(transport http.RoundTripper, proxy *models.SharedProxy,
 }
 
 func (t *CachingTransport) readRequestBody(req *http.Request) ([]byte, error) {
+	defer trace.StartRegion(req.Context(), "readRequestBody").End()
 	if req.Body == nil {
 		return nil, nil
 	}
