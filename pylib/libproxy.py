@@ -153,7 +153,7 @@ def get_instance_list(timeout: int = 5):
     if CA_CERT_PEM and "__CA_CERT_PLACEHOLDER__" not in CA_CERT_PEM:
         try:
             context = ssl.create_default_context(cadata=CA_CERT_PEM)
-            context.check_hostname = True
+            context.check_hostname = False # Discovery uses IP/different hostname often
             logging.debug("Using embedded CA certificate for TLS.")
         except Exception as e:
             logging.error(
