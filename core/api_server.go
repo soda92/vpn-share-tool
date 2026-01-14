@@ -47,7 +47,7 @@ func StartApiServer(apiPort int) error {
 	}
 	servicesHandler := &handlers.ServicesHandler{
 		GetProxies: proxy.GetProxies,
-		MyIP:       MyIP,
+		GetIP:      func() string { return MyIP },
 	}
 
 	activeProxiesHandler := &handlers.GetActiveProxiesHandler{
@@ -70,6 +70,10 @@ func StartApiServer(apiPort int) error {
 	mux.Handle("/active-proxies", activeProxiesHandler)
 	mux.Handle("/update-settings", updateSettingsHandler)
 	mux.Handle("/trigger-update", triggerUpdateHandler)
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"version": "%s"}`, Version)
+	})
 
 	// Profiling endpoints
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
