@@ -11,18 +11,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/soda92/vpn-share-tool/core/models"
 	"github.com/soda92/vpn-share-tool/discovery/registry"
 )
 
 type ProxyInfo struct {
-	OriginalURL   string  `json:"original_url"`
-	RemotePort    int     `json:"remote_port"`
-	Path          string  `json:"path"`
-	SharedURL     string  `json:"shared_url"`
-	EnableDebug   bool    `json:"enable_debug"`
-	EnableCaptcha bool    `json:"enable_captcha"`
-	RequestRate   float64 `json:"request_rate"`
-	TotalRequests int64   `json:"total_requests"`
+	OriginalURL   string               `json:"original_url"`
+	RemotePort    int                  `json:"remote_port"`
+	Path          string               `json:"path"`
+	SharedURL     string               `json:"shared_url"`
+	Settings      models.ProxySettings `json:"settings"`
+	ActiveSystems []string             `json:"active_systems"`
+	RequestRate   float64              `json:"request_rate"`
+	TotalRequests int64                `json:"total_requests"`
 }
 
 func normalizeHost(u string) string {

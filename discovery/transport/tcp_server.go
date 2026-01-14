@@ -2,10 +2,10 @@ package transport
 
 import (
 	"crypto/tls"
+	"github.com/soda92/vpn-share-tool/discovery/registry"
+	"github.com/soda92/vpn-share-tool/discovery/resources"
 	"log"
 	"net"
-	"github.com/soda92/vpn-share-tool/discovery/resources"
-	"github.com/soda92/vpn-share-tool/discovery/registry"
 )
 
 const listenPort = "45679"

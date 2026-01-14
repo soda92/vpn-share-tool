@@ -22,7 +22,7 @@ type sharedURLInfo struct {
 // servicesHandler provides the list of currently shared proxies as a JSON response.
 func (h *ServicesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	MyIP := h.MyIP
-	
+
 	proxies := h.GetProxies()
 
 	// Initialize with a non-nil empty slice to ensure the JSON output is `[]` instead of `null`.

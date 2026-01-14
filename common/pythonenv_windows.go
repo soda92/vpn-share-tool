@@ -15,7 +15,7 @@ func GetPythonPath() (string, error) {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\数字员工平台`, registry.QUERY_VALUE)
 	if err == nil {
 		defer k.Close()
-		
+
 		val, _, err := k.GetStringValue("PythonPath")
 		if err == nil && val != "" {
 			exePath := filepath.Join(val, "python.exe")

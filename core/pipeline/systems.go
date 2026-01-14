@@ -1,6 +1,5 @@
 package pipeline
 
-
 type SystemDefinition struct {
 	ID         string
 	Name       string
@@ -19,7 +18,7 @@ var DefinedSystems = []SystemDefinition{
 	{
 		ID:        "HIS",
 		Name:      "Legacy HIS",
-		ProbeURLs: []string{"cis/images/img/LOGO-HIS-LOGIN.png"},
+		ProbeURLs: []string{"/cis/images/img/LOGO-HIS-LOGIN.png"},
 		Processors: []ContentProcessor{
 			FixLegacyJS,
 		},
@@ -27,9 +26,19 @@ var DefinedSystems = []SystemDefinition{
 	{
 		ID:        "PHIS",
 		Name:      "Public Health",
-		ProbeURLs: []string{"phis/static/images/logins/bg-denglu.png"},
+		ProbeURLs: []string{"/phis/static/images/logins/bg-denglu.png"},
 		Processors: []ContentProcessor{
+			FixLegacyJS,
 			RewritePhisURLs,
+			InjectCaptchaSolver,
+		},
+	},
+	{
+		ID:        "DEMO",
+		Name:      "Demo Site",
+		ProbeURLs: []string{"/demo/probe.png"},
+		Processors: []ContentProcessor{
+			FixLegacyJS,
 			InjectCaptchaSolver,
 		},
 	},

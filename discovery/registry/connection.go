@@ -68,7 +68,7 @@ func HandleConnection(conn net.Conn) {
 			}
 			mutex.Unlock()
 
-			log.Printf("Registered instance: %s (v%s)", instanceAddress, version)
+			log.Printf("Registered instance: %s (%s)", instanceAddress, version)
 			response = []byte(fmt.Sprintf("OK %s\n", remoteAddr))
 			shouldWrite = true
 

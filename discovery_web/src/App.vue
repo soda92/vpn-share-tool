@@ -79,21 +79,7 @@ const handleSaveSettings = async (data) => {
     });
     success = true;
   } catch (err) {
-    console.warn("New settings API failed (legacy client?):", err);
-  }
-
-  // 2. Update Legacy Settings (Best Effort)
-  try {
-      if (currentSettingsProxy.value.enable_debug !== data.legacy.enable_debug) {
-         await axios.post('/toggle-debug-proxy', { url: data.url, enable: data.legacy.enable_debug });
-         success = true;
-      }
-      if (currentSettingsProxy.value.enable_captcha !== data.legacy.enable_captcha) {
-         await axios.post('/toggle-captcha-proxy', { url: data.url, enable: data.legacy.enable_captcha });
-         success = true;
-      }
-  } catch (err) {
-      console.error("Legacy toggle failed:", err);
+    console.warn("New settings API failed:", err);
   }
   
   if (success) {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/soda92/vpn-share-tool/core"
 	"github.com/soda92/vpn-share-tool/core/debug"
+	"github.com/soda92/vpn-share-tool/core/proxy"
 )
 
 // EventCallback is the type for the Dart callback function.
@@ -32,7 +33,7 @@ func SetEventCallback(cb EventCallback) {
 func init() {
 	// Start goroutines to listen for core events and push them to Dart.
 	go func() {
-		for p := range core.ProxyAddedChan {
+		for p := range proxy.ProxyAddedChan {
 			eventCallbackMu.Lock()
 			if eventCallback != nil {
 				event := struct {
@@ -47,7 +48,7 @@ func init() {
 	}()
 
 	go func() {
-		for p := range core.ProxyRemovedChan {
+		for p := range proxy.ProxyRemovedChan {
 			eventCallbackMu.Lock()
 			if eventCallback != nil {
 				event := struct {
@@ -62,7 +63,7 @@ func init() {
 	}()
 
 	go func() {
-		for ip := range core.IPReadyChan {
+		for ip := range proxy.IPReadyChan {
 			eventCallbackMu.Lock()
 			if eventCallback != nil {
 				event := struct {
@@ -104,12 +105,12 @@ func StartGoBackendWithPort(port int) {
 
 // ShareURL shares a URL.
 func ShareURL(url string) {
-	go core.ShareUrlAndGetProxy(url, 0)
+	go proxy.ShareUrlAndGetProxy(url, 0)
 }
 
 // GetProxies returns the list of shared proxies as a JSON string.
 func GetProxies() string {
-	proxies := core.GetProxies()
+	proxies := proxy.GetProxies()
 	data, _ := json.Marshal(proxies)
 	return string(data)
 }

@@ -10,7 +10,17 @@ import (
 )
 
 func (t *CachingTransport) handleCaptchaImage(req *http.Request, reqBody []byte) (*http.Response, error) {
-	if !strings.HasSuffix(req.URL.Path, "voCode") || t.Proxy == nil || !t.Proxy.GetEnableCaptcha() {
+	if !strings.HasSuffix(req.URL.Path, "voCode") || t.Proxy == nil {
+		return nil, nil
+	}
+
+	// Check if content modification is enabled.
+	// We could also check if "PHIS" is in ActiveSystems, but path check is strong enough here.
+	t.Proxy.Mu.RLock()
+	enabled := t.Proxy.Settings.EnableContentMod
+	t.Proxy.Mu.RUnlock()
+
+	if !enabled {
 		return nil, nil
 	}
 

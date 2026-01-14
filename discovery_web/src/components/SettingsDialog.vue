@@ -11,18 +11,11 @@
         <div class="help-text">Enables system-specific fixes (e.g. Legacy JS fixes, Captcha injection).</div>
       </el-form-item>
 
-      <el-divider content-position="left">Legacy / Overrides</el-divider>
-
       <el-form-item label="Debug Script">
-        <el-switch v-model="form.enable_debug" />
-        <div class="help-text">Injects debug overlay (Legacy).</div>
+        <el-switch v-model="form.enable_debug_script" />
+        <div class="help-text">Injects a visual debug overlay for development/testing.</div>
       </el-form-item>
 
-      <el-form-item label="Auto Captcha">
-        <el-switch v-model="form.enable_captcha" />
-        <div class="help-text">Legacy toggle for captcha solver.</div>
-      </el-form-item>
-      
       <el-divider v-if="activeSystems.length > 0" content-position="left">Detected Systems</el-divider>
       <div v-if="activeSystems.length > 0">
         <el-tag v-for="sys in activeSystems" :key="sys" type="success" style="margin-right: 5px">{{ sys }}</el-tag>
@@ -52,8 +45,7 @@ const visible = ref(false);
 const form = ref({
   enable_url_rewrite: true,
   enable_content_mod: true,
-  enable_debug: false,
-  enable_captcha: false,
+  enable_debug_script: false,
 });
 const activeSystems = ref([]);
 
@@ -65,10 +57,7 @@ watch(() => props.modelValue, (val) => {
     form.value = {
       enable_url_rewrite: s.enable_url_rewrite !== undefined ? s.enable_url_rewrite : true,
       enable_content_mod: s.enable_content_mod !== undefined ? s.enable_content_mod : true,
-      // Fallback to legacy fields if settings object is missing (older client)
-      // or if we want to show legacy state
-      enable_debug: props.proxyData.enable_debug,
-      enable_captcha: props.proxyData.enable_captcha,
+      enable_debug_script: s.enable_debug_script !== undefined ? s.enable_debug_script : false,
     };
     activeSystems.value = props.proxyData.active_systems || [];
   }
@@ -84,10 +73,7 @@ const save = () => {
     settings: {
         enable_url_rewrite: form.value.enable_url_rewrite,
         enable_content_mod: form.value.enable_content_mod,
-    },
-    legacy: {
-        enable_debug: form.value.enable_debug,
-        enable_captcha: form.value.enable_captcha,
+        enable_debug_script: form.value.enable_debug_script,
     }
   });
   visible.value = false;

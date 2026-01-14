@@ -6,13 +6,12 @@ import (
 	_ "embed"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/soda92/vpn-share-tool/core/proxy"
+	"github.com/soda92/vpn-share-tool/core/resources"
 )
-
-//go:embed ca.crt
-var rootCACert []byte
 
 const (
 	discoverySrvPort = "45679"
@@ -26,21 +25,35 @@ var (
 	MyIP               string
 	DiscoveryServerURL string
 	Version            string
+
+	globalTransport *http.Transport
+	transportOnce   sync.Once
 )
 
-func GetHTTPClient() *http.Client {
-	caCertPool := x509.NewCertPool()
-	if ok := caCertPool.AppendCertsFromPEM(rootCACert); !ok {
-		log.Println("Failed to append CA cert")
-	}
+func GetGlobalTransport() *http.Transport {
+	transportOnce.Do(func() {
+		caCertPool := x509.NewCertPool()
+		if ok := caCertPool.AppendCertsFromPEM(resources.RootCACert); !ok {
+			log.Println("Failed to append CA cert")
+		}
 
-	return &http.Client{
-		Transport: &http.Transport{
+		globalTransport = &http.Transport{
 			TLSClientConfig: &tls.Config{
 				RootCAs: caCertPool,
 			},
-		},
-		Timeout: 30 * time.Second,
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 10, // Increased from default 2
+			IdleConnTimeout:     90 * time.Second,
+			DisableCompression:  true, // Handled by CachingTransport manually
+		}
+	})
+	return globalTransport
+}
+
+func GetHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: GetGlobalTransport(),
+		Timeout:   30 * time.Second,
 	}
 }
 

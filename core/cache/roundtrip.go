@@ -1,9 +1,16 @@
 package cache
 
-import "net/http"
+import (
+	"net/http"
+	"runtime/trace"
+)
 
 // RoundTrip implements the http.RoundTripper interface.
 func (t *CachingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	ctx, task := trace.NewTask(req.Context(), "ProxyRequest")
+	defer task.End()
+	req = req.WithContext(ctx)
+
 	// Read the request body for capturing
 	reqBody, err := t.readRequestBody(req)
 	if err != nil {

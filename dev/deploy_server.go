@@ -11,7 +11,7 @@ import (
 var deployTarget string
 
 var deployCmd = &cobra.Command{
-	Use:   "deploy",
+	Use:   "deploy-server",
 	Short: "Deploy discovery-server",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runDeploy(deployTarget)

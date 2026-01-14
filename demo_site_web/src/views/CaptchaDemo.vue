@@ -1,0 +1,141 @@
+<template>
+    <div class="captcha-demo">
+        <h1>Captcha Solver Demo</h1>
+        <p>This page simulates a system that requires captcha solving.</p>
+
+        <div class="login-box">
+            <!-- Probe image that triggers the system detection (hidden or visible) -->
+            <div class="probe-container">
+                <p>Probe Image (triggers system detection):</p>
+                <img src="/demo/probe.png" alt="probe" width="50" />
+            </div>
+
+            <div class="form-group">
+                <label>Username:</label>
+                <input type="text" placeholder="admin" />
+            </div>
+            <div class="form-group">
+                <label>Password:</label>
+                <input type="password" placeholder="password" />
+            </div>
+            <div class="form-group">
+                <label>Captcha:</label>
+                <!-- ID required by solver_script.js -->
+                <input type="text" id="verifyCode" v-model="captchaCode" placeholder="Code will be auto-filled" />
+
+                <div class="captcha-img-container">
+                    <!-- ID required by solver_script.js -->
+                    <!-- Use the specific path expected by reCaptchaImage regex -->
+                    <img id="img" :src="'/phis/app/login/voCode'" @click="refreshCaptcha" alt="captcha" />
+                    <small>Click image to refresh</small>
+                </div>
+            </div>
+            <button @click="login">Login</button>
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+
+const captchaCode = ref('');
+
+const refreshCaptcha = (e) => {
+    console.log('Refreshing captcha...');
+    // Force reload image
+    const img = e.target;
+    const src = img.src.split('?')[0];
+    img.src = src + '?t=' + new Date().getTime();
+};
+
+const login = async () => {
+    const formData = new URLSearchParams();
+    formData.append('verifyCode', captchaCode.value);
+
+    try {
+        const response = await fetch('/api/submit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formData,
+        });
+
+        if (response.ok) {
+            alert('Success! Code verified.');
+        } else {
+            const msg = await response.text();
+            alert('Failed: ' + msg);
+        }
+    } catch (e) {
+        alert('Error: ' + e);
+    }
+};
+</script>
+
+<style scoped>
+.captcha-demo {
+    padding: 20px;
+    font-family: sans-serif;
+}
+
+.login-box {
+    border: 1px solid #ccc;
+    padding: 20px;
+    max-width: 400px;
+    margin: 0 auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+input {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+}
+
+.captcha-img-container {
+    margin-top: 10px;
+    text-align: center;
+}
+
+#img {
+    cursor: pointer;
+    border: 1px solid #ddd;
+    max-width: 100%;
+}
+
+.probe-container {
+    margin-bottom: 20px;
+    padding: 10px;
+    background: #f9f9f9;
+    border-radius: 4px;
+    text-align: center;
+}
+
+button {
+    width: 100%;
+    padding: 10px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+button:hover {
+    background: #0056b3;
+}
+</style>

@@ -6,6 +6,7 @@
       <input type="password" v-model="password" placeholder="Password" />
       <button type="submit">Login</button>
     </form>
+    <dt id="dd65-ddheader" onclick="Ehr.phisIndex()">健康档案</dt>
   </div>
 </template>
 

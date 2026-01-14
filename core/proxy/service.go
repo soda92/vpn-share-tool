@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -46,17 +45,6 @@ func SetGlobalConfig(ip string, port int, discoveryURL string, clientProvider fu
 	APIPort = port
 	DiscoveryServerURL = discoveryURL
 	HTTPClientProvider = clientProvider
-}
-
-// isPortAvailable checks if a TCP port is available to be listened on.
-func isPortAvailable(port int) bool {
-	address := fmt.Sprintf(":%d", port)
-	ln, err := net.Listen("tcp", address)
-	if err != nil {
-		return false
-	}
-	_ = ln.Close()
-	return true
 }
 
 // removeProxy shuts down a proxy server and removes it from the list.
@@ -136,112 +124,22 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 		req.Host = target.Host
 	}
 
-	// proxy.Transport will be assigned later after creating SharedProxy
-
 	proxy.ModifyResponse = func(resp *http.Response) error {
-		if resp.StatusCode >= 300 && resp.StatusCode <= 399 {
-			location := resp.Header.Get("Location")
-			if location == "" {
-				return nil // No Location header, nothing to do
-			}
-
-			locationURL, err := url.Parse(location)
-			if err != nil {
-				log.Printf("Error parsing Location header: %v", err)
-				return nil
-			}
-
-			if !locationURL.IsAbs() {
-				locationURL = target.ResolveReference(locationURL)
-			}
-
-			ProxiesLock.RLock()
-			var existingProxy *models.SharedProxy
-			for _, p := range Proxies {
-				if p.OriginalURL == locationURL.String() {
-					existingProxy = p
-					break
-				}
-			}
-			ProxiesLock.RUnlock()
-
-			originalHost, ok := resp.Request.Context().Value(models.OriginalHostKey).(string)
-			if !ok {
-				log.Println("Error: could not retrieve originalHost from context or it's not a string")
-				return nil
-			}
-			hostParts := strings.Split(originalHost, ":")
-			proxyHost := hostParts[0]
-
-			if existingProxy != nil {
-				newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, existingProxy.RemotePort, locationURL.RequestURI())
-				resp.Header.Set("Location", newLocation)
-				log.Printf("Redirecting to existing proxy: %s", newLocation)
-			} else {
-				log.Printf("Redirect location not proxied, creating new proxy for: %s", locationURL.String())
-				newProxy, err := ShareUrlAndGetProxy(locationURL.String(), 0)
-				if err != nil {
-					log.Printf("Error creating new proxy for redirect: %v", err)
-				} else {
-					newLocation := fmt.Sprintf("http://%s:%d%s", proxyHost, newProxy.RemotePort, locationURL.RequestURI())
-					resp.Header.Set("Location", newLocation)
-					log.Printf("Redirecting to new proxy: %s", newLocation)
-				}
-			}
-		}
-		return nil
+		return HandleRedirect(resp, target)
 	}
 
-	remotePort := 0
-
-	// Try requested port first
-	if requestedPort > 0 {
-		isUsed := false
-		for _, p := range Proxies {
-			if p.RemotePort == requestedPort {
-				isUsed = true
-				break
-			}
-		}
-		if !isUsed && isPortAvailable(requestedPort) {
-			remotePort = requestedPort
-		} else {
-			log.Printf("Requested port %d is not available or in use, falling back to auto-selection.", requestedPort)
-		}
+	remotePort, err := SelectAvailablePort(requestedPort, startPort, len(Proxies))
+	if err != nil {
+		return nil, err
 	}
-
-	ProxiesLock.Lock()
-	if remotePort == 0 {
-		port := startPort
-		for {
-			isUsed := false
-			for _, p := range Proxies {
-				if p.RemotePort == port {
-					isUsed = true
-					break
-				}
-			}
-			if !isUsed && isPortAvailable(port) {
-				remotePort = port
-				break
-			}
-			port++
-			if port > startPort+1000 {
-				return nil, fmt.Errorf("could not find an available port")
-			}
-		}
-	}
-	ProxiesLock.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// Pre-create the struct to allow closure capture
 	newProxy := &models.SharedProxy{
-		OriginalURL:   rawURL,
-		RemotePort:    remotePort,
-		Path:          target.Path,
-		Handler:       proxy,
-		EnableDebug:   true,
-		EnableCaptcha: true,
+		OriginalURL: rawURL,
+		RemotePort:  remotePort,
+		Path:        target.Path,
+		Handler:     proxy,
 		Settings: models.ProxySettings{
 			EnableContentMod: true,
 			EnableUrlRewrite: true,
@@ -260,15 +158,24 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 		}),
 	}
 	newProxy.Server = server
+
+	// Use the global transport configuration if available
+	var baseTransport http.RoundTripper
+	if HTTPClientProvider != nil {
+		if client := HTTPClientProvider(); client != nil {
+			baseTransport = client.Transport
+		}
+	}
+
 	// Assign transport here to pass the newProxy reference
-	proxy.Transport = cache.NewCachingTransport(nil, newProxy, &captchaAdapter{}, func(ctx *models.ProcessingContext, body string) string {
+	proxy.Transport = cache.NewCachingTransport(baseTransport, newProxy, &captchaAdapter{}, func(ctx *models.ProcessingContext, body string) string {
 		// Populate Services
 		ctx.Services = models.PipelineServices{
 			CreateProxy: ShareUrlAndGetProxy,
 			MyIP:        MyIP,
 			APIPort:     APIPort,
 		}
-		return pipeline.RunPipeline(ctx, body, pipeline.GetDefaultProcessors())
+		return pipeline.RunPipeline(ctx, body)
 	})
 
 	go func() {

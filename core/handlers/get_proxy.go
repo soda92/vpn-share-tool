@@ -10,10 +10,10 @@ import (
 )
 
 type GetActiveProxiesHandler struct {
-	GetProxies func()     []*models.SharedProxy
+	GetProxies func() []*models.SharedProxy
 }
 
-func(h *GetActiveProxiesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *GetActiveProxiesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxies := h.GetProxies()
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(proxies); err != nil {

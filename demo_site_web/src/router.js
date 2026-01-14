@@ -1,12 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import Login from './views/Login.vue';
 import Main from './views/Main.vue';
+import CaptchaDemo from './views/CaptchaDemo.vue';
 
 const routes = [
   {
     path: '/login',
     name: 'Login',
     component: Login,
+  },
+  {
+    path: '/captcha',
+    name: 'CaptchaDemo',
+    component: CaptchaDemo,
   },
   {
     path: '/',
