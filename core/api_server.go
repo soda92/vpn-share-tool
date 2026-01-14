@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"strings"
+	"encoding/json"
 
 	"github.com/soda92/vpn-share-tool/core/debug"
 	"github.com/soda92/vpn-share-tool/core/handlers"
@@ -72,7 +73,10 @@ func StartApiServer(apiPort int) error {
 	mux.Handle("/trigger-update", triggerUpdateHandler)
 	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"version": "%s"}`, Version)
+		response := map[string]string{"version": Version}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "Failed to encode version", http.StatusInternalServerError)
+		}
 	})
 
 	// Profiling endpoints
