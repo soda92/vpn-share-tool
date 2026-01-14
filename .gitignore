@@ -1,5 +1,7 @@
 __pycache__
 
+/trace.out
+
 tagged_urls.json
 *.log
 

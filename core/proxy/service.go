@@ -158,8 +158,17 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 		}),
 	}
 	newProxy.Server = server
+
+	// Use the global transport configuration if available
+	var baseTransport http.RoundTripper
+	if HTTPClientProvider != nil {
+		if client := HTTPClientProvider(); client != nil {
+			baseTransport = client.Transport
+		}
+	}
+
 	// Assign transport here to pass the newProxy reference
-	proxy.Transport = cache.NewCachingTransport(nil, newProxy, &captchaAdapter{}, func(ctx *models.ProcessingContext, body string) string {
+	proxy.Transport = cache.NewCachingTransport(baseTransport, newProxy, &captchaAdapter{}, func(ctx *models.ProcessingContext, body string) string {
 		// Populate Services
 		ctx.Services = models.PipelineServices{
 			CreateProxy: ShareUrlAndGetProxy,
