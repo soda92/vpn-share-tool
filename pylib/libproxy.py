@@ -153,7 +153,7 @@ def get_instance_list(timeout: int = 5):
     global CA_CERT_PEM
     if CA_CERT_PEM:
         if "__CA_CERT_PLACEHOLDER__" in CA_CERT_PEM:
-            CA_FILE = Path(__file__).resolve().parent.parent.joinpath("certs/ca.crt")
+            CA_FILE = Path(os.environ.get("VPN_SHARE_TOOL_CA_PATH", Path(__file__).resolve().parent.parent.joinpath("certs/ca.crt")))
             if CA_FILE.exists():
                 CA_CERT_PEM = CA_FILE.read_text(encoding='utf8')
             else:
