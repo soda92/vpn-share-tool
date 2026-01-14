@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -14,6 +15,14 @@ var buildCmd = &cobra.Command{
 	Short: "Build main application (desktop)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runBuildDesktop()
+	},
+}
+
+var buildPylibCmd = &cobra.Command{
+	Use:   "pylib",
+	Short: "Build Python library (inject CA cert)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildPylib()
 	},
 }
 
@@ -62,6 +71,7 @@ var noFrontend bool
 
 func init() {
 	rootCmd.AddCommand(buildCmd)
+	buildCmd.AddCommand(buildPylibCmd)
 	buildCmd.AddCommand(buildAndroidCmd)
 	buildCmd.AddCommand(buildAARCmd)
 	buildCmd.AddCommand(buildWindowsCmd)
@@ -315,5 +325,59 @@ func runBuildTestProject() error {
 	}
 
 	fmt.Println("✅ Test project build successful.")
+	return nil
+}
+
+func runBuildPylib() error {
+	fmt.Println("Building Python library...")
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get cwd: %w", err)
+	}
+
+	srcFile := filepath.Join(rootDir, "pylib", "libproxy.py")
+	certFile := filepath.Join(rootDir, "certs", "ca.crt")
+	dstDir := filepath.Join(rootDir, "dist")
+	dstFile := filepath.Join(dstDir, "libproxy.py")
+
+	// Read source file
+	srcContent, err := os.ReadFile(srcFile)
+	if err != nil {
+		return fmt.Errorf("failed to read libproxy.py: %w", err)
+	}
+
+	// Read cert file
+	// Ensure certs exist
+	if _, err := os.Stat(certFile); os.IsNotExist(err) {
+		fmt.Println("⚠️ CA cert not found. Running 'dev certs' to generate...")
+		if err := runGenCerts(); err != nil {
+			return err
+		}
+	}
+	certContent, err := os.ReadFile(certFile)
+	if err != nil {
+		return fmt.Errorf("failed to read ca.crt: %w", err)
+	}
+
+	// Replace placeholder
+	contentStr := string(srcContent)
+	certStr := string(certContent)
+	
+	// Escape backslashes and double quotes if necessary, but usually PEM cert is safe in python triple quotes blocks if it doesn't contain triple quotes.
+	// However, we should check if the cert ends with a newline.
+	
+	newContent := strings.Replace(contentStr, "__CA_CERT_PLACEHOLDER__", certStr, 1)
+
+	// Ensure dist dir exists
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return fmt.Errorf("failed to create dist dir: %w", err)
+	}
+
+	// Write to destination
+	if err := os.WriteFile(dstFile, []byte(newContent), 0644); err != nil {
+		return fmt.Errorf("failed to write libproxy.py to dist: %w", err)
+	}
+
+	fmt.Printf("✅ Pylib build successful: %s\n", dstFile)
 	return nil
 }
