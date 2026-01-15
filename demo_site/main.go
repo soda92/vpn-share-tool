@@ -156,20 +156,7 @@ func main() {
 	})
 
 	// Main file server
-	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check if the requested file exists in the embedded filesystem
-		path := strings.TrimPrefix(r.URL.Path, "/")
-		if path != "" {
-			f, err := fsSub.Open(path)
-			if err != nil {
-				// If the file doesn't exist, serve index.html
-				r.URL.Path = "/"
-			} else {
-				f.Close()
-			}
-		}
-		http.FileServer(http.FS(fsSub)).ServeHTTP(w, r)
-	}))
+	http.Handle("/", http.FileServer(http.FS(fsSub)))
 
 	log.Println("Starting server on :8888")
 	if err := http.ListenAndServe(":8888", nil); err != nil {
