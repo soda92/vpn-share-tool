@@ -16,6 +16,11 @@
         <div>{{ new Date(request.timestamp).toLocaleString() }}</div>
       </div>
 
+      <div v-if="queryString">
+        <h3>Query Parameters</h3>
+        <UrlDecoder :encodedData="queryString" />
+      </div>
+
       <h3>Notes</h3>
       <textarea :value="note" @input="$emit('update:note', ($event.target as HTMLTextAreaElement).value)" placeholder="Add notes here..."></textarea>
 
@@ -94,6 +99,13 @@ const formattedResponseBody = computed(() => {
     }
   }
   return props.request?.response_body;
+});
+
+const queryString = computed(() => {
+  if (!props.request?.url) return '';
+  const qIndex = props.request.url.indexOf('?');
+  if (qIndex === -1) return '';
+  return props.request.url.substring(qIndex + 1);
 });
 </script>
 
