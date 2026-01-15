@@ -52,7 +52,7 @@ var buildWindowsCmd = &cobra.Command{
 
 var buildTestCmd = &cobra.Command{
 	Use:     "test",
-	Aliases: []string{"test-project"},
+	Aliases: []string{"test-project", "demo_site"},
 	Short:   "Build test project",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runBuildTestProject()
