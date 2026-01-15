@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineProps, defineEmits } from 'vue';
+import { computed} from 'vue';
 import type { CapturedRequest } from '../types';
 import UrlDecoder from './UrlDecoder.vue';
 
@@ -116,7 +116,14 @@ const queryString = computed(() => {
   padding: 1.5rem;
   overflow-y: auto;
   background-color: #f5f5f5;
-  display: block; /* Use block layout for simple scrolling */
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Center content */
+}
+
+.request-details-pane > div:not(.mobile-header) {
+  width: 100%;
+  max-width: 1200px; /* Constrain content width */
 }
 
 .mobile-header {
