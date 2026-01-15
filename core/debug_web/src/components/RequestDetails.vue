@@ -103,9 +103,15 @@ const formattedResponseBody = computed(() => {
 
 const queryString = computed(() => {
   if (!props.request?.url) return '';
-  const qIndex = props.request.url.indexOf('?');
-  if (qIndex === -1) return '';
-  return props.request.url.substring(qIndex + 1);
+  try {
+    const url = new URL(props.request.url);
+    return url.searchParams.toString();
+  } catch (e) {
+    // Fallback for invalid URLs.
+    const qIndex = props.request.url.indexOf('?');
+    if (qIndex === -1) return '';
+    return props.request.url.substring(qIndex + 1);
+  }
 });
 </script>
 
