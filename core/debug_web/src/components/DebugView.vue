@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, defineProps, nextTick, computed } from 'vue';
+import { ref, onMounted, watch, nextTick, computed } from 'vue';
 import axios from 'axios';
 import type { CapturedRequest } from '../types';
 import RequestList from './RequestList.vue';
@@ -250,13 +250,15 @@ onMounted(() => {
 
 .list-pane {
   width: 35%;
-  min-width: 300px;
-  /* border-right: 1px solid #ddd; Removed per user request */
+  min-width: 320px;
+  max-width: 450px; /* Prevent becoming too wide on large screens */
+  border-right: 1px solid #e0e0e0; /* Restore border for separation */
 }
 
 .details-pane {
   flex-grow: 1;
-  width: 65%; /* Default desktop width */
+  /* width is automatic via flex-grow */
+  overflow: hidden; /* Ensure scrolling happens inside */
 }
 
 button {

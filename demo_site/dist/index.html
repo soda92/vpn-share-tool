@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo Site (Static)</title>
+    <script src="/ehr.js"></script>
+</head>
+<body>
+    <h1>Login Page</h1>
+    <form id="loginForm">
+        <input type="text" id="username" placeholder="Username" />
+        <input type="password" id="password" placeholder="Password" />
+        <button type="submit">Login</button>
+    </form>
+    
+    <dt id="dd65-ddheader" onclick="Ehr.phisIndex()">健康档案</dt>
+
+    <div style="margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px;">
+      <h3>Debug Links</h3>
+      <ul>
+        <li><a href="/captcha_demo.html">Captcha Solver Demo</a></li>
+        <li><a href="/?simple=value&num=123&bool=true">Simple Params</a></li>
+        <li><a href="/?data=%7B%22id%22%3A1%2C%22name%22%3A%22test%22%7D&list=1&list=2">JSON & Array Params</a></li>
+      </ul>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            try {
+                const response = await fetch('/api/login', { method: 'POST' });
+                if (response.ok) {
+                    alert('Login successful');
+                } else {
+                    console.error('Login failed');
+                    alert('Login failed');
+                }
+            } catch (error) {
+                console.error('Error during login:', error);
+            }
+        });
+    </script>
+</body>
+</html>

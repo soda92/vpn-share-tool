@@ -16,6 +16,11 @@
         <div>{{ new Date(request.timestamp).toLocaleString() }}</div>
       </div>
 
+      <div v-if="queryString">
+        <h3>Query Parameters</h3>
+        <UrlDecoder :encodedData="queryString" />
+      </div>
+
       <h3>Notes</h3>
       <textarea :value="note" @input="$emit('update:note', ($event.target as HTMLTextAreaElement).value)" placeholder="Add notes here..."></textarea>
 
@@ -46,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineProps, defineEmits } from 'vue';
+import { computed} from 'vue';
 import type { CapturedRequest } from '../types';
 import UrlDecoder from './UrlDecoder.vue';
 
@@ -95,6 +100,19 @@ const formattedResponseBody = computed(() => {
   }
   return props.request?.response_body;
 });
+
+const queryString = computed(() => {
+  if (!props.request?.url) return '';
+  try {
+    const url = new URL(props.request.url);
+    return url.searchParams.toString();
+  } catch (e) {
+    // Fallback for invalid URLs.
+    const qIndex = props.request.url.indexOf('?');
+    if (qIndex === -1) return '';
+    return props.request.url.substring(qIndex + 1);
+  }
+});
 </script>
 
 <style scoped>
@@ -104,7 +122,14 @@ const formattedResponseBody = computed(() => {
   padding: 1.5rem;
   overflow-y: auto;
   background-color: #f5f5f5;
-  display: block; /* Use block layout for simple scrolling */
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Center content */
+}
+
+.request-details-pane > div:not(.mobile-header) {
+  width: 100%;
+  max-width: 1200px; /* Constrain content width */
 }
 
 .mobile-header {

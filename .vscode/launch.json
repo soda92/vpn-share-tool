@@ -28,6 +28,17 @@
             "mode": "auto",
             "program": "${workspaceFolder}/demo_site/main.go",
             "cwd": "${workspaceFolder}/demo_site"
+        },
+        {
+            "name": "Build demo site",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/dev/",
+            "args": [
+                "build",
+                "demo_site"
+            ]
         }
     ],
     "compounds": [

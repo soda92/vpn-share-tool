@@ -52,7 +52,7 @@ var buildWindowsCmd = &cobra.Command{
 
 var buildTestCmd = &cobra.Command{
 	Use:     "test",
-	Aliases: []string{"test-project"},
+	Aliases: []string{"test-project", "demo_site"},
 	Short:   "Build test project",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runBuildTestProject()
@@ -312,12 +312,6 @@ func runBuildTestProject() error {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
 	testProjectDir := filepath.Join(rootDir, "demo_site")
-	frontendDir := filepath.Join(rootDir, "demo_site_web")
-
-	// Build frontend
-	if err := buildFrontendIn(frontendDir); err != nil {
-		return fmt.Errorf("frontend build failed: %w", err)
-	}
 
 	// Build Go binary
 	if err := execCmd(testProjectDir, nil, "go", "build", "main.go"); err != nil {
