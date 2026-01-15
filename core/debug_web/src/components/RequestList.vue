@@ -6,16 +6,19 @@
         <input type="text" :value="searchQuery"
           @input="$emit('update:searchQuery', ($event.target as HTMLInputElement).value)" placeholder="Filter..."
           class="search-input" />
+        <label class="error-filter">
+          <input type="checkbox" v-model="hideErrors"> Hide Errors
+        </label>
         <button @click="$emit('clear')" title="Clear">🚫</button>
       </div>
       <div class="type-filters">
-        <button :class="{ active: resourceTypeFilter === 'ALL' }" @click="resourceTypeFilter = 'ALL'">All</button>
-        <button :class="{ active: resourceTypeFilter === 'XHR' }" @click="resourceTypeFilter = 'XHR'">XHR</button>
-        <button :class="{ active: resourceTypeFilter === 'JS' }" @click="resourceTypeFilter = 'JS'">JS</button>
-        <button :class="{ active: resourceTypeFilter === 'CSS' }" @click="resourceTypeFilter = 'CSS'">CSS</button>
-        <button :class="{ active: resourceTypeFilter === 'IMG' }" @click="resourceTypeFilter = 'IMG'">Img</button>
-        <button :class="{ active: resourceTypeFilter === 'DOC' }" @click="resourceTypeFilter = 'DOC'">Doc</button>
-        <button :class="{ active: resourceTypeFilter === 'OTHER' }" @click="resourceTypeFilter = 'OTHER'">Other</button>
+        <button :class="{ active: resourceTypeFilter.has('ALL') }" @click="toggleFilter('ALL')">All</button>
+        <button :class="{ active: resourceTypeFilter.has('XHR') }" @click="toggleFilter('XHR')">XHR</button>
+        <button :class="{ active: resourceTypeFilter.has('JS') }" @click="toggleFilter('JS')">JS</button>
+        <button :class="{ active: resourceTypeFilter.has('CSS') }" @click="toggleFilter('CSS')">CSS</button>
+        <button :class="{ active: resourceTypeFilter.has('IMG') }" @click="toggleFilter('IMG')">Img</button>
+        <button :class="{ active: resourceTypeFilter.has('DOC') }" @click="toggleFilter('DOC')">Doc</button>
+        <button :class="{ active: resourceTypeFilter.has('OTHER') }" @click="toggleFilter('OTHER')">Other</button>
       </div>
     </div>
     <div v-if="filteredRequests.length === 0" class="no-requests">
@@ -27,13 +30,13 @@
         <li v-for="request in group" :key="request.id"
           :class="{ selected: selectedRequest?.id === request.id, error: request.response_status >= 400 }"
           @click="$emit('select-request', request)" @contextmenu.prevent="$emit('show-context-menu', $event, request)">
-          <div class="req-main">
-            <div class="req-name" :title="request.url">{{ getRequestName(request.url) }}</div>
-            <div class="req-path">{{ getUrlPath(request.url) }}</div>
-          </div>
           <div class="req-meta">
             <span class="method" :class="request.method">{{ request.method }}</span>
             <span class="status" :class="getStatusClass(request.response_status)">{{ request.response_status }}</span>
+          </div>
+          <div class="req-main">
+            <div class="req-path">{{ getUrlPath(request.url) }}</div>
+            <div class="req-name" :title="request.url">{{ getRequestName(request.url) }}</div>
           </div>
         </li>
       </template>
@@ -56,15 +59,18 @@
 @media (max-width: 768px) {
   .request-list-pane {
     width: 100%;
-    height: auto; /* Grow with content */
+    height: auto;
+    /* Grow with content */
     min-height: 0;
     border-right: none;
     border-bottom: none;
-    overflow: visible; /* Let window scroll */
+    overflow: visible;
+    /* Let window scroll */
   }
 
   .request-list {
-    overflow-y: visible; /* Let window scroll */
+    overflow-y: visible;
+    /* Let window scroll */
     height: auto;
   }
 }
@@ -98,24 +104,40 @@
   /* Prevent overflow */
 }
 
+.error-filter {
+  display: flex;
+  align-items: center;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
 .type-filters {
   display: flex;
   gap: 0.2rem;
   overflow-x: auto;
   padding-bottom: 2px;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none;  /* IE 10+ */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE 10+ */
 }
+
 .type-filters::-webkit-scrollbar {
-  display: none; /* Chrome/Safari */
+  display: none;
+  /* Chrome/Safari */
 }
 
 .type-filters button {
-  padding: 0.2rem 0.4rem; /* Slightly reduced horizontal padding */
+  padding: 0.2rem 0.4rem;
+  /* Slightly reduced horizontal padding */
   font-size: 0.75rem;
   border: 1px solid #ccc;
   background-color: #fff;
-  color: #333; /* Explicitly set text color */
+  color: #333;
+  /* Explicitly set text color */
   border-radius: 10px;
   cursor: pointer;
   white-space: nowrap;
@@ -136,7 +158,8 @@
 }
 
 .request-list li {
-  padding: 0.5rem 0.8rem 0.5rem 0.5rem; /* More right padding */
+  padding: 0.5rem 0.8rem 0.5rem 0.5rem;
+  /* More right padding */
   cursor: pointer;
   border-bottom: 1px solid #eee;
   display: flex;
@@ -144,7 +167,8 @@
   align-items: center;
   gap: 0.5rem;
   transition: background-color 0.2s;
-  min-width: 0; /* Allow flex children to shrink */
+  min-width: 0;
+  /* Allow flex children to shrink */
 }
 
 .request-list li:hover {
@@ -230,7 +254,7 @@
 }
 </style>
 <script setup lang="ts">
-import { computed, defineProps, defineEmits, ref } from 'vue';
+import { computed, ref } from 'vue';
 import type { CapturedRequest } from '../types';
 
 const props = defineProps<{
@@ -249,13 +273,33 @@ defineEmits<{
   (e: 'clear'): void;
 }>();
 
-const resourceTypeFilter = ref('ALL');
+const resourceTypeFilter = ref<Set<string>>(new Set(['DOC', 'XHR']));
+const hideErrors = ref(true);
 
 const getUrlOrigin = (url: string) => {
   try {
     return new URL(url).origin;
   } catch (e) {
     return 'Unknown';
+  }
+};
+
+const toggleFilter = (type: string) => {
+  if (type === 'ALL') {
+    resourceTypeFilter.value.clear();
+    resourceTypeFilter.value.add('ALL');
+  } else {
+    if (resourceTypeFilter.value.has('ALL')) {
+      resourceTypeFilter.value.delete('ALL');
+    }
+    if (resourceTypeFilter.value.has(type)) {
+      resourceTypeFilter.value.delete(type);
+      if (resourceTypeFilter.value.size === 0) {
+        resourceTypeFilter.value.add('ALL'); // Default back to ALL if empty
+      }
+    } else {
+      resourceTypeFilter.value.add(type);
+    }
   }
 };
 
@@ -290,10 +334,12 @@ const getResourceType = (req: CapturedRequest): string => {
   const contentType = (req.response_headers['Content-Type']?.[0] || '').toLowerCase();
   const url = req.url.toLowerCase();
 
+  // Prioritize URL patterns for static assets to correctly classify 404s
+  if (url.match(/\.(js|jsx|ts|tsx)(\?.*)?$/) || contentType.includes('javascript') || contentType.includes('application/x-javascript')) return 'JS';
+  if (url.match(/\.(css|less|scss)(\?.*)?$/) || contentType.includes('css')) return 'CSS';
+  if (url.match(/\.(png|jpg|jpeg|gif|ico|svg|webp|bmp)(\?.*)?$/) || contentType.includes('image')) return 'IMG';
+
   if (contentType.includes('text/html')) return 'DOC';
-  if (contentType.includes('javascript') || contentType.includes('application/x-javascript') || url.endsWith('.js')) return 'JS';
-  if (contentType.includes('css') || url.endsWith('.css')) return 'CSS';
-  if (contentType.includes('image') || url.match(/\.(png|jpg|jpeg|gif|ico|svg|webp)$/)) return 'IMG';
   if (contentType.includes('json') || contentType.includes('xml') || req.request_headers['X-Requested-With']) return 'XHR';
 
   return 'OTHER';
@@ -301,20 +347,17 @@ const getResourceType = (req: CapturedRequest): string => {
 
 const filteredRequests = computed(() => {
   return props.requests.filter(req => {
+    if (hideErrors.value && req.response_status >= 400) return false;
+
     const searchMatch = req.url.toLowerCase().includes(props.searchQuery.toLowerCase());
 
-        // Resource Type Filter
-        if (resourceTypeFilter.value !== 'ALL') {
-          const type = getResourceType(req);
-          
-          if (resourceTypeFilter.value === 'XHR') {
-             // Special case: XHR often implies JSON/API calls not covered by others
-             if (type !== 'XHR') return false;
-          } else if (type !== resourceTypeFilter.value) {
-            return false;
-          }
-        }
-        return searchMatch;
+    if (!searchMatch) return false;
+
+    // Resource Type Filter
+    if (resourceTypeFilter.value.has('ALL')) return true;
+
+    const type = getResourceType(req);
+    return resourceTypeFilter.value.has(type);
   });
 });
 
