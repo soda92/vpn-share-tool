@@ -67,17 +67,34 @@ const filteredDecodedData = computed(() => {
   );
 });
 
+const parseValue = (val: string): any => {
+  if (val === 'true') return true;
+  if (val === 'false') return false;
+  if (val === 'null') return null;
+  if (val === 'undefined') return undefined;
+  // Check for number (and not just empty string or whitespace)
+  if (!isNaN(Number(val)) && val.trim() !== '') return Number(val);
+  try {
+    const json = JSON.parse(val);
+    if (typeof json === 'object' && json !== null) return json;
+  } catch (e) {
+    // Ignore JSON parse error, keep as string
+  }
+  return val;
+};
+
 const jsonOutput = computed(() => {
-  const obj: { [key: string]: string | string[] } = {};
+  const obj: { [key: string]: any } = {};
   for (const { key, value } of decodedData.value) {
+    const parsedValue = parseValue(value);
     if (obj.hasOwnProperty(key)) {
       if (Array.isArray(obj[key])) {
-        (obj[key] as string[]).push(value);
+        (obj[key] as any[]).push(parsedValue);
       } else {
-        obj[key] = [obj[key] as string, value];
+        obj[key] = [obj[key], parsedValue];
       }
     } else {
-      obj[key] = value;
+      obj[key] = parsedValue;
     }
   }
   return JSON.stringify(obj, null, 2);
