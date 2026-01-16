@@ -50,7 +50,7 @@ func (r *remoteWriter) Write(p []byte) (n int, err error) {
 func (r *remoteWriter) flushLoop() {
 	ticker := time.NewTicker(2 * time.Second) // Flush every 2 seconds or immediately on buffer full?
 	// Actually we can stream faster with WS.
-	
+
 	for {
 		select {
 		case line := <-r.buffer:
@@ -63,6 +63,7 @@ func (r *remoteWriter) flushLoop() {
 
 func (r *remoteWriter) send(logLine string) {
 	if core.DiscoveryServerURL == "" || core.MyIP == "" {
+		fmt.Println("Remote logging skipped: Missing ServerURL or IP")
 		return // Not ready
 	}
 
@@ -71,6 +72,7 @@ func (r *remoteWriter) send(logLine string) {
 	}
 
 	if r.ws == nil {
+		fmt.Println("Remote logging failed: WS connection nil")
 		return // Connection failed
 	}
 
@@ -79,14 +81,14 @@ func (r *remoteWriter) send(logLine string) {
 	if core.APIPort != 0 {
 		address = fmt.Sprintf("%s:%d", core.MyIP, core.APIPort)
 	}
-	
+
 	data := map[string]string{
 		"address": address,
 		"logs":    logLine,
 	}
 
 	if err := r.ws.WriteJSON(data); err != nil {
-		// fmt.Printf("WS Write error: %v\n", err)
+		fmt.Printf("WS Write error: %v\n", err)
 		r.ws.Close()
 		r.ws = nil
 		// Drop this log line or retry? Drop for simplicity to avoid blocking.
@@ -106,7 +108,10 @@ func (r *remoteWriter) connect() {
 	target = strings.TrimRight(target, "/") + "/upload-logs"
 
 	// Connect
-	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
+	dialer := websocket.Dialer{
+		HandshakeTimeout: 5 * time.Second,
+		TLSClientConfig:  core.GetGlobalTransport().TLSClientConfig,
+	}
 	c, _, err := dialer.Dial(target, nil)
 	if err != nil {
 		// fmt.Printf("WS Dial error: %v\n", err)
@@ -134,5 +139,16 @@ func setupLogging() {
 		// But here we are returning. We can let the OS close it on exit, or return the closer.
 		// For simplicity, we assume app runs until exit.
 		log.SetOutput(&safeMultiWriter{writers: []io.Writer{os.Stdout, logFile, newRemoteWriter()}})
+	}
+
+	// Cleanup legacy log file if it exists alongside the executable
+	// But ensure we don't delete the active log file if we are running from that dir
+	legacyLog := "vpn-share-tool.log"
+	if _, err := os.Stat(legacyLog); err == nil {
+		absLegacy, _ := filepath.Abs(legacyLog)
+		absNew, _ := filepath.Abs(logPath)
+		if absLegacy != absNew {
+			_ = os.Remove(legacyLog)
+		}
 	}
 }
