@@ -12,6 +12,7 @@
       >
         ↑
       </button>
+      <button class="log-btn" @click="$emit('open-logs', server.address)" title="View Logs">≡</button>
       <span v-if="index < servers.length - 1">, </span>
     </span>
     <span v-if="!servers.length">{{ $t('no_active_servers') }}</span>
@@ -30,7 +31,7 @@ defineProps({
   }
 });
 
-defineEmits(['update-server']);
+defineEmits(['update-server', 'open-logs']);
 </script>
 
 <style scoped>
@@ -77,6 +78,23 @@ defineEmits(['update-server']);
 
 .update-btn:hover {
   background: #d35400;
+}
+
+.log-btn {
+  background: #34495e;
+  color: #bdc3c7;
+  border: 1px solid #7f8c8d;
+  border-radius: 2px;
+  padding: 0 4px;
+  margin-left: 4px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.log-btn:hover {
+  background: #2c3e50;
+  color: #ecf0f1;
 }
 
 @media (max-width: 768px) {
