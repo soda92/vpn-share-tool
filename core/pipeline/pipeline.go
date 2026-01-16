@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	_ "embed"
-	"log"
 	"strings"
 
 	"github.com/soda92/vpn-share-tool/core/models"
