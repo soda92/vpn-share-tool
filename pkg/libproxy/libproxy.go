@@ -21,7 +21,7 @@ import (
 // Fallback addresses if scanning fails
 var DiscoveryServerHosts = []string{"192.168.0.81", "192.168.1.81"}
 
-const DiscoveryServerPort = 45679
+var DiscoveryServerPort = 45679
 
 // CA Cert Placeholder - in a real build this might be replaced or loaded from file
 var CACertPEM = `__CA_CERT_PLACEHOLDER__`
