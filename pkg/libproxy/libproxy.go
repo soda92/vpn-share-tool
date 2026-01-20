@@ -24,7 +24,26 @@ var DiscoveryServerHosts = []string{"192.168.0.81", "192.168.1.81"}
 var DiscoveryServerPort = 45679
 
 // CA Cert Placeholder - in a real build this might be replaced or loaded from file
-var CACertPEM = `__CA_CERT_PLACEHOLDER__`
+var CACertPEM = `-----BEGIN CERTIFICATE-----
+MIIDFDCCAfygAwIBAgIBATANBgkqhkiG9w0BAQsFADAcMRowGAYDVQQKExFWUE4g
+U2hhcmUgVG9vbCBDQTAeFw0yNTEyMTIwNzM1NTRaFw0zNTEyMTAwNzM1NTRaMBwx
+GjAYBgNVBAoTEVZQTiBTaGFyZSBUb29sIENBMIIBIjANBgkqhkiG9w0BAQEFAAOC
+AQ8AMIIBCgKCAQEAsVzVSTITX6H/S2f3lbG2GhBldtFAQO5iizkauTKMDfXg6cIc
+OZEkLmq+88e5asY1ytT8/wIjiANBDLPDt0ZFeFJ5JXpKPO0bogkAqun+j80xdmfL
+j8gV6E02FO41Ln5RgGnr7rstYp18N+WZelg8OL6Ss1e68sR59tWRU3t2KzCzblPS
+mYmoCO6jvs6ZG5eGCpfg1TFhCtrr1UO7wkR1diLvPOCNPpOKERLLw0IMVSlKWMPS
+cli2Zx6Aweg5M95pbN5Bo8Gvvf9WKrDlxeElUKju2RiuxmsJ0ABZiQbmJNmYZnB/
+3XrCVos7YoWnNipzJeqcf+ptIid3r5UxK1YXWQIDAQABo2EwXzAOBgNVHQ8BAf8E
+BAMCAoQwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMA8GA1UdEwEB/wQF
+MAMBAf8wHQYDVR0OBBYEFO3Lboneorxs9meV+jtEZ5pSMpxJMA0GCSqGSIb3DQEB
+CwUAA4IBAQBlCmXx59N0yfPP/y+Y09ww7j+FdvOekUWYdc7C8z4AURFAFHQf/gcD
+S4jesZWDmqSyIcNlhR4qVe4ouVMs1HHG7DFWLnNiwqno4/EVFYekr5KRCTARP9hy
+UGlB21iA6lNaW9QWfoYRInPZ7dkQJzFGeZa7xO8nkRg/TE0wZQljptv4aMTtDuRh
+odcRU50Gylkustwml/KIDhMIe/N+/zu6DrbsLact9zxvjoBc8YgpW8GYKZrg2lRA
+X9o+Ofh3drIjpESl4+oc+zfqbgy6aYY1Q+t2+G+QrLYO+lS//kKsrjMWcci44zIl
+LruVr5jc5OBxi50P5M/tt9hC2P5J7k7g
+-----END CERTIFICATE-----
+`
 
 type Cache map[string]string
 
@@ -159,15 +178,15 @@ func getTLSConfig() (*tls.Config, error) {
 		if ok := certPool.AppendCertsFromPEM(pemData); !ok {
 			return nil, fmt.Errorf("failed to append CA cert")
 		}
-		return &tls.Config{RootCAs: certPool, InsecureSkipVerify: true}, nil // CheckHostname false equivalent
+		// Use standard verification with our custom RootCAs. 
+		// If connecting via IP, standard verification might fail on hostname unless the cert has IP SANs.
+		// However, for security, we should NOT disable verification globally.
+		// Assuming the certs are generated correctly with IP SANs for the discovery server.
+		return &tls.Config{RootCAs: certPool}, nil 
 	}
 	
-	// If we have no cert, we can't do TLS properly for the discovery server self-signed certs
-	// But we return a config that expects system certs if any, or insecure if strictly necessary (but better to fail)
-	// For this specific tool, we likely need the custom CA.
-	// We'll return insecure=true purely for the 'check hostname' part, but RootCAs is empty so it relies on system certs
-	// unless we find the cert.
-	return &tls.Config{InsecureSkipVerify: true}, nil
+	// If we have no cert, we rely on system certs.
+	return &tls.Config{}, nil
 }
 
 type InstanceResponse struct {

@@ -92,6 +92,7 @@ func generateTestCert() (tls.Certificate, error) {
 		ExtKeyUsage: []x509.ExtKeyUsage{
 			x509.ExtKeyUsageServerAuth,
 		},
+		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
 		BasicConstraintsValid: true,
 	}
 
@@ -102,6 +103,9 @@ func generateTestCert() (tls.Certificate, error) {
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
+	
+	// Update global CA placeholder for verification in tests
+	CACertPEM = string(certPEM)
 
 	return tls.X509KeyPair(certPEM, keyPEM)
 }

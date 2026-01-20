@@ -15,7 +15,26 @@ use url::Url;
 
 const DISCOVERY_SERVER_PORT: u16 = 45679;
 const DISCOVERY_HOSTS: &[&str] = &["192.168.0.81", "192.168.1.81"];
-const CA_CERT_PLACEHOLDER: &str = "__CA_CERT_PLACEHOLDER__";
+const CA_CERT_PLACEHOLDER: &str = r#"-----BEGIN CERTIFICATE-----
+MIIDFDCCAfygAwIBAgIBATANBgkqhkiG9w0BAQsFADAcMRowGAYDVQQKExFWUE4g
+U2hhcmUgVG9vbCBDQTAeFw0yNTEyMTIwNzM1NTRaFw0zNTEyMTAwNzM1NTRaMBwx
+GjAYBgNVBAoTEVZQTiBTaGFyZSBUb29sIENBMIIBIjANBgkqhkiG9w0BAQEFAAOC
+AQ8AMIIBCgKCAQEAsVzVSTITX6H/S2f3lbG2GhBldtFAQO5iizkauTKMDfXg6cIc
+OZEkLmq+88e5asY1ytT8/wIjiANBDLPDt0ZFeFJ5JXpKPO0bogkAqun+j80xdmfL
+j8gV6E02FO41Ln5RgGnr7rstYp18N+WZelg8OL6Ss1e68sR59tWRU3t2KzCzblPS
+mYmoCO6jvs6ZG5eGCpfg1TFhCtrr1UO7wkR1diLvPOCNPpOKERLLw0IMVSlKWMPS
+cli2Zx6Aweg5M95pbN5Bo8Gvvf9WKrDlxeElUKju2RiuxmsJ0ABZiQbmJNmYZnB/
+3XrCVos7YoWnNipzJeqcf+ptIid3r5UxK1YXWQIDAQABo2EwXzAOBgNVHQ8BAf8E
+BAMCAoQwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMA8GA1UdEwEB/wQF
+MAMBAf8wHQYDVR0OBBYEFO3Lboneorxs9meV+jtEZ5pSMpxJMA0GCSqGSIb3DQEB
+CwUAA4IBAQBlCmXx59N0yfPP/y+Y09ww7j+FdvOekUWYdc7C8z4AURFAFHQf/gcD
+S4jesZWDmqSyIcNlhR4qVe4ouVMs1HHG7DFWLnNiwqno4/EVFYekr5KRCTARP9hy
+UGlB21iA6lNaW9QWfoYRInPZ7dkQJzFGeZa7xO8nkRg/TE0wZQljptv4aMTtDuRh
+odcRU50Gylkustwml/KIDhMIe/N+/zu6DrbsLact9zxvjoBc8YgpW8GYKZrg2lRA
+X9o+Ofh3drIjpESl4+oc+zfqbgy6aYY1Q+t2+G+QrLYO+lS//kKsrjMWcci44zIl
+LruVr5jc5OBxi50P5M/tt9hC2P5J7k7g
+-----END CERTIFICATE-----
+"#;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Instance {
@@ -109,7 +128,7 @@ fn scan_subnet(local_ip_str: &str, port: u16) -> Vec<String> {
 
 fn get_tls_connector() -> Option<TlsConnector> {
     let mut builder = TlsConnector::builder();
-    builder.danger_accept_invalid_certs(true); // For self-signed hostname mismatch
+    builder.danger_accept_invalid_hostnames(true); // Ignore hostname mismatch (IP vs Cert Hostname)
     
     let ca_pem = if CA_CERT_PLACEHOLDER.contains("__CA_CERT_PLACEHOLDER__") {
         // Try env var
