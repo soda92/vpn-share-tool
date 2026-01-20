@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	_ "embed"
-	"log"
 	"strings"
 
 	"github.com/soda92/vpn-share-tool/core/models"
@@ -16,8 +15,6 @@ func RunPipeline(ctx *models.ProcessingContext, body string) string {
 	if strings.HasPrefix(path, "*.js") {
 		return body
 	}
-
-	log.Printf("RunPipeline: %s (Active Systems: %v)", ctx.ReqURL.Path, ctx.Proxy.ActiveSystems)
 
 	// 1. Internal URL Rewrite
 	if ctx.Proxy.Settings.EnableUrlRewrite {

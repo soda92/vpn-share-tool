@@ -33,12 +33,22 @@
     </div>
 
     <!-- Bottom Section: Active Servers (Info) -->
-    <ServerInfo :servers="servers" :latest-version="latestVersion" @update-server="handleUpdateServer" />
+    <ServerInfo 
+        :servers="servers" 
+        :latest-version="latestVersion" 
+        @update-server="handleUpdateServer"
+        @open-logs="openLogs"
+    />
 
     <SettingsDialog
       v-model="settingsVisible"
       :proxy-data="currentSettingsProxy"
       @save="handleSaveSettings"
+    />
+
+    <LogViewer
+      v-model="logsVisible"
+      :server-address="currentLogServer"
     />
   </div>
 </template>
@@ -51,6 +61,7 @@ import TaggedList from './components/TaggedList.vue';
 import ProxyList from './components/ProxyList.vue';
 import ServerInfo from './components/ServerInfo.vue';
 import SettingsDialog from './components/SettingsDialog.vue';
+import LogViewer from './components/LogViewer.vue';
 
 const servers = ref([]);
 const taggedUrls = ref([]);
@@ -64,9 +75,18 @@ const latestVersion = ref('');
 const settingsVisible = ref(false);
 const currentSettingsProxy = ref(null);
 
+// Log Viewer State
+const logsVisible = ref(false);
+const currentLogServer = ref('');
+
 const openSettings = (proxy) => {
   currentSettingsProxy.value = proxy;
   settingsVisible.value = true;
+};
+
+const openLogs = (address) => {
+    currentLogServer.value = address;
+    logsVisible.value = true;
 };
 
 const handleSaveSettings = async (data) => {

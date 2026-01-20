@@ -185,6 +185,7 @@ func StartHTTPServer(insecure bool) {
 	protectedMux.HandleFunc("/cluster-proxies", proxy.HandleClusterProxies)
 	protectedMux.HandleFunc("/update-proxy-settings", HandleUpdateProxySettings)
 	protectedMux.HandleFunc("/trigger-update-remote", handleTriggerUpdateRemote)
+	protectedMux.HandleFunc("/logs", handleGetLogs)
 
 	// Serve the Vue frontend (Protected)
 	fsys, err := fs.Sub(frontendDist, "dist")
@@ -207,6 +208,7 @@ func StartHTTPServer(insecure bool) {
 	rootMux.HandleFunc("/latest-version", handleLatestVersion)
 	rootMux.Handle("/download/", http.StripPrefix("/download/", http.FileServer(http.Dir(SharePath))))
 	rootMux.HandleFunc("/solve-captcha", handleSolveCaptchaRequest)
+	rootMux.HandleFunc("/upload-logs", handleUploadLogs)
 
 	// Delegate everything else to Protected Mux
 	rootMux.Handle("/", BasicAuth(protectedMux))
