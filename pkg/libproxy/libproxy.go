@@ -48,6 +48,8 @@ LruVr5jc5OBxi50P5M/tt9hC2P5J7k7g
 
 type Cache map[string]string
 
+var cacheMutex sync.RWMutex
+
 func getCachePath() (string, error) {
 	var baseDir string
 	var err error
@@ -68,6 +70,12 @@ func getCachePath() (string, error) {
 }
 
 func loadCache() Cache {
+	cacheMutex.RLock()
+	defer cacheMutex.RUnlock()
+	return loadCacheInternal()
+}
+
+func loadCacheInternal() Cache {
 	path, err := getCachePath()
 	if err != nil {
 		return make(Cache)
@@ -84,6 +92,9 @@ func loadCache() Cache {
 }
 
 func saveToCache(targetURL, proxyURL string) {
+	cacheMutex.Lock()
+	defer cacheMutex.Unlock()
+
 	path, err := getCachePath()
 	if err != nil {
 		return
@@ -91,7 +102,8 @@ func saveToCache(targetURL, proxyURL string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return
 	}
-	cache := loadCache()
+	
+	cache := loadCacheInternal()
 	cache[targetURL] = proxyURL
 	data, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
@@ -324,8 +336,12 @@ func DiscoverProxy(targetURL string, timeout time.Duration, remoteOnly bool) (st
 		resp.Body.Close()
 
 		for _, s := range services {
-			su, _ := url.Parse(s.OriginalURL)
-			if su != nil && su.Hostname() == targetHostname {
+			su, err := url.Parse(s.OriginalURL)
+			if err != nil {
+				log.Printf("Failed to parse service URL %s: %v", s.OriginalURL, err)
+				continue
+			}
+			if su.Hostname() == targetHostname {
 				saveToCache(targetURL, s.SharedURL)
 				return s.SharedURL, nil
 			}

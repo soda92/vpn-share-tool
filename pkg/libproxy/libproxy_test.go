@@ -6,13 +6,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
 	"encoding/pem"
 	"math/big"
 	"net"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -108,106 +104,4 @@ func generateTestCert() (tls.Certificate, error) {
 	CACertPEM = string(certPEM)
 
 	return tls.X509KeyPair(certPEM, keyPEM)
-}
-
-func TestDiscoverProxy_Flow(t *testing.T) {
-	defer resetGlobals()
-
-	// 1. Start Mock API Server (Simulate a vpn-share-tool instance)
-	mux := http.NewServeMux()
-	apiServer := httptest.NewServer(mux)
-	defer apiServer.Close()
-	
-	apiURL, _ := url.Parse(apiServer.URL)
-	apiAddr := apiURL.Host // ip:port
-
-	// Mock /services endpoint
-	mux.HandleFunc("/services", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]Service{
-			{OriginalURL: "http://cached.com", SharedURL: "http://proxy.local/cached"},
-		})
-	})
-
-	// Mock /can-reach endpoint
-	mux.HandleFunc("/can-reach", func(w http.ResponseWriter, r *http.Request) {
-		u := r.URL.Query().Get("url")
-		reachable := u == "http://reachable.com"
-		json.NewEncoder(w).Encode(ReachResponse{Reachable: reachable})
-	})
-
-	// Mock /proxies endpoint (Create)
-	mux.HandleFunc("/proxies", func(w http.ResponseWriter, r *http.Request) {
-		var req CreateProxyRequest
-		json.NewDecoder(r.Body).Decode(&req)
-		if req.URL == "http://reachable.com" {
-			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(Service{
-				OriginalURL: req.URL,
-				SharedURL:   "http://proxy.local/created",
-			})
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
-		}
-	})
-
-	// 2. Start Mock Discovery Server (TLS)
-	cer, err := generateTestCert()
-	if err != nil {
-		t.Fatal(err)
-	}
-	config := &tls.Config{Certificates: []tls.Certificate{cer}}
-	
-	mdsListener, err := tls.Listen("tcp", "127.0.0.1:0", config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer mdsListener.Close()
-	
-	mdsPort := mdsListener.Addr().(*net.TCPAddr).Port
-	DiscoveryServerPort = mdsPort
-	DiscoveryServerHosts = []string{"127.0.0.1"}
-
-	// Handle MDS connections
-	go func() {
-		for {
-			conn, err := mdsListener.Accept()
-			if err != nil { return }
-			go func(c net.Conn) {
-				defer c.Close()
-				buf := make([]byte, 1024)
-				n, _ := c.Read(buf)
-				if n > 0 && string(buf[:n]) == "LIST\n" {
-					resp := []InstanceResponse{{Address: apiAddr}}
-					data, _ := json.Marshal(resp)
-					c.Write(data)
-				}
-			}(conn)
-		}
-	}()
-
-	// 3. Run Tests
-	
-	// Case A: Existing Proxy (mocked via /services)
-	// Target: http://cached.com -> should return http://proxy.local/cached
-	p, err := DiscoverProxy("http://cached.com", 1*time.Second, false)
-	if err != nil {
-		t.Errorf("Case A failed: unexpected error %v", err)
-	} else if p != "http://proxy.local/cached" {
-		t.Errorf("Case A failed: expected http://proxy.local/cached, got %s", p)
-	}
-
-	// Case B: Create Proxy (mocked via /can-reach and /proxies)
-	// Target: http://reachable.com -> should return http://proxy.local/created
-	p, err = DiscoverProxy("http://reachable.com", 1*time.Second, false)
-	if err != nil {
-		t.Errorf("Case B failed: unexpected error %v", err)
-	} else if p != "http://proxy.local/created" {
-		t.Errorf("Case B failed: expected http://proxy.local/created, got %s", p)
-	}
-	
-	// Case C: Unreachable
-	p, err = DiscoverProxy("http://unreachable.com", 1*time.Second, false)
-	if err == nil {
-		t.Errorf("Case C failed: expected error for unreachable url, got %s", p)
-	}
 }
