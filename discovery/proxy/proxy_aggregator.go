@@ -6,13 +6,12 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/soda92/vpn-share-tool/core/models"
 	"github.com/soda92/vpn-share-tool/discovery/registry"
+	"github.com/soda92/vpn-share-tool/discovery/utils"
 )
 
 type ProxyInfo struct {
@@ -24,18 +23,6 @@ type ProxyInfo struct {
 	ActiveSystems []string             `json:"active_systems"`
 	RequestRate   float64              `json:"request_rate"`
 	TotalRequests int64                `json:"total_requests"`
-}
-
-func normalizeHost(u string) string {
-	if !strings.HasPrefix(u, "http") {
-		u = "http://" + u
-	}
-	u = strings.ReplaceAll(u, "localhost", "127.0.0.1")
-	parsed, err := url.Parse(u)
-	if err != nil {
-		return u
-	}
-	return parsed.Host
 }
 
 // FetchAllClusterProxies queries all active instances for their proxy lists.
@@ -70,7 +57,7 @@ func FetchAllClusterProxies() (map[string]ProxyInfo, []ProxyInfo) {
 						rawList = append(rawList, p)
 
 						// Store by normalized host for tagging matching
-						key := normalizeHost(p.OriginalURL)
+						key := utils.NormalizeHost(p.OriginalURL)
 						hostnameMap[key] = p
 					}
 					mu.Unlock()
