@@ -16,7 +16,7 @@ const maxLogLines = 1000
 var (
 	logStore = make(map[string][]string)
 	logMutex sync.RWMutex
-	
+
 	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
@@ -76,7 +76,7 @@ func handleUploadLogs(w http.ResponseWriter, r *http.Request) {
 		handleWSUpload(w, r)
 		return
 	}
-	
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -106,9 +106,9 @@ func handleWSUpload(w http.ResponseWriter, r *http.Request) {
 		// For simplicity, let's assume the client sends the same JSON structure as POST.
 		var entry LogEntry
 		err := conn.ReadJSON(&entry)
-        if err != nil {
-            log.Printf("log upload WS read error: %v", err)
-			break 
+		if err != nil {
+			log.Printf("log upload WS read error: %v", err)
+			break
 		}
 		processLogs(entry.Address, entry.Logs)
 	}
@@ -194,6 +194,7 @@ func handleWSView(w http.ResponseWriter, r *http.Request) {
 	// Keep connection alive
 	for {
 		if _, _, err := conn.ReadMessage(); err != nil {
+			log.Printf("log view WS read error: %v", err)
 			break
 		}
 	}
