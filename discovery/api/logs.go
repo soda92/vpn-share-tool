@@ -11,7 +11,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const maxLogLines = 1000
+const (
+	maxLogLines = 1000
+	writeWait   = 10 * time.Second
+	pongWait    = 60 * time.Second
+	pingPeriod  = (pongWait * 9) / 10
+)
 
 var (
 	logStore = make(map[string][]string)
@@ -23,44 +28,96 @@ var (
 
 	// Hub for broadcasting logs to viewers
 	logHub = &LogHub{
-		viewers: make(map[string]map[*websocket.Conn]bool),
+		viewers: make(map[string]map[*Client]bool),
 	}
 )
 
+type Client struct {
+	hub  *LogHub
+	conn *websocket.Conn
+	send chan []byte
+}
+
+func (c *Client) writePump() {
+	ticker := time.NewTicker(pingPeriod)
+	defer func() {
+		ticker.Stop()
+		c.conn.Close()
+	}()
+	for {
+		select {
+		case message, ok := <-c.send:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if !ok {
+				// The hub closed the channel.
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+
+			w, err := c.conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				return
+			}
+			w.Write(message)
+
+			// Add queued messages to the current websocket message.
+			n := len(c.send)
+			for i := 0; i < n; i++ {
+				w.Write([]byte{'\n'})
+				w.Write(<-c.send)
+			}
+
+			if err := w.Close(); err != nil {
+				return
+			}
+		case <-ticker.C:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		}
+	}
+}
+
 type LogHub struct {
-	viewers map[string]map[*websocket.Conn]bool // address -> set of connections
+	viewers map[string]map[*Client]bool // address -> set of clients
 	lock    sync.RWMutex
 }
 
-func (h *LogHub) Register(address string, conn *websocket.Conn) {
+func (h *LogHub) Register(address string, client *Client) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 	if h.viewers[address] == nil {
-		h.viewers[address] = make(map[*websocket.Conn]bool)
+		h.viewers[address] = make(map[*Client]bool)
 	}
-	h.viewers[address][conn] = true
+	h.viewers[address][client] = true
 }
 
-func (h *LogHub) Unregister(address string, conn *websocket.Conn) {
+func (h *LogHub) Unregister(address string, client *Client) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 	if set, ok := h.viewers[address]; ok {
-		delete(set, conn)
-		if len(set) == 0 {
-			delete(h.viewers, address)
+		if _, ok := set[client]; ok {
+			delete(set, client)
+			close(client.send)
+			if len(set) == 0 {
+				delete(h.viewers, address)
+			}
 		}
 	}
 }
 
 func (h *LogHub) Broadcast(address string, logs string) {
-	h.lock.RLock()
-	defer h.lock.RUnlock()
+	h.lock.Lock()
+	defer h.lock.Unlock()
 	if set, ok := h.viewers[address]; ok {
-		for conn := range set {
-			// Write message non-blocking or with timeout?
-			// For simplicity, blocking write, but in production use a write pump.
-			// Here we just ignore errors (handled by reader/pinger)
-			_ = conn.WriteMessage(websocket.TextMessage, []byte(logs))
+		for client := range set {
+			select {
+			case client.send <- []byte(logs):
+			default:
+				close(client.send)
+				delete(set, client)
+			}
 		}
 	}
 }
@@ -175,26 +232,40 @@ func handleWSView(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to upgrade log view WS: %v", err)
 		return
 	}
-	defer conn.Close()
 
-	// Register viewer
-	logHub.Register(address, conn)
-	defer logHub.Unregister(address, conn)
+	client := &Client{hub: logHub, conn: conn, send: make(chan []byte, 256)}
+	client.hub.Register(address, client)
 
-	// Send existing logs first?
+	// Send existing logs
 	logMutex.RLock()
 	existing, ok := logStore[address]
 	logMutex.RUnlock()
 	if ok {
-		// Join them back to string for transmission
 		fullLog := strings.Join(existing, "\n")
-		conn.WriteMessage(websocket.TextMessage, []byte(fullLog))
+		select {
+		case client.send <- []byte(fullLog):
+		default:
+		}
 	}
 
-	// Keep connection alive
+	go client.writePump()
+
+	// readPump equivalent logic
+	defer func() {
+		client.hub.Unregister(address, client)
+		client.conn.Close()
+	}()
+
+	client.conn.SetReadLimit(512)
+	client.conn.SetReadDeadline(time.Now().Add(pongWait))
+	client.conn.SetPongHandler(func(string) error { client.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+
 	for {
-		if _, _, err := conn.ReadMessage(); err != nil {
-			log.Printf("log view WS read error: %v", err)
+		_, _, err := client.conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("error: %v", err)
+			}
 			break
 		}
 	}
