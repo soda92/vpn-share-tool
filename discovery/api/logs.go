@@ -106,7 +106,8 @@ func handleWSUpload(w http.ResponseWriter, r *http.Request) {
 		// For simplicity, let's assume the client sends the same JSON structure as POST.
 		var entry LogEntry
 		err := conn.ReadJSON(&entry)
-		if err != nil {
+        if err != nil {
+            log.Printf("log upload WS read error: %v", err)
 			break 
 		}
 		processLogs(entry.Address, entry.Logs)
