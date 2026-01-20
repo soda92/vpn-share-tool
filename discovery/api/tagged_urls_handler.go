@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/soda92/vpn-share-tool/core/models"
 	"github.com/soda92/vpn-share-tool/discovery/proxy"
 	"github.com/soda92/vpn-share-tool/discovery/store"
+	"github.com/soda92/vpn-share-tool/discovery/utils"
 )
 
 func HandleTaggedURLs(w http.ResponseWriter, r *http.Request) {
@@ -25,19 +25,6 @@ func HandleTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
-}
-
-func normalizeHost(u string) string {
-	if !strings.HasPrefix(u, "http") {
-		u = "http://" + u
-	}
-	// Replace localhost with 127.0.0.1 to match proxy behavior
-	u = strings.ReplaceAll(u, "localhost", "127.0.0.1")
-	parsed, err := url.Parse(u)
-	if err != nil {
-		return u
-	}
-	return parsed.Host
 }
 
 func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +47,7 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	for i, u := range urls {
 		enrichedUrls[i] = EnrichedTaggedURL{TaggedURL: u}
 		// Check against Hostname (keys in allProxies are normalized hostnames)
-		if proxyInfo, ok := allProxies[normalizeHost(u.URL)]; ok {
+		if proxyInfo, ok := allProxies[utils.NormalizeHost(u.URL)]; ok {
 			enrichedUrls[i].ProxyURL = proxyInfo.SharedURL
 			enrichedUrls[i].Settings = proxyInfo.Settings
 			enrichedUrls[i].ActiveSystems = proxyInfo.ActiveSystems
