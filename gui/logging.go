@@ -113,9 +113,10 @@ func (r *remoteWriter) connect() {
 		TLSClientConfig:  core.GetGlobalTransport().TLSClientConfig,
 	}
 	c, _, err := dialer.Dial(target, nil)
-	if err != nil {
-		// fmt.Printf("WS Dial error: %v\n", err)
+    if err != nil {
+		fmt.Printf("WS Dial error: %v\n", err)
 		return
+	}
 	}
 	r.ws = c
 }
