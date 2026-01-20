@@ -1,7 +1,5 @@
 __pycache__
 
-rustlib/target
-
 /trace.out
 /rustlib/target
 tagged_urls.json
