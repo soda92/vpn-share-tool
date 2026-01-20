@@ -16,8 +16,6 @@ func RunPipeline(ctx *models.ProcessingContext, body string) string {
 		return body
 	}
 
-	// log.Printf("RunPipeline: %s (Active Systems: %v)", ctx.ReqURL.Path, ctx.Proxy.ActiveSystems)
-
 	// 1. Internal URL Rewrite
 	if ctx.Proxy.Settings.EnableUrlRewrite {
 		body = RewriteInternalURLs(ctx, body)
