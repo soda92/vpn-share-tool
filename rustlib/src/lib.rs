@@ -3,7 +3,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use local_ip_address::local_ip;
@@ -12,6 +12,18 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use threadpool::ThreadPool;
 use url::Url;
+
+lazy_static::lazy_static! {
+    static ref CACHE_LOCK: RwLock<()> = RwLock::new(());
+}
+
+use std::sync::OnceLock;
+
+static FILE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn get_file_lock() -> &'static Mutex<()> {
+    FILE_LOCK.get_or_init(|| Mutex::new(()))
+}
 
 const DISCOVERY_SERVER_PORT: u16 = 45679;
 const DISCOVERY_HOSTS: &[&str] = &["192.168.0.81", "192.168.1.81"];
@@ -67,7 +79,7 @@ fn get_cache_path() -> Option<PathBuf> {
     Some(path)
 }
 
-fn load_cache() -> HashMap<String, String> {
+fn load_cache_internal() -> HashMap<String, String> {
     if let Some(path) = get_cache_path() {
         if path.exists() {
             if let Ok(file) = fs::File::open(path) {
@@ -80,16 +92,22 @@ fn load_cache() -> HashMap<String, String> {
     HashMap::new()
 }
 
+fn load_cache() -> HashMap<String, String> {
+    let _guard = get_file_lock().lock().unwrap();
+    load_cache_internal()
+}
+
 fn save_to_cache(target: &str, proxy: &str) {
+    let _guard = get_file_lock().lock().unwrap();
+
     if let Some(path) = get_cache_path() {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        let mut cache = load_cache();
+        let mut cache = load_cache_internal();
         cache.insert(target.to_string(), proxy.to_string());
         if let Ok(file) = fs::File::create(path) {
             if let Err(e) = serde_json::to_writer_pretty(file, &cache) {
-                // Log the error using standard log crate if initialized, or just eprintln
                 eprintln!("Failed to write cache: {}", e);
             }
         }
