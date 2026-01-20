@@ -61,11 +61,11 @@ The system consists of two primary applications:
 ## Directory Structure
 
 *   `cmd/`: Entry points for binaries.
-    *   `vpn-share-tool/`: Desktop client.
-    *   `discovery/`: Registry server.
+    *   `vpn-share-tool/`: Desktop client entry point.
+    *   `discovery/`: Registry server entry point.
+*   `discovery/`: Server-specific logic (Registry, API), implementation of the Registry Server.
 *   `core/`: Shared business logic (Proxy, API, Registration, Debugging).
 *   `gui/`: Fyne UI implementation.
-*   `discovery/`: Server-specific logic (Registry, API).
 *   `discovery_web/`: Source code for the Discovery Server dashboard (Vue.js).
 *   `core/debug_web/`: Source code for the Request Debugger (Vue.js).
 *   `dev/`: Build scripts and CLI tool.
