@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Write, BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use local_ip_address::local_ip;
-use native_tls::{TlsConnector, Certificate};
+use native_tls::{Certificate, TlsConnector};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use threadpool::ThreadPool;
@@ -62,7 +62,7 @@ fn get_cache_path() -> Option<PathBuf> {
         dirs::config_dir().map(|p| p.join("vpn-share-tool"))
     } else {
         dirs::home_dir().map(|p| p.join(".config").join("vpn-share-tool"))
-    }?; 
+    }?;
     path.push("libproxy_cache.json");
     Some(path)
 }
@@ -88,7 +88,10 @@ fn save_to_cache(target: &str, proxy: &str) {
         let mut cache = load_cache();
         cache.insert(target.to_string(), proxy.to_string());
         if let Ok(file) = fs::File::create(path) {
-            let _ = serde_json::to_writer_pretty(file, &cache);
+            if let Err(e) = serde_json::to_writer_pretty(file, &cache) {
+                // Log the error using standard log crate if initialized, or just eprintln
+                eprintln!("Failed to write cache: {}", e);
+            }
         }
     }
 }
@@ -98,7 +101,7 @@ fn scan_subnet(local_ip_str: &str, port: u16) -> Vec<String> {
     if parts.len() != 4 {
         return vec![];
     }
-    
+
     // Skip 10.x.x.x
     if parts[0] == "10" {
         return vec![];
@@ -112,11 +115,12 @@ fn scan_subnet(local_ip_str: &str, port: u16) -> Vec<String> {
         let ip = format!("{}{}", prefix, i);
         let hosts = found_hosts.clone();
         pool.execute(move || {
-            if let Ok(_) = TcpStream::connect_timeout(
-                &format!("{}:{}", ip, port).to_socket_addrs().unwrap().next().unwrap(),
-                Duration::from_millis(200),
-            ) {
-                hosts.lock().unwrap().push(ip);
+            if let Ok(mut addrs) = format!("{}:{}", ip, port).to_socket_addrs() {
+                if let Some(addr) = addrs.next() {
+                    if TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
+                        hosts.lock().unwrap().push(ip);
+                    }
+                }
             }
         });
     }
@@ -129,10 +133,12 @@ fn scan_subnet(local_ip_str: &str, port: u16) -> Vec<String> {
 fn get_tls_connector() -> Option<TlsConnector> {
     let mut builder = TlsConnector::builder();
     builder.danger_accept_invalid_hostnames(true); // Ignore hostname mismatch (IP vs Cert Hostname)
-    
+
     let ca_pem = if CA_CERT_PLACEHOLDER.contains("__CA_CERT_PLACEHOLDER__") {
         // Try env var
-        std::env::var("VPN_SHARE_TOOL_CA_PATH").ok().and_then(|p| fs::read_to_string(p).ok())
+        std::env::var("VPN_SHARE_TOOL_CA_PATH")
+            .ok()
+            .and_then(|p| fs::read_to_string(p).ok())
     } else {
         Some(CA_CERT_PLACEHOLDER.to_string())
     };
@@ -160,13 +166,12 @@ fn get_instance_list(timeout: Duration) -> Vec<String> {
 
     for host in candidates {
         let addr = format!("{}:{}", host, DISCOVERY_SERVER_PORT);
-        if let Ok(stream) = TcpStream::connect_timeout(
-            &addr.to_socket_addrs().unwrap().next().unwrap(),
-            timeout,
-        ) {
+        if let Ok(stream) =
+            TcpStream::connect_timeout(&addr.to_socket_addrs().unwrap().next().unwrap(), timeout)
+        {
             // Need to set read timeout
             let _ = stream.set_read_timeout(Some(timeout));
-            
+
             if let Ok(mut tls_stream) = connector.connect(host.as_str(), stream) {
                 if tls_stream.write_all(b"LIST\n").is_ok() {
                     let mut reader = BufReader::new(tls_stream);
@@ -184,7 +189,11 @@ fn get_instance_list(timeout: Duration) -> Vec<String> {
 }
 
 fn is_reachable(url: &str, timeout: Duration) -> bool {
-    let client = Client::builder().timeout(timeout).no_proxy().build().unwrap();
+    let client = Client::builder()
+        .timeout(timeout)
+        .no_proxy()
+        .build()
+        .unwrap();
     client.head(url).send().is_ok()
 }
 
@@ -237,9 +246,10 @@ pub fn discover_proxy(target_url: &str, timeout_secs: u64, remote_only: bool) ->
     // Phase 2
     for addr in &instances {
         let can_reach = format!("http://{}/can-reach", addr);
-        if let Ok(resp) = client.get(&can_reach)
+        if let Ok(resp) = client
+            .get(&can_reach)
             .query(&[("url", &target_url_str)])
-            .send() 
+            .send()
         {
             if let Ok(r) = resp.json::<ReachResponse>() {
                 if !r.reachable {
@@ -247,7 +257,9 @@ pub fn discover_proxy(target_url: &str, timeout_secs: u64, remote_only: bool) ->
                 }
 
                 let create_url = format!("http://{}/proxies", addr);
-                let body = CreateProxyRequest { url: target_url_str.clone() };
+                let body = CreateProxyRequest {
+                    url: target_url_str.clone(),
+                };
                 if let Ok(resp) = client.post(&create_url).json(&body).send() {
                     if resp.status().is_success() {
                         if let Ok(new_proxy) = resp.json::<Service>() {

@@ -1,6 +1,7 @@
 package libproxy
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
@@ -96,7 +97,9 @@ func saveToCache(targetURL, proxyURL string) {
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(path, data, 0644)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		log.Printf("error writing to cache file %s: %v", path, err)
+	}
 }
 
 func getLocalIP() string {
@@ -157,7 +160,7 @@ func scanSubnet(localIP string, port int) []string {
 
 func getTLSConfig() (*tls.Config, error) {
 	certPool := x509.NewCertPool()
-	
+
 	// If placeholder is present, try to load from file relative to binary or env var
 	pemData := []byte(CACertPEM)
 	if strings.Contains(CACertPEM, "__CA_CERT_PLACEHOLDER__") {
@@ -178,13 +181,13 @@ func getTLSConfig() (*tls.Config, error) {
 		if ok := certPool.AppendCertsFromPEM(pemData); !ok {
 			return nil, fmt.Errorf("failed to append CA cert")
 		}
-		// Use standard verification with our custom RootCAs. 
+		// Use standard verification with our custom RootCAs.
 		// If connecting via IP, standard verification might fail on hostname unless the cert has IP SANs.
 		// However, for security, we should NOT disable verification globally.
 		// Assuming the certs are generated correctly with IP SANs for the discovery server.
-		return &tls.Config{RootCAs: certPool}, nil 
+		return &tls.Config{RootCAs: certPool}, nil
 	}
-	
+
 	// If we have no cert, we rely on system certs.
 	return &tls.Config{}, nil
 }
@@ -209,29 +212,28 @@ func getInstanceList(timeout time.Duration) []string {
 	}
 
 	var validHosts []string
-	
+
 	for _, host := range candidateHosts {
 		// Connect TCP/TLS
 		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: timeout}, "tcp", fmt.Sprintf("%s:%d", host, DiscoveryServerPort), tlsConfig)
 		if err != nil {
 			continue
 		}
-		
+
 		conn.Write([]byte("LIST\n"))
-		
-		// Read line
-		buffer := make([]byte, 4096)
-		n, err := conn.Read(buffer)
+
+		reader := bufio.NewReader(conn)
+		data, err := reader.ReadBytes('\n')
 		conn.Close()
 		if err != nil {
 			continue
 		}
-		
+
 		var instances []InstanceResponse
-		if err := json.Unmarshal(buffer[:n], &instances); err != nil {
+		if err := json.Unmarshal(data, &instances); err != nil {
 			continue
 		}
-		
+
 		for _, inst := range instances {
 			validHosts = append(validHosts, inst.Address)
 		}
@@ -282,7 +284,7 @@ func DiscoverProxy(targetURL string, timeout time.Duration, remoteOnly bool) (st
 		u.Scheme = "http"
 		targetURL = u.String()
 	}
-	
+
 	if !remoteOnly {
 		if isURLReachableLocally(targetURL, timeout) {
 			return targetURL, nil
@@ -313,7 +315,7 @@ func DiscoverProxy(targetURL string, timeout time.Duration, remoteOnly bool) (st
 		if err != nil || resp.StatusCode != 200 {
 			continue
 		}
-		
+
 		var services []Service
 		if err := json.NewDecoder(resp.Body).Decode(&services); err != nil {
 			resp.Body.Close()
@@ -339,7 +341,7 @@ func DiscoverProxy(targetURL string, timeout time.Duration, remoteOnly bool) (st
 		if err != nil || resp.StatusCode != 200 {
 			continue
 		}
-		
+
 		var reach ReachResponse
 		if err := json.NewDecoder(resp.Body).Decode(&reach); err != nil {
 			resp.Body.Close()
@@ -358,7 +360,7 @@ func DiscoverProxy(targetURL string, timeout time.Duration, remoteOnly bool) (st
 		if err != nil {
 			continue
 		}
-		
+
 		if resp.StatusCode == 201 {
 			var newProxy Service // Reusing struct, check fields if matches
 			// Python code expects: { "shared_url": ... }
