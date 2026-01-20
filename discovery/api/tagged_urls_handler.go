@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/soda92/vpn-share-tool/core/models"
