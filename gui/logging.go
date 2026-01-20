@@ -48,20 +48,30 @@ func (r *remoteWriter) Write(p []byte) (n int, err error) {
 }
 
 func (r *remoteWriter) flushLoop() {
-	ticker := time.NewTicker(2 * time.Second) // Flush every 2 seconds or immediately on buffer full?
-	// Actually we can stream faster with WS.
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	var batch []string
+	const batchSize = 50
 
 	for {
 		select {
 		case line := <-r.buffer:
-			r.send(line)
+			batch = append(batch, line)
+			if len(batch) >= batchSize {
+				r.send(batch)
+				batch = nil // clear
+			}
 		case <-ticker.C:
-			// Ping / keepalive if needed, or just let TCP handle it.
+			if len(batch) > 0 {
+				r.send(batch)
+				batch = nil
+			}
 		}
 	}
 }
 
-func (r *remoteWriter) send(logLine string) {
+func (r *remoteWriter) send(logLines []string) {
 	if core.DiscoveryServerURL == "" || core.MyIP == "" {
 		fmt.Println("Remote logging skipped: Missing ServerURL or IP")
 		return // Not ready
@@ -84,7 +94,7 @@ func (r *remoteWriter) send(logLine string) {
 
 	data := map[string]string{
 		"address": address,
-		"logs":    logLine,
+		"logs":    strings.Join(logLines, ""), // Join without separator as lines already have it
 	}
 
 	if err := r.ws.WriteJSON(data); err != nil {
@@ -113,13 +123,12 @@ func (r *remoteWriter) connect() {
 		TLSClientConfig:  core.GetGlobalTransport().TLSClientConfig,
 	}
 	c, _, err := dialer.Dial(target, nil)
-	if err != nil {
-		// fmt.Printf("WS Dial error: %v\n", err)
-		return
-	}
-	r.ws = c
-}
-
+    	if err != nil {
+    		fmt.Printf("WS Dial error: %v\n", err)
+    		return
+    	}
+    	r.ws = c
+    }
 func setupLogging() {
 	var logPath string
 	if home, err := os.UserHomeDir(); err == nil {
