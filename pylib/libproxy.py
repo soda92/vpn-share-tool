@@ -15,16 +15,35 @@ import ssl
 import os
 from pathlib import Path
 
-# Fallback addresses if scanning fails
+# 扫描失败时的备用地址
 DISCOVERY_SERVER_HOSTS = ["192.168.0.81", "192.168.1.81"]
 DISCOVERY_SERVER_PORT = 45679
 
-# Placeholder for CA Cert injection
-CA_CERT_PEM = """__CA_CERT_PLACEHOLDER__"""
+# CA证书注入占位符
+CA_CERT_PEM = """-----BEGIN CERTIFICATE-----
+MIIDFDCCAfygAwIBAgIBATANBgkqhkiG9w0BAQsFADAcMRowGAYDVQQKExFWUE4g
+U2hhcmUgVG9vbCBDQTAeFw0yNTEyMTIwNzM1NTRaFw0zNTEyMTAwNzM1NTRaMBwx
+GjAYBgNVBAoTEVZQTiBTaGFyZSBUb29sIENBMIIBIjANBgkqhkiG9w0BAQEFAAOC
+AQ8AMIIBCgKCAQEAsVzVSTITX6H/S2f3lbG2GhBldtFAQO5iizkauTKMDfXg6cIc
+OZEkLmq+88e5asY1ytT8/wIjiANBDLPDt0ZFeFJ5JXpKPO0bogkAqun+j80xdmfL
+j8gV6E02FO41Ln5RgGnr7rstYp18N+WZelg8OL6Ss1e68sR59tWRU3t2KzCzblPS
+mYmoCO6jvs6ZG5eGCpfg1TFhCtrr1UO7wkR1diLvPOCNPpOKERLLw0IMVSlKWMPS
+cli2Zx6Aweg5M95pbN5Bo8Gvvf9WKrDlxeElUKju2RiuxmsJ0ABZiQbmJNmYZnB/
+3XrCVos7YoWnNipzJeqcf+ptIid3r5UxK1YXWQIDAQABo2EwXzAOBgNVHQ8BAf8E
+BAMCAoQwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMA8GA1UdEwEB/wQF
+MAMBAf8wHQYDVR0OBBYEFO3Lboneorxs9meV+jtEZ5pSMpxJMA0GCSqGSIb3DQEB
+CwUAA4IBAQBlCmXx59N0yfPP/y+Y09ww7j+FdvOekUWYdc7C8z4AURFAFHQf/gcD
+S4jesZWDmqSyIcNlhR4qVe4ouVMs1HHG7DFWLnNiwqno4/EVFYekr5KRCTARP9hy
+UGlB21iA6lNaW9QWfoYRInPZ7dkQJzFGeZa7xO8nkRg/TE0wZQljptv4aMTtDuRh
+odcRU50Gylkustwml/KIDhMIe/N+/zu6DrbsLact9zxvjoBc8YgpW8GYKZrg2lRA
+X9o+Ofh3drIjpESl4+oc+zfqbgy6aYY1Q+t2+G+QrLYO+lS//kKsrjMWcci44zIl
+LruVr5jc5OBxi50P5M/tt9hC2P5J7k7g
+-----END CERTIFICATE-----
+"""
 
 
 def get_cache_path():
-    """Returns the path to the cache file."""
+    """返回缓存文件路径。"""
     if platform.system() == "Windows":
         base_dir = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
     else:
@@ -34,7 +53,7 @@ def get_cache_path():
 
 
 def load_cache():
-    """Loads the proxy cache from disk."""
+    """从磁盘加载代理缓存。"""
     path = get_cache_path()
     if not path.exists():
         return {}
@@ -42,12 +61,12 @@ def load_cache():
         with open(path, "r") as f:
             return json.load(f)
     except Exception as e:
-        logging.debug(f"Failed to load cache: {e}")
+        logging.debug(f"加载缓存失败: {e}")
         return {}
 
 
 def save_to_cache(target_url, proxy_url):
-    """Saves a discovered proxy to the cache."""
+    """将发现的代理保存到缓存。"""
     path = get_cache_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -56,13 +75,13 @@ def save_to_cache(target_url, proxy_url):
         with open(path, "w") as f:
             json.dump(cache, f)
     except Exception as e:
-        logging.debug(f"Failed to save cache: {e}")
+        logging.debug(f"保存缓存失败: {e}")
 
 
 def get_local_ip():
-    """Attempts to detect the local IP address, preferring private networks (192.168.x.x)."""
+    """尝试检测本地IP地址，优先选择私有网络 (192.168.x.x)。"""
 
-    # 1. Try parsing OS commands to find a 192.168.x.x address
+    # 1. 尝试解析系统命令以查找 192.168.x.x 地址
     try:
         system = platform.system()
         if system == "Linux":
@@ -78,11 +97,11 @@ def get_local_ip():
             if matches:
                 return matches[0]
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        logging.debug(f"Failed to parse OS network config: {e}")
+        logging.debug(f"解析操作系统网络配置失败: {e}")
 
-    # 2. Fallback to default route (e.g. 8.8.8.8)
+    # 2. 回退到默认路由 (例如 8.8.8.8)
     try:
-        # We don't actually send data, just opening the socket is enough to get the local IP
+        # 我们实际上不发送数据，只需打开套接字即可获取本地IP
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
@@ -91,33 +110,33 @@ def get_local_ip():
 
 
 def scan_subnet(local_ip, port):
-    """Scans the /24 subnet of the given IP for the specified TCP port."""
+    """扫描给定IP的 /24 子网以查找指定的TCP端口。"""
     if not local_ip:
         return []
 
     try:
-        # Calculate the network
+        # 计算网络
         ip_net = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
     except ValueError:
         return []
 
-    # Skip 10.x.x.x networks as requested
+    # 按要求跳过 10.x.x.x 网络
     if str(ip_net.network_address).startswith("10."):
-        logging.debug(f"Skipping scan for 10.x.x.x network: {ip_net}")
+        logging.debug(f"跳过扫描 10.x.x.x 网络: {ip_net}")
         return []
 
     found_hosts = []
 
     def check_host(ip):
         ip_str = str(ip)
-        # Skip self if needed, but sometimes helpful
+        # 如果需要可以跳过自身，但有时会有帮助
         try:
             with socket.create_connection((ip_str, port), timeout=0.2):
                 return ip_str
         except (socket.timeout, ConnectionRefusedError, OSError):
             return None
 
-    # Use a thread pool to scan quickly
+    # 使用线程池快速扫描
     with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
         futures = [executor.submit(check_host, ip) for ip in ip_net.hosts()]
         for future in concurrent.futures.as_completed(futures):
@@ -129,53 +148,43 @@ def scan_subnet(local_ip, port):
 
 
 def get_instance_list(timeout: int = 5):
-    """Gets the list of active vpn-share-tool instances using scanning and fallbacks."""
+    """使用扫描和回退获取活动的 vpn-share-tool 实例列表。"""
 
-    # 1. Scan local subnet first
+    # 1. 首先扫描本地子网
     local_ip = get_local_ip()
     candidate_hosts = []
 
     if local_ip:
-        logging.debug(f"Detected local IP: {local_ip}. Scanning subnet...")
+        logging.debug(f"检测到本地IP: {local_ip}。正在扫描子网...")
         scanned_hosts = scan_subnet(local_ip, DISCOVERY_SERVER_PORT)
         if scanned_hosts:
-            logging.info(f"Found discovery servers via scanning: {scanned_hosts}")
+            logging.info(f"通过扫描发现服务器: {scanned_hosts}")
             candidate_hosts.extend(scanned_hosts)
         else:
-            logging.debug("No servers found via scanning.")
+            logging.debug("通过扫描未发现服务器。")
     else:
-        logging.warning("Could not detect local IP for scanning.")
+        logging.warning("无法检测到用于扫描的本地IP。")
 
-    # 2. Add fallbacks
+    # 2. 添加备用地址
     candidate_hosts.extend(DISCOVERY_SERVER_HOSTS)
 
-    # Setup SSL context
-    global CA_CERT_PEM
-    if CA_CERT_PEM:
-        if "__CA_CERT_PLACEHOLDER__" in CA_CERT_PEM:
-            CA_FILE = Path(os.environ.get("VPN_SHARE_TOOL_CA_PATH", Path(__file__).resolve().parent.parent.joinpath("certs/ca.crt")))
-            if CA_FILE.exists():
-                CA_CERT_PEM = CA_FILE.read_text(encoding='utf8')
-            else:
-                logging.error("No CA certificate found. Exiting for security.")
-                sys.exit(1)
+    # 设置 SSL 上下文
+    if CA_CERT_PEM and "__CA_CERT_PLACEHOLDER__" not in CA_CERT_PEM:
         try:
             context = ssl.create_default_context(cadata=CA_CERT_PEM)
-            context.check_hostname = False # Discovery uses IP/different hostname often
-            logging.debug("Using embedded CA certificate for TLS.")
+            context.check_hostname = True
+            logging.debug("使用嵌入式 CA 证书进行 TLS。")
         except Exception as e:
-            logging.error(
-                f"Failed to load embedded CA cert: {e}. Exiting for security."
-            )
+            logging.error(f"加载嵌入式 CA 证书失败: {e}。出于安全原因退出。")
             sys.exit(1)
     else:
-        logging.error("No CA certificate configured. Exiting for security.")
+        logging.error("未找到嵌入式 CA 证书。出于安全原因退出。")
         sys.exit(1)
 
-    # 3. Try to connect to candidates
+    # 3. 尝试连接候选项
     for host in candidate_hosts:
         try:
-            logging.debug(f"Trying discovery server at {host}...")
+            logging.debug(f"正在尝试连接发现服务器 {host}...")
             with socket.create_connection(
                 (host, DISCOVERY_SERVER_PORT), timeout=timeout
             ) as sock:
@@ -183,143 +192,132 @@ def get_instance_list(timeout: int = 5):
                     ssock.sendall(b"LIST\n")
                     response = ssock.makefile().readline()
                     if not response:
-                        logging.warning(
-                            f"Did not receive a response from discovery server at {host}"
-                        )
+                        logging.warning(f"未收到来自 {host} 发现服务器的响应")
                         continue
                     instances_raw = json.loads(response)
-                    # The server gives us a list of objects with an "address" field
-                    logging.info(f"Successfully retrieved instances from {host}")
+                    # 服务器返回一个包含 "address" 字段的对象列表
+                    logging.info(f"成功从 {host} 获取实例")
                     return [item["address"] for item in instances_raw]
         except ssl.SSLError as e:
-            logging.debug(f"SSL Error connecting to {host}: {e}")
+            logging.debug(f"连接到 {host} 时发生 SSL 错误: {e}")
             continue
         except socket.timeout:
-            logging.debug(
-                f"Timeout connecting to discovery server at {host}:{DISCOVERY_SERVER_PORT}"
-            )
+            logging.debug(f"连接发现服务器 {host}:{DISCOVERY_SERVER_PORT} 超时")
             continue
         except ConnectionRefusedError:
-            logging.debug(
-                f"Connection refused by discovery server at {host}:{DISCOVERY_SERVER_PORT}"
-            )
+            logging.debug(f"发现服务器 {host}:{DISCOVERY_SERVER_PORT} 拒绝连接")
             continue
         except json.JSONDecodeError as e:
-            logging.error(
-                f"Failed to decode JSON response from discovery server at {host}: {e}"
-            )
+            logging.error(f"解码来自发现服务器 {host} 的 JSON 响应失败: {e}")
             continue
         except Exception as e:
-            logging.error(
-                f"An unexpected error occurred while getting instance list from {host}: {e}"
-            )
+            logging.error(f"从 {host} 获取实例列表时发生意外错误: {e}")
             continue
 
-    logging.error("Failed to connect to any discovery server.")
+    logging.error("无法连接到任何发现服务器。")
     return []
 
 
 def is_url_reachable_locally(target_url, timeout=3):
-    """Checks if a URL is reachable from the local machine."""
+    """检查 URL 是否可以从本地机器访问。"""
     try:
-        # Use a HEAD request for efficiency
+        # 使用 HEAD 请求以提高效率
         req = urllib.request.Request(target_url, method="HEAD")
-        # Use a proxy handler that does nothing, to ensure we are checking direct access
+        # 使用不执行任何操作的代理处理程序，以确保我们正在检查直接访问
         proxy_handler = urllib.request.ProxyHandler({})
         opener = urllib.request.build_opener(proxy_handler)
         with opener.open(req, timeout=timeout) as response:
-            # Any status code means it's reachable.
-            logging.debug(
-                f"Local check: URL {target_url} is reachable with status {response.status}"
-            )
+            # 任何状态码都意味着可达。
+            logging.debug(f"本地检查: URL {target_url} 可达，状态码 {response.status}")
             return True
+    except urllib.error.HTTPError as e:
+        # HTTPError 意味着服务器已响应，因此它是可达的。
+        logging.debug(
+            f"本地检查: URL {target_url} 可达 (HTTP 错误 {e.code}: {e.reason})"
+        )
+        return True
     except (urllib.error.URLError, socket.timeout) as e:
-        logging.debug(f"Local check: URL {target_url} is not reachable: {e}")
+        logging.debug(f"本地检查: URL {target_url} 不可达: {e}")
         return False
 
 
-def discover_proxy(target_url, timeout=10, remote_only: bool=False):
+def discover_proxy(target_url, timeout=10, remote_only: bool = False):
     """
-    Discovers a proxy for a given URL by querying the central discovery server.
-    First, it checks if the URL is reachable locally.
+    通过查询中央发现服务器为给定 URL 发现代理。
+    首先，它检查 URL 是否在本地可达。
     """
-    # 0. Check for local reachability first
-    logging.debug(f"Checking if {target_url} is reachable locally...")
+    # 0. 首先检查本地可达性
+    logging.debug(f"正在检查 {target_url} 是否本地可达...")
 
-    # Ensure the URL has a scheme for the request library
+    # 确保 URL 具有请求库所需的 scheme
     schemed_target_url = target_url
     if not urlparse(schemed_target_url).scheme:
         schemed_target_url = f"http://{schemed_target_url}"
 
     if not remote_only:
+        logging.debug(f"正在本地检查 URL {schemed_target_url}，超时时间 {timeout}")
         if is_url_reachable_locally(schemed_target_url, timeout=timeout):
-            logging.info(f"URL {target_url} is directly reachable. No proxy needed.")
+            logging.info(f"URL {target_url} 可直接访问。无需代理。")
             return target_url  # Return the original URL
 
-    # 0.5 Check cache
+    # 0.5 检查缓存
     cache = load_cache()
     if schemed_target_url in cache:
         cached_proxy = cache[schemed_target_url]
-        logging.debug(f"Found cached proxy: {cached_proxy}")
-        # Verify the cached proxy is still reachable
+        logging.debug(f"发现缓存的代理: {cached_proxy}")
+        # 验证缓存的代理是否仍然可达
         if is_url_reachable_locally(cached_proxy, timeout=2):
-            logging.info(f"Using cached proxy: {cached_proxy}")
+            logging.info(f"使用缓存的代理: {cached_proxy}")
             return cached_proxy
         else:
-            logging.debug("Cached proxy not reachable, discarding.")
-            # We could remove it from cache here, but overwrite later handles it
+            logging.debug("缓存的代理不可达，丢弃。")
+            # 我们可以从此处删除它，但稍后覆盖会处理它
 
-    logging.debug(
-        f"URL {target_url} not reachable locally and no valid cache. Starting discovery..."
-    )
+    logging.debug(f"URL {target_url} 本地不可达且无有效缓存。开始发现...")
 
-    # 1. Get the list of all available API servers from the central server
+    # 1. 从中央服务器获取所有可用 API 服务器的列表
     instance_addresses = get_instance_list(timeout=timeout)
     if not instance_addresses:
-        logging.info("No active vpn-share-tool instances found.")
+        logging.info("未找到活动的 vpn-share-tool 实例。")
         return None
 
     target_hostname = urlparse(schemed_target_url).hostname
 
-    # 2. Phase 1: Check all discovered servers for an EXISTING proxy
-    logging.debug("Phase 1: Checking for existing proxies...")
+    # 2. 阶段 1: 检查所有发现的服务器是否存在现有代理
+    logging.debug("阶段 1: 检查现有代理...")
     for instance_addr in instance_addresses:
         api_url = f"http://{instance_addr}/services"
         try:
-            logging.debug(f"Querying API server at {api_url}")
+            logging.debug(f"正在查询 API 服务器 {api_url}")
             proxy_handler = urllib.request.ProxyHandler({})
             opener = urllib.request.build_opener(proxy_handler)
             with opener.open(api_url, timeout=timeout) as response:
                 if response.status != 200:
-                    logging.warning(
-                        f"API server at {api_url} returned status {response.status}"
-                    )
+                    logging.warning(f"API 服务器 {api_url} 返回状态 {response.status}")
                     continue
                 services = json.loads(response.read())
 
-            if services:  # Ensure services is not None
+            if services:  # 确保 services 不为 None
                 for service in services:
                     original_url_hostname = urlparse(
                         service.get("original_url")
                     ).hostname
                     if original_url_hostname == target_hostname:
                         proxy_url = service.get("shared_url")
-                        logging.debug(
-                            f"Found existing proxy: {proxy_url} on server {api_url}"
-                        )
+                        logging.debug(f"在服务器 {api_url} 上发现现有代理: {proxy_url}")
                         save_to_cache(schemed_target_url, proxy_url)
                         return proxy_url
         except Exception as e:
-            logging.warning(f"Could not check services on {api_url}: {e}")
+            logging.warning(f"无法检查 {api_url} 上的服务: {e}")
             continue
 
-    # 3. Phase 2: No existing proxy found. Ask a capable server to create one.
-    logging.debug("Phase 2: No existing proxy found. Requesting creation...")
+    # 3. 阶段 2: 未找到现有代理。请求有能力的服务器创建一个。
+    logging.debug("阶段 2: 未找到现有代理。请求创建...")
     for instance_addr in instance_addresses:
-        # First, check if this server can reach the target URL
+        # 首先，检查此服务器是否可以访问目标 URL
         try:
             can_reach_url = f"http://{instance_addr}/can-reach?url={urllib.parse.quote(schemed_target_url)}"
-            logging.debug(f"Checking reachability at {can_reach_url}")
+            logging.debug(f"正在检查 {can_reach_url} 的可达性")
             proxy_handler = urllib.request.ProxyHandler({})
             opener = urllib.request.build_opener(proxy_handler)
             with opener.open(can_reach_url, timeout=timeout) as response:
@@ -327,16 +325,14 @@ def discover_proxy(target_url, timeout=10, remote_only: bool=False):
                     continue
                 reach_data = json.loads(response.read())
                 if not reach_data.get("reachable"):
-                    logging.debug(f"Server {instance_addr} cannot reach {target_url}")
+                    logging.debug(f"服务器 {instance_addr} 无法访问 {target_url}")
                     continue
         except Exception as e:
-            logging.warning(f"Could not check reachability on {instance_addr}: {e}")
+            logging.warning(f"无法检查 {instance_addr} 上的可达性: {e}")
             continue
 
-        # This server can reach the URL, so ask it to create the proxy
-        logging.debug(
-            f"Server {instance_addr} can reach the URL. Requesting proxy creation..."
-        )
+        # 此服务器可以访问该 URL，因此请求它创建代理
+        logging.debug(f"服务器 {instance_addr} 可以访问该 URL。正在请求创建代理...")
         try:
             create_url = f"http://{instance_addr}/proxies"
             post_data = json.dumps({"url": schemed_target_url}).encode("utf-8")
@@ -349,24 +345,22 @@ def discover_proxy(target_url, timeout=10, remote_only: bool=False):
             proxy_handler = urllib.request.ProxyHandler({})
             opener = urllib.request.build_opener(proxy_handler)
             with opener.open(req, timeout=timeout) as response:
-                if response.status == 201:  # StatusCreated
+                if response.status == 201:  # 状态已创建
                     new_proxy_data = json.loads(response.read())
                     proxy_url = new_proxy_data.get("shared_url")
-                    logging.debug(f"Successfully created proxy: {proxy_url}")
+                    logging.debug(f"成功创建代理: {proxy_url}")
                     save_to_cache(schemed_target_url, proxy_url)
                     return proxy_url
                 else:
                     logging.error(
-                        f"Server {instance_addr} failed to create proxy, status: {response.status}"
+                        f"服务器 {instance_addr} 创建代理失败，状态: {response.status}"
                     )
                     continue  # Try next instance
         except Exception as e:
-            logging.error(f"Failed to request proxy creation from {instance_addr}: {e}")
+            logging.error(f"向 {instance_addr} 请求创建代理失败: {e}")
             continue  # Try next instance
 
-    logging.fatal(
-        f"Found API server(s), but none could reach or create a proxy for {target_url}"
-    )
+    logging.fatal(f"找到 API 服务器，但无法为 {target_url} 创建或访问代理")
     sys.exit(-1)
 
 
@@ -376,15 +370,15 @@ if __name__ == "__main__":
     )
 
     if len(sys.argv) < 2:
-        print(f"Usage: python3 {sys.argv[0]} <url_to_discover>", file=sys.stderr)
+        print(f"用法: python3 {sys.argv[0]} <要发现的URL>", file=sys.stderr)
         sys.exit(1)
 
     url_to_discover = sys.argv[1]
     proxy_url_found = discover_proxy(url_to_discover)
 
     if proxy_url_found:
-        # Print the proxy URL to stdout for scripting
+        # 将代理 URL 打印到标准输出以供脚本使用
         print(proxy_url_found, file=sys.stdout)
     else:
-        # Exit with a non-zero status code if no proxy is found
+        # 如果未找到代理，则以非零状态码退出
         sys.exit(2)
