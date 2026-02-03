@@ -7,9 +7,9 @@
         <button v-if="showJson" @click="copyJson" class="secondary-btn">Copy</button>
       </div>
     </div>
-    
+
     <pre v-if="showJson" class="json-output">{{ jsonOutput }}</pre>
-    
+
     <table>
       <thead>
         <tr>
@@ -73,7 +73,7 @@ const parseValue = (val: string): any => {
   if (val === 'null') return null;
   if (val === 'undefined') return undefined;
   // Check for number (and not just empty string or whitespace)
-  if (!isNaN(Number(val)) && val.trim() !== '') return Number(val);
+  if (!isNaN(Number(val)) && val.trim() !== '' && val.charAt(0) !== '0') return Number(val);
   try {
     const json = JSON.parse(val);
     if (typeof json === 'object' && json !== null) return json;
@@ -171,10 +171,12 @@ const copyJson = () => {
 table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed; /* Important for overflow control */
+  table-layout: fixed;
+  /* Important for overflow control */
 }
 
-th, td {
+th,
+td {
   border: 1px solid #eee;
   padding: 0.5rem;
   text-align: left;
@@ -184,14 +186,16 @@ th, td {
 }
 
 td {
-  white-space: pre-wrap; /* Allow wrapping for long values */
+  white-space: pre-wrap;
+  /* Allow wrapping for long values */
   word-break: break-all;
   font-family: 'Fira Code', 'Courier New', monospace;
 }
 
 th {
   background-color: #f8f9fa;
-  width: 30%; /* Give keys less space than values */
+  width: 30%;
+  /* Give keys less space than values */
   color: #555;
 }
 </style>
