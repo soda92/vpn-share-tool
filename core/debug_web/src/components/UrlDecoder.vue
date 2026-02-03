@@ -73,7 +73,11 @@ const parseValue = (val: string): any => {
   if (val === 'null') return null;
   if (val === 'undefined') return undefined;
   // Check for number (and not just empty string or whitespace)
-  if (!isNaN(Number(val)) && val.trim() !== '' && val.charAt(0) !== '0') return Number(val);
+  if (!isNaN(Number(val)) && val.trim() !== '') {
+    if (!(val.length > 1 && val.charAt(0) === '0')) {
+      return Number(val);
+    }
+  }
   try {
     const json = JSON.parse(val);
     if (typeof json === 'object' && json !== null) return json;
