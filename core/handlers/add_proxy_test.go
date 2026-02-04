@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/soda92/vpn-share-tool/core/models"
@@ -62,14 +61,5 @@ func TestAddProxyHandler_PreservesSubpath(t *testing.T) {
 	
 	if resp.SharedURL != expectedSharedURL {
 		t.Errorf("SharedURL mismatch.\nExpected: %s\nActual:   %s", expectedSharedURL, resp.SharedURL)
-	}
-
-	// Double check that we didn't just accidentally match the mockProxy.OriginalURL
-	if strings.HasSuffix(resp.SharedURL, mockProxy.Path) && mockProxy.Path != "/specific/path" {
-		// logic check: if mockProxy.Path is empty, strings.HasSuffix is always true, 
-		// but we want to ensure the specific path IS present.
-		if !strings.Contains(resp.SharedURL, "/specific/path") {
-             t.Errorf("SharedURL does not contain the requested path component")
-        }
 	}
 }
