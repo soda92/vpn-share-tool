@@ -48,6 +48,14 @@ func runDeploy(target string) error {
 		return fmt.Errorf("frontend build failed: %w", err)
 	}
 
+	// Move dist to api/dist because frontend_embed.go is in api package
+	srcDist := filepath.Join(rootDir, "discovery", "dist")
+	dstDist := filepath.Join(rootDir, "discovery", "api", "dist")
+	os.RemoveAll(dstDist) // Clean
+	if err := os.Rename(srcDist, dstDist); err != nil {
+		return fmt.Errorf("failed to move dist to api/dist: %w", err)
+	}
+
 	// Build Go binary
 	if err := execCmd(discoveryEntryDir, nil, "go", "build", "-o", "discovery-server"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
