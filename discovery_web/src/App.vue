@@ -5,17 +5,19 @@
     <div class="main-grid" :class="{ 'single-column': !showAllProxies }">
       <!-- Left Column: Tagged URLs (Primary Action) -->
       <div class="left-column">
-        <TaggedList
-          :tagged-urls="taggedUrls"
-          :add-form="newTag"
-          :creating-proxy-urls="creatingProxyUrls"
-          @save-tag="saveTaggedUrl"
-          @create-proxy="createProxy"
-          @open-settings="openSettings"
-          @rename-tag="renameTag"
-          @delete-tag="deleteTag"
-        />
-        
+        <div class="tagged-list-wrapper">
+          <TaggedList
+            :tagged-urls="taggedUrls"
+            :add-form="newTag"
+            :creating-proxy-urls="creatingProxyUrls"
+            @save-tag="saveTaggedUrl"
+            @create-proxy="createProxy"
+            @open-settings="openSettings"
+            @rename-tag="renameTag"
+            @delete-tag="deleteTag"
+          />
+        </div>
+
         <div class="toggle-section">
            <el-button @click="showAllProxies = !showAllProxies">
              {{ showAllProxies ? 'Hide All Active Proxies' : 'Show All Active Proxies' }}
@@ -283,6 +285,20 @@ body {
 
 .main-grid.single-column {
   grid-template-columns: 1fr;
+}
+
+.left-column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.tagged-list-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .toggle-section {
