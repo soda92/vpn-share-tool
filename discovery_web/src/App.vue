@@ -5,51 +5,32 @@
     <div class="main-grid" :class="{ 'single-column': !showAllProxies }">
       <!-- Left Column: Tagged URLs (Primary Action) -->
       <div class="left-column">
-        <TaggedList
-          :tagged-urls="taggedUrls"
-          :add-form="newTag"
-          :creating-proxy-urls="creatingProxyUrls"
-          @save-tag="saveTaggedUrl"
-          @create-proxy="createProxy"
-          @open-settings="openSettings"
-          @rename-tag="renameTag"
-          @delete-tag="deleteTag"
-        />
-        
+        <div class="tagged-list-wrapper">
+          <TaggedList :tagged-urls="taggedUrls" :add-form="newTag" :creating-proxy-urls="creatingProxyUrls"
+            @save-tag="saveTaggedUrl" @create-proxy="createProxy" @open-settings="openSettings" @rename-tag="renameTag"
+            @delete-tag="deleteTag" />
+        </div>
+
         <div class="toggle-section">
-           <el-button @click="showAllProxies = !showAllProxies">
-             {{ showAllProxies ? 'Hide All Active Proxies' : 'Show All Active Proxies' }}
-           </el-button>
+          <el-button @click="showAllProxies = !showAllProxies">
+            {{ showAllProxies ? 'Hide All Active Proxies' : 'Show All Active Proxies' }}
+          </el-button>
         </div>
       </div>
 
       <!-- Right Column: All Active Proxies (Quick Access) -->
       <div v-if="showAllProxies" class="right-column">
-        <ProxyList
-          :cluster-proxies="clusterProxies"
-          @open-settings="openSettings"
-        />
+        <ProxyList :cluster-proxies="clusterProxies" @open-settings="openSettings" />
       </div>
     </div>
 
     <!-- Bottom Section: Active Servers (Info) -->
-    <ServerInfo 
-        :servers="servers" 
-        :latest-version="latestVersion" 
-        @update-server="handleUpdateServer"
-        @open-logs="openLogs"
-    />
+    <ServerInfo :servers="servers" :latest-version="latestVersion" @update-server="handleUpdateServer"
+      @open-logs="openLogs" />
 
-    <SettingsDialog
-      v-model="settingsVisible"
-      :proxy-data="currentSettingsProxy"
-      @save="handleSaveSettings"
-    />
+    <SettingsDialog v-model="settingsVisible" :proxy-data="currentSettingsProxy" @save="handleSaveSettings" />
 
-    <LogViewer
-      v-model="logsVisible"
-      :server-address="currentLogServer"
-    />
+    <LogViewer v-model="logsVisible" :server-address="currentLogServer" />
   </div>
 </template>
 
@@ -85,29 +66,29 @@ const openSettings = (proxy) => {
 };
 
 const openLogs = (address) => {
-    currentLogServer.value = address;
-    logsVisible.value = true;
+  currentLogServer.value = address;
+  logsVisible.value = true;
 };
 
 const handleSaveSettings = async (data) => {
   let success = false;
   // 1. Try New Settings
   try {
-    await axios.post('/update-proxy-settings', { 
-        url: data.url, 
-        settings: data.settings 
+    await axios.post('/update-proxy-settings', {
+      url: data.url,
+      settings: data.settings
     });
     success = true;
   } catch (err) {
     console.warn("New settings API failed:", err);
   }
-  
+
   if (success) {
-      ElNotification({ title: 'Success', message: 'Settings updated.', type: 'success' });
-      fetchTaggedURLs();
-      fetchClusterProxies();
+    ElNotification({ title: 'Success', message: 'Settings updated.', type: 'success' });
+    fetchTaggedURLs();
+    fetchClusterProxies();
   } else {
-      ElNotification({ title: 'Error', message: 'Failed to update settings. Check client connection.', type: 'error' });
+    ElNotification({ title: 'Error', message: 'Failed to update settings. Check client connection.', type: 'error' });
   }
 };
 
@@ -159,7 +140,28 @@ const createProxy = async (url) => {
   creatingProxyUrls.value[url] = true;
   try {
     const response = await axios.post('/create-proxy', { url });
-    ElNotification({ title: 'Success', message: `Proxy created: ${response.data.shared_url}`, type: 'success' });
+    let sharedUrl = response.data.shared_url;
+
+    // Client-side fix for older nodes or partial backend responses:
+    // Reconstruct the full shared URL using the host/port from the response
+    // and the path/query/hash from the original requested URL.
+    try {
+      const originalObj = new URL(url);
+      const sharedObj = new URL(sharedUrl);
+
+      // We trust the backend for the scheme, host, and port (where the proxy lives)
+      // We trust the original request for the path, query, and hash (what the user wants)
+      sharedObj.pathname = originalObj.pathname;
+      sharedObj.search = originalObj.search;
+      sharedObj.hash = originalObj.hash;
+
+      sharedUrl = sharedObj.toString();
+    } catch (e) {
+      // If parsing fails, fall back to the backend's response
+      console.warn("Failed to reconstruct shared URL, using backend response:", e);
+    }
+
+    ElNotification({ title: 'Success', message: `Proxy created: ${sharedUrl}`, type: 'success' });
     fetchTaggedURLs(); // Refresh to show new proxy status
     fetchClusterProxies();
   } catch (err) {
@@ -254,13 +256,15 @@ body {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
-  margin: 0 auto; /* Center naturally */
+  margin: 0 auto;
+  /* Center naturally */
 }
 
 @media (min-width: 769px) {
   .container {
     width: calc(100% - 2rem);
-    min-height: auto; /* Allow content to dictate height, but keep min for look */
+    min-height: auto;
+    /* Allow content to dictate height, but keep min for look */
     margin: 1rem auto;
     border-radius: 8px;
   }
@@ -276,7 +280,6 @@ body {
 
 .main-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 1rem;
   /* Removed overflow and flex-grow */
 }
@@ -285,9 +288,24 @@ body {
   grid-template-columns: 1fr;
 }
 
+.left-column {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 1rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.tagged-list-wrapper {
+  min-height: 0;
+  /* Critical for scrolling inside grid item */
+  /* No flex needed here anymore */
+}
+
 .toggle-section {
-  margin-top: 1rem;
   text-align: center;
+  /* margin-top is handled by gap in grid */
+  margin-top: 0;
 }
 
 @media (max-width: 768px) {

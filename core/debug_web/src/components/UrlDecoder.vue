@@ -74,6 +74,7 @@ const parseValue = (val: string): any => {
   if (val === 'undefined') return undefined;
   // Check for number (and not just empty string or whitespace)
   if (!isNaN(Number(val)) && val.trim() !== '') {
+    // [HACK] compatible with "0123" string values
     if (!(val.length > 1 && val.charAt(0) === '0')) {
       return Number(val);
     }

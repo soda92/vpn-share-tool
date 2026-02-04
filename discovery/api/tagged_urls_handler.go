@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/soda92/vpn-share-tool/core/models"
@@ -48,7 +49,29 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 		enrichedUrls[i] = EnrichedTaggedURL{TaggedURL: u}
 		// Check against Hostname (keys in allProxies are normalized hostnames)
 		if proxyInfo, ok := allProxies[utils.NormalizeHost(u.URL)]; ok {
+			// Default to what the proxy reports
 			enrichedUrls[i].ProxyURL = proxyInfo.SharedURL
+
+			// Try to make it more specific using the Tagged URL's path/query
+			if uURL, err := url.Parse(u.URL); err == nil {
+				if pURL, err := url.Parse(proxyInfo.SharedURL); err == nil {
+					// We want the Proxy's Scheme://Host:Port, but the Tagged URL's Path/Query
+					path := uURL.Path
+					// Ensure path starts with / to prevent open redirect vulnerabilities
+					if !strings.HasPrefix(path, "/") {
+						path = "/" + path
+					}
+					pURL.Path = path
+					pURL.RawQuery = uURL.RawQuery
+					pURL.Fragment = uURL.Fragment
+					enrichedUrls[i].ProxyURL = pURL.String()
+				} else {
+					log.Printf("Error parsing shared URL for enrichment %s: %v", proxyInfo.SharedURL, err)
+				}
+			} else {
+				log.Printf("Error parsing tagged URL for enrichment %s: %v", u.URL, err)
+			}
+
 			enrichedUrls[i].Settings = proxyInfo.Settings
 			enrichedUrls[i].ActiveSystems = proxyInfo.ActiveSystems
 			enrichedUrls[i].RequestRate = proxyInfo.RequestRate
