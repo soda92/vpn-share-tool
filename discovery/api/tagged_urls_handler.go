@@ -56,11 +56,20 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 			if uURL, err := url.Parse(u.URL); err == nil {
 				if pURL, err := url.Parse(proxyInfo.SharedURL); err == nil {
 					// We want the Proxy's Scheme://Host:Port, but the Tagged URL's Path/Query
-					pURL.Path = uURL.Path
+					path := uURL.Path
+					// Ensure path starts with / to prevent open redirect vulnerabilities
+					if !strings.HasPrefix(path, "/") {
+						path = "/" + path
+					}
+					pURL.Path = path
 					pURL.RawQuery = uURL.RawQuery
 					pURL.Fragment = uURL.Fragment
 					enrichedUrls[i].ProxyURL = pURL.String()
+				} else {
+					log.Printf("Error parsing shared URL for enrichment %s: %v", proxyInfo.SharedURL, err)
 				}
+			} else {
+				log.Printf("Error parsing tagged URL for enrichment %s: %v", u.URL, err)
 			}
 
 			enrichedUrls[i].Settings = proxyInfo.Settings

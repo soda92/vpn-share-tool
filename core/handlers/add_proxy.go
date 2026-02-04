@@ -4,8 +4,10 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/soda92/vpn-share-tool/core/models"
 )
@@ -47,14 +49,26 @@ func (h *AddProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// This ensures the client gets the externally accessible URL.
 	var sharedURL string
 	if MyIP != "" {
+		// Use net/url for safe construction, handling IPv6 and path encoding
+		host := net.JoinHostPort(MyIP, fmt.Sprintf("%d", newProxy.RemotePort))
+		u := &url.URL{
+			Scheme: "http",
+			Host:   host,
+		}
+
 		// Use the path from the requested URL, not the proxy's original path,
 		// because the proxy might be reused for different paths on the same host.
-		reqPath := ""
 		if parsedUrl, err := url.Parse(req.URL); err == nil {
-			reqPath = parsedUrl.Path
+			// Ensure path starts with /
+			path := parsedUrl.Path
+			if !strings.HasPrefix(path, "/") {
+				path = "/" + path
+			}
+			u.Path = path
+		} else {
+			u.Path = "/"
 		}
-		// Ensure path starts with / if not empty, or handled by browser
-		sharedURL = fmt.Sprintf("http://%s:%d%s", MyIP, newProxy.RemotePort, reqPath)
+		sharedURL = u.String()
 	}
 
 	type sharedURLInfo struct {
