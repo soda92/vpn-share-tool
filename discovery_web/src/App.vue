@@ -280,7 +280,6 @@ body {
 
 .main-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 1rem;
   /* Removed overflow and flex-grow */
 }
