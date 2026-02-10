@@ -125,6 +125,17 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 	}
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
+		// Inject CORS/PNA headers to allow access from private/local networks
+		reqOrigin := resp.Request.Header.Get("Origin")
+		if reqOrigin != "" {
+			resp.Header.Set("Access-Control-Allow-Origin", reqOrigin)
+			resp.Header.Set("Access-Control-Allow-Credentials", "true")
+			resp.Header.Add("Vary", "Origin")
+		} else {
+			resp.Header.Set("Access-Control-Allow-Origin", "*")
+		}
+		resp.Header.Set("Access-Control-Allow-Private-Network", "true")
+
 		return HandleRedirect(resp, target)
 	}
 
@@ -150,6 +161,23 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", remotePort),
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Handle CORS/PNA Preflight (OPTIONS)
+			if r.Method == "OPTIONS" {
+				origin := r.Header.Get("Origin")
+				if origin != "" {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+					w.Header().Add("Vary", "Origin")
+				} else {
+					w.Header().Set("Access-Control-Allow-Origin", "*")
+				}
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH")
+				w.Header().Set("Access-Control-Allow-Headers", "*")
+				w.Header().Set("Access-Control-Allow-Private-Network", "true")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
 			// Update metrics
 			atomic.AddInt64(&newProxy.ReqCounter, 1)
 			atomic.AddInt64(&newProxy.TotalRequests, 1)
