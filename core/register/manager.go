@@ -2,6 +2,7 @@ package register
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -14,11 +15,22 @@ import (
 )
 
 func Start(cfg Config) {
+	if cfg.Ctx == nil {
+		cfg.Ctx = context.Background()
+	}
+
 	currentIP := cfg.MyIP
 	// Local Mode flag to avoid repeated signals/logs
 	inLocalMode := false
 
 	for {
+		select {
+		case <-cfg.Ctx.Done():
+			log.Println("Stopping registration loop due to context cancellation.")
+			return
+		default:
+		}
+
 		// 0. Try Cached IP first
 		cachedIP := loadDiscoveryCache()
 		if cachedIP != "" {
@@ -26,10 +38,15 @@ func Start(cfg Config) {
 			if err == nil {
 				// Connected successfully
 				inLocalMode = false
-				manageConnection(conn, cfg)
+				manageConnection(cfg.Ctx, conn, cfg)
 				log.Printf("Connection to discovery server lost. Retrying...")
-				time.Sleep(5 * time.Second)
-				continue
+				
+				select {
+				case <-cfg.Ctx.Done():
+					return
+				case <-time.After(5 * time.Second):
+					continue
+				}
 			}
 		}
 
@@ -83,18 +100,29 @@ func Start(cfg Config) {
 			}
 
 			log.Printf("Retrying in 5 seconds.")
-			time.Sleep(5 * time.Second)
-			continue
+			
+			select {
+			case <-cfg.Ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+				continue
+			}
 		}
 
 		// Connected successfully
 		inLocalMode = false
 		saveDiscoveryCache(connectedIP)
 
-		manageConnection(conn, cfg)
+		manageConnection(cfg.Ctx, conn, cfg)
 
 		log.Printf("Connection to discovery server lost. Retrying...")
-		time.Sleep(5 * time.Second)
+		
+		select {
+		case <-cfg.Ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+			continue
+		}
 	}
 }
 
@@ -154,7 +182,10 @@ func connectToDiscoveryServer(ip string, cfg Config) (net.Conn, error) {
 	// Prepare TLS config
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(cfg.RootCACert)
-	tlsConfig := &tls.Config{RootCAs: caCertPool}
+	tlsConfig := &tls.Config{
+		RootCAs:            caCertPool,
+		InsecureSkipVerify: true, // Allow connection via IP address
+	}
 	dialer := &net.Dialer{Timeout: 2 * time.Second}
 
 	// Try TLS first
@@ -171,7 +202,7 @@ func connectToDiscoveryServer(ip string, cfg Config) (net.Conn, error) {
 	return nil, err
 }
 
-func manageConnection(conn net.Conn, cfg Config) {
+func manageConnection(ctx context.Context, conn net.Conn, cfg Config) {
 	defer conn.Close()
 	scanner := bufio.NewScanner(conn)
 
@@ -194,10 +225,13 @@ func manageConnection(conn net.Conn, cfg Config) {
 		serverDetectedIP := parts[1]
 		if cfg.MyIP != serverDetectedIP {
 			log.Printf("Server sees us as %s (Local was %s). Updating.", serverDetectedIP, cfg.MyIP)
-			if cfg.SetMyIP != nil {
-				cfg.SetMyIP(serverDetectedIP)
-			}
 		}
+		
+		// ALWAYS call SetMyIP on successful registration to signal readiness
+		if cfg.SetMyIP != nil {
+			cfg.SetMyIP(serverDetectedIP)
+		}
+
 		log.Printf("Successfully registered with discovery server. My IP is %s", serverDetectedIP)
 		if cfg.IPReadyChan != nil {
 			// Signal that the IP is ready
@@ -215,29 +249,35 @@ func manageConnection(conn net.Conn, cfg Config) {
 	heartbeatTicker := time.NewTicker(5 * time.Second)
 	defer heartbeatTicker.Stop()
 
-	for range heartbeatTicker.C {
-		heartbeatMsg := fmt.Sprintf("HEARTBEAT %d\n", cfg.APIPort)
-		if _, err := conn.Write([]byte(heartbeatMsg)); err != nil {
-			log.Printf("Failed to send HEARTBEAT: %v", err)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Stopping heartbeats due to context cancellation.")
 			return
-		}
+		case <-heartbeatTicker.C:
+			heartbeatMsg := fmt.Sprintf("HEARTBEAT %d\n", cfg.APIPort)
+			if _, err := conn.Write([]byte(heartbeatMsg)); err != nil {
+				log.Printf("Failed to send HEARTBEAT: %v", err)
+				return
+			}
 
-		// Wait for and process server response
-		if !scanner.Scan() {
-			log.Printf("Did not receive response from server after HEARTBEAT.")
-			return
-		}
+			// Wait for and process server response
+			if !scanner.Scan() {
+				log.Printf("Did not receive response from server after HEARTBEAT.")
+				return
+			}
 
-		response := scanner.Text()
-		switch response {
-		case "OK":
-			// All good
-		case "ERR_NOT_REGISTERED":
-			log.Printf("Heartbeat failed: instance not registered. Re-registering...")
-			return
-		default:
-			log.Printf("Unknown response from server after HEARTBEAT: %s", response)
-			return
+			response := scanner.Text()
+			switch response {
+			case "OK":
+				// All good
+			case "ERR_NOT_REGISTERED":
+				log.Printf("Heartbeat failed: instance not registered. Re-registering...")
+				return
+			default:
+				log.Printf("Unknown response from server after HEARTBEAT: %s", response)
+				return
+			}
 		}
 	}
 }

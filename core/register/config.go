@@ -1,6 +1,9 @@
 package register
 
+import "context"
+
 type Config struct {
+	Ctx                context.Context
 	MyIP               string
 	SetMyIP            func(string)
 	Version            string
