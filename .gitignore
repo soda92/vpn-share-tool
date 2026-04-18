@@ -49,3 +49,4 @@ flutter_gui/linux/libcore*
 certs/
 certs/*.key
 discovery-server/*.key
+core/resources/ca.crt
