@@ -19,29 +19,44 @@ type EventCallback interface {
 var (
 	eventCallbackMu sync.Mutex
 	eventCallback   EventCallback
+	unifiedEventChan = make(chan string, 100)
 )
 
 // SetEventCallback registers a Dart function to be called when events occur.
-// This function is called from Dart via gomobile.
 func SetEventCallback(cb EventCallback) {
 	eventCallbackMu.Lock()
 	eventCallback = cb
 	eventCallbackMu.Unlock()
-	log.Println("Event callback registered from Dart.")
+	log.Println("Event callback registered.")
+}
+
+// GetNextEvent blocks until an event is available and returns it.
+// This is used by the FFI bridge to avoid thread-safety issues with callbacks.
+func GetNextEvent() string {
+	return <-unifiedEventChan
 }
 
 func init() {
-	// Start goroutines to listen for core events and push them to Dart.
+	// Start goroutines to listen for core events and push them to both the callback and the unified channel.
 	go func() {
 		for p := range proxy.ProxyAddedChan {
+			event := struct {
+				Type  string      `json:"type"`
+				Proxy interface{} `json:"proxy"`
+			}{"added", p}
+			data, _ := json.Marshal(event)
+			eventJSON := string(data)
+
+			// Push to unified channel (for Linux FFI)
+			select {
+			case unifiedEventChan <- eventJSON:
+			default:
+			}
+
+			// Call callback (for Android Gomobile)
 			eventCallbackMu.Lock()
 			if eventCallback != nil {
-				event := struct {
-					Type  string      `json:"type"`
-					Proxy interface{} `json:"proxy"`
-				}{"added", p}
-				data, _ := json.Marshal(event)
-				eventCallback.OnEvent(string(data))
+				eventCallback.OnEvent(eventJSON)
 			}
 			eventCallbackMu.Unlock()
 		}
@@ -49,14 +64,21 @@ func init() {
 
 	go func() {
 		for p := range proxy.ProxyRemovedChan {
+			event := struct {
+				Type  string      `json:"type"`
+				Proxy interface{} `json:"proxy"`
+			}{"removed", p}
+			data, _ := json.Marshal(event)
+			eventJSON := string(data)
+
+			select {
+			case unifiedEventChan <- eventJSON:
+			default:
+			}
+
 			eventCallbackMu.Lock()
 			if eventCallback != nil {
-				event := struct {
-					Type  string      `json:"type"`
-					Proxy interface{} `json:"proxy"`
-				}{"removed", p}
-				data, _ := json.Marshal(event)
-				eventCallback.OnEvent(string(data))
+				eventCallback.OnEvent(eventJSON)
 			}
 			eventCallbackMu.Unlock()
 		}
@@ -64,14 +86,21 @@ func init() {
 
 	go func() {
 		for ip := range proxy.IPReadyChan {
+			event := struct {
+				Type string `json:"type"`
+				IP   string `json:"ip"`
+			}{"ip_ready", ip}
+			data, _ := json.Marshal(event)
+			eventJSON := string(data)
+
+			select {
+			case unifiedEventChan <- eventJSON:
+			default:
+			}
+
 			eventCallbackMu.Lock()
 			if eventCallback != nil {
-				event := struct {
-					Type string `json:"type"`
-					IP   string `json:"ip"`
-				}{"ip_ready", ip}
-				data, _ := json.Marshal(event)
-				eventCallback.OnEvent(string(data))
+				eventCallback.OnEvent(eventJSON)
 			}
 			eventCallbackMu.Unlock()
 		}

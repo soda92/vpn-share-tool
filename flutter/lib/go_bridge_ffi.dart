@@ -7,8 +7,8 @@ import 'package:vpn_share_tool/go_bridge_interface.dart';
 
 // FFI function signatures
 typedef _ShareURLFunc = Void Function(Pointer<Utf8>);
-typedef _SetEventCallbackFunc =
-    Void Function(Pointer<NativeFunction<EventCallbackC>>);
+typedef _GetNextEventFunc = Pointer<Utf8> Function();
+typedef _FreeStringFunc = Void Function(Pointer<Utf8>);
 typedef _GetIPFunc = Pointer<Utf8> Function();
 typedef _GetProxiesFunc = Pointer<Utf8> Function();
 typedef _StartApiServerWithPortFunc = Void Function(Int32 port);
@@ -17,25 +17,13 @@ typedef _SetStoragePathFunc = Void Function(Pointer<Utf8>);
 
 // Dart function signatures
 typedef _ShareURL = void Function(Pointer<Utf8>);
-typedef _SetEventCallback =
-    void Function(Pointer<NativeFunction<EventCallbackC>>);
+typedef _GetNextEvent = Pointer<Utf8> Function();
+typedef _FreeString = void Function(Pointer<Utf8>);
 typedef _GetIP = Pointer<Utf8> Function();
 typedef _GetProxies = Pointer<Utf8> Function();
 typedef _StartApiServerWithPort = void Function(int port);
 typedef _SetDeviceIP = void Function(Pointer<Utf8>);
 typedef _SetStoragePath = void Function(Pointer<Utf8>);
-
-// Callback type for Go to call Dart
-typedef EventCallbackC = Void Function(Pointer<Utf8>);
-
-@pragma('vm:entry-point')
-void _eventCallback(Pointer<Utf8> eventJsonC) {
-  final eventJson = eventJsonC.toDartString();
-  _eventPort.send(eventJson);
-}
-
-// This is the port that the main isolate listens on for events from Go.
-late SendPort _eventPort;
 
 class GoBridgeLinux implements GoBridge {
   static final DynamicLibrary _lib = DynamicLibrary.open('libcore.so');
@@ -44,9 +32,13 @@ class GoBridgeLinux implements GoBridge {
       .lookup<NativeFunction<_ShareURLFunc>>('ShareURL')
       .asFunction<_ShareURL>();
 
-  static final _SetEventCallback _setEventCallback = _lib
-      .lookup<NativeFunction<_SetEventCallbackFunc>>('SetEventCallback')
-      .asFunction<_SetEventCallback>();
+  static final _GetNextEvent _getNextEvent = _lib
+      .lookup<NativeFunction<_GetNextEventFunc>>('GetNextEvent')
+      .asFunction<_GetNextEvent>();
+
+  static final _FreeString _freeString = _lib
+      .lookup<NativeFunction<_FreeStringFunc>>('FreeString')
+      .asFunction<_FreeString>();
 
   static final _GetIP _getIP = _lib
       .lookup<NativeFunction<_GetIPFunc>>('GetIP')
@@ -55,12 +47,6 @@ class GoBridgeLinux implements GoBridge {
   static final _GetProxies _getProxies = _lib
       .lookup<NativeFunction<_GetProxiesFunc>>('GetProxies')
       .asFunction<_GetProxies>();
-
-  static final _StartApiServerWithPort _startApiServerWithPort = _lib
-      .lookup<NativeFunction<_StartApiServerWithPortFunc>>(
-        'StartApiServerWithPort',
-      )
-      .asFunction<_StartApiServerWithPort>();
 
   static final _StartApiServerWithPort _startGoBackendWithPort = _lib
       .lookup<NativeFunction<_StartApiServerWithPortFunc>>(
@@ -80,15 +66,38 @@ class GoBridgeLinux implements GoBridge {
       StreamController<Map<String, dynamic>>.broadcast();
 
   GoBridgeLinux() {
-    // Set up a receive port for events from the Go callback
+    _startEventLoop();
+  }
+
+  // Start a separate thread (Isolate) to poll for events from Go.
+  // This avoids blocking the UI thread and prevents the "outside isolate" crash.
+  void _startEventLoop() async {
     final receivePort = ReceivePort();
-    _eventPort = receivePort.sendPort;
+    // We pass the path to the library so the new isolate can open it.
+    await Isolate.spawn(_eventWorker, receivePort.sendPort);
+
     receivePort.listen((message) {
       _eventStreamController.add(jsonDecode(message as String));
     });
+  }
 
-    // Register the Dart callback with Go
-    _setEventCallback(Pointer.fromFunction<EventCallbackC>(_eventCallback));
+  // This runs in a separate background thread
+  static void _eventWorker(SendPort sendPort) {
+    // Re-open library in the new isolate
+    final lib = DynamicLibrary.open('libcore.so');
+    final getEvent = lib
+        .lookup<NativeFunction<_GetNextEventFunc>>('GetNextEvent')
+        .asFunction<_GetNextEvent>();
+    final freeStr = lib
+        .lookup<NativeFunction<_FreeStringFunc>>('FreeString')
+        .asFunction<_FreeString>();
+
+    while (true) {
+      final eventC = getEvent(); // This BLOCKS until Go has an event
+      final event = eventC.toDartString();
+      freeStr(eventC); // Free Go-allocated string
+      sendPort.send(event);
+    }
   }
 
   @override
@@ -102,25 +111,15 @@ class GoBridgeLinux implements GoBridge {
   Future<String?> getIP() async {
     final ipC = _getIP();
     final ip = ipC.toDartString();
-    // We don't free here because Go allocated the string via C.CString
-    // In a real app we'd need a way to free it or use a pre-allocated buffer
+    _freeString(ipC);
     return ip.isEmpty ? null : ip;
   }
 
   @override
-  void pollEvents(dynamic args) {
-    // No-op, events are pushed via stream
-  }
+  void startForegroundService() {}
 
   @override
-  void startForegroundService() {
-    // No-op for Linux
-  }
-
-  @override
-  void stopForegroundService() {
-    // No-op for Linux
-  }
+  void stopForegroundService() {}
 
   @override
   void startGoBackendWithPort(int port) {
@@ -128,14 +127,10 @@ class GoBridgeLinux implements GoBridge {
   }
 
   @override
-  Future<bool> hasNotificationPermission() async {
-    return Future.value(true);
-  }
+  Future<bool> hasNotificationPermission() => Future.value(true);
 
   @override
-  Future<bool> isForegroundServiceRunning() async {
-    return Future.value(false);
-  }
+  Future<bool> isForegroundServiceRunning() => Future.value(false);
 
   @override
   void setDeviceIP(String ip) {
@@ -151,5 +146,6 @@ class GoBridgeLinux implements GoBridge {
     malloc.free(pathC);
   }
 
+  @override
   Stream<Map<String, dynamic>> get eventStream => _eventStreamController.stream;
 }

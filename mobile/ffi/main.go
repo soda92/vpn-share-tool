@@ -2,10 +2,6 @@ package main
 
 /*
 #include <stdlib.h>
-typedef void (*event_callback)(const char* event_json);
-static void call_event_callback(void* cb, const char* event_json) {
-    ((event_callback)cb)(event_json);
-}
 */
 import "C"
 import (
@@ -13,20 +9,14 @@ import (
 	"github.com/soda92/vpn-share-tool/mobile"
 )
 
-// cEventCallback implements the mobile.EventCallback interface for C/FFI.
-type cEventCallback struct {
-	ptr unsafe.Pointer
+//export GetNextEvent
+func GetNextEvent() *C.char {
+	return C.CString(mobile.GetNextEvent())
 }
 
-func (c *cEventCallback) OnEvent(eventJSON string) {
-	cStr := C.CString(eventJSON)
-	defer C.free(unsafe.Pointer(cStr))
-	C.call_event_callback(c.ptr, cStr)
-}
-
-//export SetEventCallback
-func SetEventCallback(cb unsafe.Pointer) {
-	mobile.SetEventCallback(&cEventCallback{ptr: cb})
+//export FreeString
+func FreeString(str *C.char) {
+	C.free(unsafe.Pointer(str))
 }
 
 //export StartApiServerWithPort
