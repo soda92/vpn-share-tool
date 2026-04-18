@@ -16,6 +16,10 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  test: {
+    environment: 'happy-dom',
+    root: fileURLToPath(new URL('./', import.meta.url)),
+  },
   server: {
     proxy: {
       '/debug/sessions': 'http://localhost:10081',
