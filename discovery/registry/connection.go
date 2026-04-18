@@ -9,10 +9,20 @@ import (
 	"strings"
 	"time"
 )
-
 func HandleConnection(conn net.Conn) {
 	var instanceAddress string
-	remoteAddr := conn.RemoteAddr().(*net.TCPAddr).IP.String()
+	remoteAddr := "unknown"
+	if tcpAddr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+		remoteAddr = tcpAddr.IP.String()
+	} else {
+		// Fallback for non-TCP connections (e.g. net.Pipe in tests)
+		host, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+		if err == nil {
+			remoteAddr = host
+		} else {
+			remoteAddr = conn.RemoteAddr().String()
+		}
+	}
 
 	defer func() {
 		conn.Close()
