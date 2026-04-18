@@ -16,6 +16,8 @@ import (
 )
 
 func TestE2E_ProxyTraffic(t *testing.T) {
+	proxy.Reset()
+
 	// 0. Setup Temporary Storage for the test
 	tmpDir, err := os.MkdirTemp("", "vpn-share-test-*")
 	if err != nil {

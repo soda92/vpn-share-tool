@@ -228,6 +228,17 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 	return newProxy, nil
 }
 
+func Reset() {
+	Shutdown()
+	ProxiesLock.Lock()
+	Proxies = nil
+	ProxiesLock.Unlock()
+	MyIP = ""
+	APIPort = 0
+	DiscoveryServerURL = ""
+	pipeline.ResetReachCache()
+}
+
 func Shutdown() {
 	ProxiesLock.Lock()
 	proxiesToShutdown := make([]*models.SharedProxy, len(Proxies))

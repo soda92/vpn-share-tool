@@ -33,6 +33,12 @@ var (
 	}
 )
 
+func ResetReachCache() {
+	reachCacheLock.Lock()
+	reachCache = make(map[string]reachabilityResult)
+	reachCacheLock.Unlock()
+}
+
 func isReachableFast(urlStr string) bool {
 	// 1. Check Cache
 	reachCacheLock.RLock()
