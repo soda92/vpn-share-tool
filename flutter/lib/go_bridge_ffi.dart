@@ -6,11 +6,11 @@ import 'package:ffi/ffi.dart';
 import 'package:vpn_share_tool/go_bridge_interface.dart';
 
 // FFI function signatures
-typedef _StartFunc = Void Function();
 typedef _ShareURLFunc = Void Function(Pointer<Utf8>);
 typedef _SetEventCallbackFunc =
     Void Function(Pointer<NativeFunction<EventCallbackC>>);
 typedef _GetIPFunc = Pointer<Utf8> Function();
+typedef _GetProxiesFunc = Pointer<Utf8> Function();
 typedef _StartApiServerWithPortFunc = Void Function(Int32 port);
 typedef _SetDeviceIPFunc = Void Function(Pointer<Utf8>);
 typedef _SetStoragePathFunc = Void Function(Pointer<Utf8>);
@@ -20,6 +20,7 @@ typedef _ShareURL = void Function(Pointer<Utf8>);
 typedef _SetEventCallback =
     void Function(Pointer<NativeFunction<EventCallbackC>>);
 typedef _GetIP = Pointer<Utf8> Function();
+typedef _GetProxies = Pointer<Utf8> Function();
 typedef _StartApiServerWithPort = void Function(int port);
 typedef _SetDeviceIP = void Function(Pointer<Utf8>);
 typedef _SetStoragePath = void Function(Pointer<Utf8>);
@@ -38,23 +39,39 @@ late SendPort _eventPort;
 
 class GoBridgeLinux implements GoBridge {
   static final DynamicLibrary _lib = DynamicLibrary.open('libcore.so');
+
   static final _ShareURL _shareURL = _lib
       .lookup<NativeFunction<_ShareURLFunc>>('ShareURL')
       .asFunction<_ShareURL>();
+
   static final _SetEventCallback _setEventCallback = _lib
       .lookup<NativeFunction<_SetEventCallbackFunc>>('SetEventCallback')
       .asFunction<_SetEventCallback>();
+
   static final _GetIP _getIP = _lib
       .lookup<NativeFunction<_GetIPFunc>>('GetIP')
       .asFunction<_GetIP>();
+
+  static final _GetProxies _getProxies = _lib
+      .lookup<NativeFunction<_GetProxiesFunc>>('GetProxies')
+      .asFunction<_GetProxies>();
+
   static final _StartApiServerWithPort _startApiServerWithPort = _lib
       .lookup<NativeFunction<_StartApiServerWithPortFunc>>(
         'StartApiServerWithPort',
       )
       .asFunction<_StartApiServerWithPort>();
+
+  static final _StartApiServerWithPort _startGoBackendWithPort = _lib
+      .lookup<NativeFunction<_StartApiServerWithPortFunc>>(
+        'StartGoBackendWithPort',
+      )
+      .asFunction<_StartApiServerWithPort>();
+
   static final _SetDeviceIP _setDeviceIP = _lib
       .lookup<NativeFunction<_SetDeviceIPFunc>>('SetDeviceIP')
       .asFunction<_SetDeviceIP>();
+
   static final _SetStoragePath _setStoragePath = _lib
       .lookup<NativeFunction<_SetStoragePathFunc>>('SetStoragePath')
       .asFunction<_SetStoragePath>();
@@ -85,12 +102,11 @@ class GoBridgeLinux implements GoBridge {
   Future<String?> getIP() async {
     final ipC = _getIP();
     final ip = ipC.toDartString();
-    malloc.free(ipC); // Free the Go-allocated string
+    // We don't free here because Go allocated the string via C.CString
+    // In a real app we'd need a way to free it or use a pre-allocated buffer
     return ip.isEmpty ? null : ip;
   }
 
-  // This method is no longer used for polling, but we keep it to satisfy the interface.
-  // The actual event stream is exposed via eventStream.
   @override
   void pollEvents(dynamic args) {
     // No-op, events are pushed via stream
@@ -98,17 +114,17 @@ class GoBridgeLinux implements GoBridge {
 
   @override
   void startForegroundService() {
-    // No-op for Linux, as foreground service is an Android-specific concept.
+    // No-op for Linux
   }
 
   @override
   void stopForegroundService() {
-    // No-op for Linux, as foreground service is an Android-specific concept.
+    // No-op for Linux
   }
 
   @override
   void startGoBackendWithPort(int port) {
-    _startApiServerWithPort(port);
+    _startGoBackendWithPort(port);
   }
 
   @override

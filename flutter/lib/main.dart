@@ -137,53 +137,28 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _startListeningEvents() {
-    if (Platform.isLinux) {
-      (_bridge as GoBridgeLinux).eventStream.listen((event) {
-        if (mounted) {
-          setState(() {
-            if (event['type'] == 'ip_ready') {
-              _ipAddress = event['ip'];
-            } else if (event['type'] == 'added') {
-              _proxies.removeWhere(
-                (p) => p['original_url'] == event['proxy']['original_url'],
-              );
-              _proxies.add(event['proxy']);
-            } else if (event['type'] == 'removed') {
-              _proxies.removeWhere(
-                (p) => p['original_url'] == event['proxy']['original_url'],
-              );
-            } else if (event['type'] == 'error') {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error from Go: ${event['message']}')),
-              );
-            }
-          });
-        }
-      });
-    } else {
-      (_bridge as GoBridgeAndroid).eventStream.listen((event) {
-        if (mounted) {
-          setState(() {
-            if (event['type'] == 'ip_ready') {
-              _ipAddress = event['ip'];
-            } else if (event['type'] == 'added') {
-              _proxies.removeWhere(
-                (p) => p['original_url'] == event['proxy']['original_url'],
-              );
-              _proxies.add(event['proxy']);
-            } else if (event['type'] == 'removed') {
-              _proxies.removeWhere(
-                (p) => p['original_url'] == event['proxy']['original_url'],
-              );
-            } else if (event['type'] == 'error') {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error from Go: ${event['message']}')),
-              );
-            }
-          });
-        }
-      });
-    }
+    _bridge.eventStream.listen((event) {
+      if (mounted) {
+        setState(() {
+          if (event['type'] == 'ip_ready') {
+            _ipAddress = event['ip'];
+          } else if (event['type'] == 'added') {
+            _proxies.removeWhere(
+              (p) => p['original_url'] == event['proxy']['original_url'],
+            );
+            _proxies.add(event['proxy']);
+          } else if (event['type'] == 'removed') {
+            _proxies.removeWhere(
+              (p) => p['original_url'] == event['proxy']['original_url'],
+            );
+          } else if (event['type'] == 'error') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error from Go: ${event['message']}')),
+            );
+          }
+        });
+      }
+    });
   }
 
   void _shareUrl() {
