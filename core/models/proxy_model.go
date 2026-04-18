@@ -12,6 +12,15 @@ type contextKey string
 
 const OriginalHostKey contextKey = "originalHost"
 
+func WithOriginalHost(ctx context.Context, host string) context.Context {
+	return context.WithValue(ctx, OriginalHostKey, host)
+}
+
+func GetOriginalHost(ctx context.Context) (string, bool) {
+	host, ok := ctx.Value(OriginalHostKey).(string)
+	return host, ok
+}
+
 type PipelineServices struct {
 	CreateProxy func(url string, port int) (*SharedProxy, error)
 	MyIP        string
