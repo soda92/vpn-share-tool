@@ -31,8 +31,8 @@ const (
 var (
 	Proxies            []*models.SharedProxy
 	ProxiesLock        sync.RWMutex
-	ProxyAddedChan     = make(chan *models.SharedProxy)
-	ProxyRemovedChan   = make(chan *models.SharedProxy)
+	ProxyAddedChan     = make(chan *models.SharedProxy, 100)
+	ProxyRemovedChan   = make(chan *models.SharedProxy, 100)
 	IPReadyChan        = make(chan string, 1)
 	MyIP               string
 	APIPort            int

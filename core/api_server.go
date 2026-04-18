@@ -16,29 +16,8 @@ import (
 	"github.com/soda92/vpn-share-tool/core/utils"
 )
 
-// StartApiServer starts the HTTP server to provide the API endpoints.
-func StartApiServer(apiPort int) error {
-	APIPort = apiPort
-
-	// Try to auto-detect IP on startup for Desktop/CLI usage
-	if MyIP == "" {
-		ips, err := utils.GetLocalIPs()
-		if err == nil {
-			for _, ip := range ips {
-				if strings.HasPrefix(ip, "192.168.") {
-					SetMyIP(ip)
-					break
-				}
-			}
-			// If no 192.168 found, take first
-			if MyIP == "" && len(ips) > 0 {
-				SetMyIP(ips[0])
-			}
-		}
-	}
-
-	proxy.SetGlobalConfig(MyIP, APIPort, DiscoveryServerURL, GetHTTPClient)
-
+// SetupApiMux initializes the HTTP serve mux with all API routes.
+func SetupApiMux() *http.ServeMux {
 	addProxyHandler := &handlers.AddProxyHandler{
 		GetIP:       func() string { return MyIP },
 		CreateProxy: proxy.ShareUrlAndGetProxy,
@@ -87,17 +66,11 @@ func StartApiServer(apiPort int) error {
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	debug.RegisterDebugRoutes(mux)
+	return mux
+}
 
-	apiServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", apiPort),
-		Handler: mux,
-	}
-
-	log.Printf("Starting API server on port %d", apiPort)
-
-	// Restore saved proxies
-	proxy.LoadProxies()
-
+// StartRegistration starts the background discovery and registration process.
+func StartRegistration(apiPort int) {
 	regCfg := register.Config{
 		MyIP:              MyIP,
 		SetMyIP:           SetMyIP,
@@ -113,6 +86,44 @@ func StartApiServer(apiPort int) error {
 		},
 	}
 	go register.Start(regCfg)
+}
+
+// StartApiServer starts the HTTP server to provide the API endpoints.
+func StartApiServer(apiPort int) error {
+	APIPort = apiPort
+
+	// Try to auto-detect IP on startup for Desktop/CLI usage
+	if MyIP == "" {
+		ips, err := utils.GetLocalIPs()
+		if err == nil {
+			for _, ip := range ips {
+				if strings.HasPrefix(ip, "192.168.") {
+					SetMyIP(ip)
+					break
+				}
+			}
+			// If no 192.168 found, take first
+			if MyIP == "" && len(ips) > 0 {
+				SetMyIP(ips[0])
+			}
+		}
+	}
+
+	proxy.SetGlobalConfig(MyIP, APIPort, DiscoveryServerURL, GetHTTPClient)
+
+	mux := SetupApiMux()
+
+	apiServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", apiPort),
+		Handler: mux,
+	}
+
+	log.Printf("Starting API server on port %d", apiPort)
+
+	// Restore saved proxies
+	proxy.LoadProxies()
+
+	StartRegistration(apiPort)
 
 	if err := apiServer.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("API server stopped with error: %w", err)
