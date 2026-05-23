@@ -12,11 +12,11 @@ describe('FormDecoder.vue', () => {
     // Check decoded data in table
     const rows = wrapper.findAll('tbody tr')
     expect(rows).toHaveLength(4)
-    expect(rows[0].text()).toContain('name')
-    expect(rows[0].text()).toContain('John Doe')
-    expect(rows[2].text()).toContain('hobby')
-    expect(rows[2].text()).toContain('coding')
-    expect(rows[3].text()).toContain('music')
+    expect(rows[0]!.text()).toContain('name')
+    expect(rows[0]!.text()).toContain('John Doe')
+    expect(rows[2]!.text()).toContain('hobby')
+    expect(rows[2]!.text()).toContain('coding')
+    expect(rows[3]!.text()).toContain('music')
   })
 
   it('generates correct JSON output including multi-value fields', async () => {
@@ -46,6 +46,6 @@ describe('FormDecoder.vue', () => {
     
     const rows = wrapper.findAll('tbody tr')
     expect(rows).toHaveLength(1)
-    expect(rows[0].text()).toContain('banana')
+    expect(rows[0]!.text()).toContain('banana')
   })
 })
