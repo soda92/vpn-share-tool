@@ -48,10 +48,7 @@ func init() {
 			eventJSON := string(data)
 
 			// Push to unified channel (for Linux FFI)
-			select {
-			case unifiedEventChan <- eventJSON:
-			default:
-			}
+			unifiedEventChan <- eventJSON
 
 			// Call callback (for Android Gomobile)
 			eventCallbackMu.Lock()
@@ -71,10 +68,7 @@ func init() {
 			data, _ := json.Marshal(event)
 			eventJSON := string(data)
 
-			select {
-			case unifiedEventChan <- eventJSON:
-			default:
-			}
+			unifiedEventChan <- eventJSON
 
 			eventCallbackMu.Lock()
 			if eventCallback != nil {
@@ -93,10 +87,7 @@ func init() {
 			data, _ := json.Marshal(event)
 			eventJSON := string(data)
 
-			select {
-			case unifiedEventChan <- eventJSON:
-			default:
-			}
+			unifiedEventChan <- eventJSON
 
 			eventCallbackMu.Lock()
 			if eventCallback != nil {
