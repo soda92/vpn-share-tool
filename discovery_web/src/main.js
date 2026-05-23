@@ -12,7 +12,7 @@ async function init() {
     const app = createApp(App);
 
     // Initialize PostHog
-    posthog.init('dummy', {
+    posthog.init('phc_ym4rdoQgT2oeKEBvyYb35qacFPTEwQyLNMf3jUojXoiq', {
         api_host: 'https://benefit.sodacris.com',
         person_profiles: 'identified_only',
         capture_pageview: true,
