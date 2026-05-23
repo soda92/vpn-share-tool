@@ -185,6 +185,18 @@ func connectToDiscoveryServer(ip string, cfg Config) (net.Conn, error) {
 	tlsConfig := &tls.Config{
 		RootCAs:            caCertPool,
 		InsecureSkipVerify: true, // Allow connection via IP address
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			opts := x509.VerifyOptions{
+				Roots:         caCertPool,
+				CurrentTime:   time.Now(),
+				Intermediates: x509.NewCertPool(),
+			}
+			for _, cert := range cs.PeerCertificates[1:] {
+				opts.Intermediates.AddCert(cert)
+			}
+			_, err := cs.PeerCertificates[0].Verify(opts)
+			return err
+		},
 	}
 	dialer := &net.Dialer{Timeout: 2 * time.Second}
 
