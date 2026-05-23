@@ -97,9 +97,6 @@ jobs:
         cp dist/libproxy.py dist/libproxy-${{ github.ref_name }}.py
 
     - name: Setup Gomobile and Build Android AAR
-      env:
-        ANDROID_HOME: /usr/local/lib/android/sdk
-        ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk-bundle
       run: |
         go install golang.org/x/mobile/cmd/gomobile@latest
         gomobile init
