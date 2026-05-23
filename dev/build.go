@@ -290,6 +290,12 @@ func runBuildAAR() error {
 		return fmt.Errorf("failed to build frontend for AAR: %w", err)
 	}
 
+	// Ensure the target directory for the AAR exists
+	libsDir := filepath.Join(rootDir, "flutter", "android", "libs")
+	if err := os.MkdirAll(libsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create libs directory: %w", err)
+	}
+
 	env := append(os.Environ(),
 		"ANDROID_NDK_HOME="+androidNdkHome,
 		"GOFLAGS=-mod=mod",
