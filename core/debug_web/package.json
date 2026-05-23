@@ -18,8 +18,10 @@
     "lint": "run-s lint:*"
   },
   "dependencies": {
+    "@sentry/vue": "^10.53.1",
     "@types/diff": "^7.0.2",
     "diff": "^8.0.2",
+    "posthog-js": "^1.376.0",
     "vue": "^3.5.22",
     "vue-router": "^4.6.3",
     "vue-toastification": "^2.0.0-rc.5"
