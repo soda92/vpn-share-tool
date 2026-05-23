@@ -1,0 +1,117 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24.0'
+        cache: true
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Set up Java JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.22.x' # Or adjust to your required version
+        channel: 'stable'
+        cache: true
+
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xorg-dev libgl1-mesa-dev zip
+
+    - name: Write certs from secrets
+      env:
+        CA_CRT: ${{ secrets.CA_CRT }}
+        CA_KEY: ${{ secrets.CA_KEY }}
+        SERVER_CRT: ${{ secrets.SERVER_CRT }}
+        SERVER_KEY: ${{ secrets.SERVER_KEY }}
+      run: |
+        mkdir -p certs
+        echo "$CA_CRT" > certs/ca.crt
+        echo "$CA_KEY" > certs/ca.key
+        echo "$SERVER_CRT" > certs/server.crt
+        echo "$SERVER_KEY" > certs/server.key
+
+    - name: Install Frontend Dependencies & Build Core Debug Web
+      run: |
+        cd core/debug_web
+        npm ci
+        npm run build
+
+    - name: Install Frontend Dependencies & Build Discovery Web
+      run: |
+        cd discovery_web
+        npm ci
+        npm run build
+
+    - name: Build Linux Discovery Server
+      run: |
+        go run ./dev build server --no-frontend
+        tar -czvf discovery-server-linux-amd64-${{ github.ref_name }}.tar.gz -C dist discovery
+
+    - name: Build Windows Desktop Binary (via Docker/fyne-cross)
+      run: |
+        go install github.com/fyne-io/fyne-cross@latest
+        go run ./dev build windows --no-frontend
+        cd fyne-cross/dist/windows-amd64
+        zip -r ../../../vpn-share-tool-windows-amd64-${{ github.ref_name }}.zip vpn-share-tool.exe
+
+    - name: Build Python Library
+      run: |
+        go run ./dev build pylib
+        cp dist/libproxy.py dist/libproxy-${{ github.ref_name }}.py
+
+    - name: Setup Gomobile and Build Android AAR
+      env:
+        ANDROID_HOME: /usr/local/lib/android/sdk
+        ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk-bundle
+      run: |
+        go install golang.org/x/mobile/cmd/gomobile@latest
+        gomobile init
+        go run ./dev build aar
+
+    - name: Build Flutter Android APK
+      run: |
+        cd flutter
+        flutter pub get
+        flutter build apk --release
+        cp build/app/outputs/flutter-apk/app-release.apk ../vpn-share-tool-${{ github.ref_name }}.apk
+
+    - name: Create GitHub Release and Upload Artifacts
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create ${{ github.ref_name }} \
+          --title "Release ${{ github.ref_name }}" \
+          --generate-notes \
+          vpn-share-tool-windows-amd64-${{ github.ref_name }}.zip \
+          discovery-server-linux-amd64-${{ github.ref_name }}.tar.gz \
+          dist/libproxy-${{ github.ref_name }}.py \
+          vpn-share-tool-${{ github.ref_name }}.apk

@@ -30,7 +30,7 @@ func runFlutter(args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
-	flutterDir := filepath.Join(rootDir, "flutter_gui")
+	flutterDir := filepath.Join(rootDir, "flutter")
 
 	env := append(os.Environ(),
 		"ANDROID_HOME="+androidHome,

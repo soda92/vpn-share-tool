@@ -294,8 +294,7 @@ func runBuildAAR() error {
 		"ANDROID_NDK_HOME="+androidNdkHome,
 		"GOFLAGS=-mod=mod",
 	)
-
-	if err := execCmd(rootDir, env, "gomobile", "bind", "-target=android", "-androidapi", "21", "-o", "flutter_gui/android/libs/core.aar", "github.com/soda92/vpn-share-tool/mobile"); err != nil {
+	if err := execCmd(rootDir, env, "gomobile", "bind", "-target=android", "-androidapi", "21", "-o", "flutter/android/libs/core.aar", "github.com/soda92/vpn-share-tool/mobile"); err != nil {
 		return fmt.Errorf("gomobile bind failed: %w", err)
 	}
 
