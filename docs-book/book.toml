@@ -1,0 +1,6 @@
+[book]
+authors = ["soda92"]
+language = "en"
+multilingual = false
+src = "src"
+title = "VPN Share Tool Documentation"
