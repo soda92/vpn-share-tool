@@ -35,6 +35,8 @@ jobs:
       run: |
         mkdir -p core/debug/dist
         touch core/debug/dist/placeholder.txt
+        mkdir -p discovery/api/dist
+        touch discovery/api/dist/placeholder.txt
         mkdir -p gui
         echo "dev" > gui/version.txt
 
