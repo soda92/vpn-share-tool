@@ -217,6 +217,7 @@ h2 {
   border: 1px solid #e0e0e0;
   transition: background-color 0.2s;
   margin-right: 4px;
+  min-width: 0;
 }
 
 .dense-list li:hover {
@@ -229,6 +230,7 @@ h2 {
   align-items: flex-start;
   gap: 0.5rem;
   overflow: hidden;
+  min-width: 0;
 }
 
 .url-info {
@@ -287,6 +289,7 @@ h2 {
   align-items: center;
   gap: 0.4rem;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .stats-badge {
@@ -303,6 +306,8 @@ h2 {
   color: #bdc3c7;
   font-style: italic;
   font-size: 0.75rem;
+  white-space: normal;
+  word-break: break-all;
 }
 
 .debug-toggle {
@@ -381,11 +386,17 @@ h2 {
     max-height: none;
     overflow: visible;
     margin-bottom: 1rem;
+    padding: 0.5rem;
   }
 
   .dense-list {
-    max-height: 400px;
-    overflow-y: auto;
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .dense-list li {
+    padding: 0.5rem;
+    margin-right: 0;
   }
 
   .url-row {

@@ -321,6 +321,7 @@ body {
     margin: 0;
     border-radius: 0;
     box-shadow: none;
+    padding: 0.5rem;
   }
 
   .main-grid {
