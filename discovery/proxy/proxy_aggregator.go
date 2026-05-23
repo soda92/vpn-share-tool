@@ -23,13 +23,14 @@ type ProxyInfo struct {
 	ActiveSystems []string             `json:"active_systems"`
 	RequestRate   float64              `json:"request_rate"`
 	TotalRequests int64                `json:"total_requests"`
+	NodeAddress   string               `json:"node_address"`
 }
 
 // FetchAllClusterProxies queries all active instances for their proxy lists.
-// Returns a map of normalized URL host -> ProxyInfo AND a flat list of all proxies
-func FetchAllClusterProxies() (map[string]ProxyInfo, []ProxyInfo) {
+// Returns a map of normalized URL host -> []ProxyInfo AND a flat list of all proxies
+func FetchAllClusterProxies() (map[string][]ProxyInfo, []ProxyInfo) {
 	activeInstances := registry.GetActiveInstances()
-	hostnameMap := make(map[string]ProxyInfo)
+	hostnameMap := make(map[string][]ProxyInfo)
 	var rawList []ProxyInfo
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -53,12 +54,13 @@ func FetchAllClusterProxies() (map[string]ProxyInfo, []ProxyInfo) {
 					for _, p := range proxies {
 						sharedURL := fmt.Sprintf("http://%s:%d%s", host, p.RemotePort, p.Path)
 						p.SharedURL = sharedURL // Enrich struct
+						p.NodeAddress = inst.Address
 
 						rawList = append(rawList, p)
 
 						// Store by normalized host for tagging matching
 						key := utils.NormalizeHost(p.OriginalURL)
-						hostnameMap[key] = p
+						hostnameMap[key] = append(hostnameMap[key], p)
 					}
 					mu.Unlock()
 				}

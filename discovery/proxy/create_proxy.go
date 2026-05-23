@@ -18,7 +18,8 @@ func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		URL string `json:"url"`
+		URL         string `json:"url"`
+		NodeAddress string `json:"node_address"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -37,6 +38,9 @@ func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
 	reachableNodeFound := false
 
 	for _, instance := range activeInstances {
+		if req.NodeAddress != "" && instance.Address != req.NodeAddress {
+			continue
+		}
 		// Check if the instance can reach the URL
 		canReachURL := fmt.Sprintf("http://%s/can-reach?url=%s", instance.Address, url.QueryEscape(req.URL))
 		client := &http.Client{Timeout: 10 * time.Second}

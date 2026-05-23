@@ -70,6 +70,7 @@ watch(visible, (val) => {
 const save = () => {
   emit('save', {
     url: props.proxyData.original_url || props.proxyData.url, // Handle different naming conventions if any
+    node_address: props.proxyData.node_address || '',
     settings: {
         enable_url_rewrite: form.value.enable_url_rewrite,
         enable_content_mod: form.value.enable_content_mod,

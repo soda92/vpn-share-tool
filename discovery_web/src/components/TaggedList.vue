@@ -14,7 +14,20 @@
           <div class="url-info">
             <div class="tag-name">{{ url.tag }}</div>
             <div class="url-sub">{{ url.url }}</div>
-            <div v-if="url.proxy_url" class="proxy-status active">
+            <!-- Multiple proxies support -->
+            <div v-if="url.proxies && url.proxies.length > 0" class="proxies-container">
+              <div v-for="p in url.proxies" :key="p.proxy_url" class="proxy-status active">
+                <a :href="p.proxy_url" target="_blank">➤ {{ p.proxy_url }}</a>
+                <span class="node-badge" :title="p.node_address">
+                  Node: {{ p.node_address }}
+                </span>
+                <span class="stats-badge" :title="'Total Requests: ' + p.total_requests">
+                  ⚡ {{ p.request_rate ? p.request_rate.toFixed(1) : 0 }}/s
+                </span>
+                <button @click="$emit('open-settings', p)" class="action-btn settings" title="Settings">⚙️</button>
+              </div>
+            </div>
+            <div v-else-if="url.proxy_url" class="proxy-status active">
               <a :href="url.proxy_url" target="_blank">➤ {{ url.proxy_url }}</a>
               <span class="stats-badge" :title="'Total Requests: ' + url.total_requests">
                 ⚡ {{ url.request_rate ? url.request_rate.toFixed(1) : 0 }}/s
@@ -26,15 +39,30 @@
             </div>
           </div>
           <div class="url-actions compact-actions">
-            <button 
-              @click="$emit('create-proxy', url.url)" 
-              :disabled="!!url.proxy_url || creatingProxyUrls[url.url]" 
-              class="action-btn create"
-              title="Create Proxy"
-            >
-              <span v-if="creatingProxyUrls[url.url]" class="spinner"></span>
-              <span v-else>⚡</span>
-            </button>
+            <el-dropdown trigger="click" @command="(cmd) => handleCreateProxyCommand(url.url, cmd)">
+              <button 
+                :disabled="!servers.length || creatingProxyUrls[url.url]" 
+                class="action-btn create"
+                title="Create Proxy"
+              >
+                <span v-if="creatingProxyUrls[url.url]" class="spinner"></span>
+                <span v-else>⚡</span>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="auto">Auto (First Reachable)</el-dropdown-item>
+                  <el-dropdown-item 
+                    v-for="server in servers" 
+                    :key="server.address" 
+                    :command="server.address"
+                    :disabled="isProxyActiveOnNode(url, server.address)"
+                  >
+                    Node: {{ server.address }}
+                    <span v-if="isProxyActiveOnNode(url, server.address)" class="active-indicator"> (active)</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
             <button @click="handleRename(url.id, url.tag)" class="action-btn rename" title="Rename">✎</button>
             <button @click="handleDelete(url.id)" class="action-btn delete" title="Delete">✕</button>
           </div>
@@ -59,10 +87,24 @@ defineProps({
   creatingProxyUrls: {
     type: Object,
     default: () => ({})
+  },
+  servers: {
+    type: Array,
+    default: () => []
   }
 });
 
 const emit = defineEmits(['save-tag', 'create-proxy', 'toggle-debug', 'toggle-captcha', 'rename-tag', 'delete-tag']);
+
+const isProxyActiveOnNode = (url, serverAddress) => {
+  if (!url.proxies) return false;
+  return url.proxies.some(p => p.node_address === serverAddress);
+};
+
+const handleCreateProxyCommand = (targetUrl, command) => {
+  const nodeAddress = command === 'auto' ? '' : command;
+  emit('create-proxy', targetUrl, nodeAddress);
+};
 
 const handleRename = async (id, oldTag) => {
   try {
@@ -342,5 +384,28 @@ h2 {
     justify-content: flex-end;
     align-self: flex-end;
   }
+}
+
+.proxies-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.node-badge {
+  background-color: #e9eef3;
+  color: #5a738e;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  border: 1px solid #d3dbe2;
+  font-family: monospace;
+}
+
+.active-indicator {
+  color: #67c23a;
+  font-size: 0.75rem;
+  margin-left: 4px;
 }
 </style>

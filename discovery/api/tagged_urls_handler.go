@@ -34,6 +34,15 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 	// Use shared aggregator to fetch proxies from all instances
 	allProxies, _ := proxy.FetchAllClusterProxies()
 
+	type EnrichedProxy struct {
+		ProxyURL      string               `json:"proxy_url"`
+		NodeAddress   string               `json:"node_address"`
+		Settings      models.ProxySettings `json:"settings"`
+		ActiveSystems []string             `json:"active_systems"`
+		RequestRate   float64              `json:"request_rate"`
+		TotalRequests int64                `json:"total_requests"`
+	}
+
 	// Enrich the tagged URLs with their proxy status
 	type EnrichedTaggedURL struct {
 		store.TaggedURL
@@ -42,40 +51,58 @@ func getTaggedURLs(w http.ResponseWriter, r *http.Request) {
 		ActiveSystems []string             `json:"active_systems"`
 		RequestRate   float64              `json:"request_rate"`
 		TotalRequests int64                `json:"total_requests"`
+		Proxies       []EnrichedProxy      `json:"proxies"`
 	}
 
 	enrichedUrls := make([]EnrichedTaggedURL, len(urls))
 	for i, u := range urls {
-		enrichedUrls[i] = EnrichedTaggedURL{TaggedURL: u}
+		enrichedUrls[i] = EnrichedTaggedURL{
+			TaggedURL: u,
+			Proxies:   []EnrichedProxy{},
+		}
 		// Check against Hostname (keys in allProxies are normalized hostnames)
-		if proxyInfo, ok := allProxies[utils.NormalizeHost(u.URL)]; ok {
-			// Default to what the proxy reports
-			enrichedUrls[i].ProxyURL = proxyInfo.SharedURL
-
-			// Try to make it more specific using the Tagged URL's path/query
-			if uURL, err := url.Parse(u.URL); err == nil {
-				if pURL, err := url.Parse(proxyInfo.SharedURL); err == nil {
-					// We want the Proxy's Scheme://Host:Port, but the Tagged URL's Path/Query
-					path := uURL.Path
-					// Ensure path starts with / to prevent open redirect vulnerabilities
-					if !strings.HasPrefix(path, "/") {
-						path = "/" + path
-					}
-					pURL.Path = path
-					pURL.RawQuery = uURL.RawQuery
-					pURL.Fragment = uURL.Fragment
-					enrichedUrls[i].ProxyURL = pURL.String()
-				} else {
-					log.Printf("Error parsing shared URL for enrichment %s: %v", proxyInfo.SharedURL, err)
+		key := utils.NormalizeHost(u.URL)
+		if proxyInfos, ok := allProxies[key]; ok && len(proxyInfos) > 0 {
+			for _, proxyInfo := range proxyInfos {
+				enrichedProxy := EnrichedProxy{
+					ProxyURL:      proxyInfo.SharedURL,
+					NodeAddress:   proxyInfo.NodeAddress,
+					Settings:      proxyInfo.Settings,
+					ActiveSystems: proxyInfo.ActiveSystems,
+					RequestRate:   proxyInfo.RequestRate,
+					TotalRequests: proxyInfo.TotalRequests,
 				}
-			} else {
-				log.Printf("Error parsing tagged URL for enrichment %s: %v", u.URL, err)
+
+				// Try to make it more specific using the Tagged URL's path/query
+				if uURL, err := url.Parse(u.URL); err == nil {
+					if pURL, err := url.Parse(proxyInfo.SharedURL); err == nil {
+						// We want the Proxy's Scheme://Host:Port, but the Tagged URL's Path/Query
+						path := uURL.Path
+						// Ensure path starts with / to prevent open redirect vulnerabilities
+						if !strings.HasPrefix(path, "/") {
+							path = "/" + path
+						}
+						pURL.Path = path
+						pURL.RawQuery = uURL.RawQuery
+						pURL.Fragment = uURL.Fragment
+						enrichedProxy.ProxyURL = pURL.String()
+					} else {
+						log.Printf("Error parsing shared URL for enrichment %s: %v", proxyInfo.SharedURL, err)
+					}
+				} else {
+					log.Printf("Error parsing tagged URL for enrichment %s: %v", u.URL, err)
+				}
+
+				enrichedUrls[i].Proxies = append(enrichedUrls[i].Proxies, enrichedProxy)
 			}
 
-			enrichedUrls[i].Settings = proxyInfo.Settings
-			enrichedUrls[i].ActiveSystems = proxyInfo.ActiveSystems
-			enrichedUrls[i].RequestRate = proxyInfo.RequestRate
-			enrichedUrls[i].TotalRequests = proxyInfo.TotalRequests
+			// Populate legacy fields from the first proxy for backwards compatibility
+			firstProxy := enrichedUrls[i].Proxies[0]
+			enrichedUrls[i].ProxyURL = firstProxy.ProxyURL
+			enrichedUrls[i].Settings = firstProxy.Settings
+			enrichedUrls[i].ActiveSystems = firstProxy.ActiveSystems
+			enrichedUrls[i].RequestRate = firstProxy.RequestRate
+			enrichedUrls[i].TotalRequests = firstProxy.TotalRequests
 		}
 	}
 
