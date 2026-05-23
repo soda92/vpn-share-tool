@@ -31,8 +31,8 @@ const (
 var (
 	Proxies            []*models.SharedProxy
 	ProxiesLock        sync.RWMutex
-	ProxyAddedChan     = make(chan *models.SharedProxy)
-	ProxyRemovedChan   = make(chan *models.SharedProxy)
+	ProxyAddedChan     = make(chan *models.SharedProxy, 100)
+	ProxyRemovedChan   = make(chan *models.SharedProxy, 100)
 	IPReadyChan        = make(chan string, 1)
 	MyIP               string
 	APIPort            int
@@ -226,6 +226,43 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 	SaveProxies()
 
 	return newProxy, nil
+}
+
+func Reset() {
+	Shutdown()
+	ProxiesLock.Lock()
+	Proxies = nil
+	ProxiesLock.Unlock()
+	MyIP = ""
+	APIPort = 0
+	DiscoveryServerURL = ""
+	pipeline.ResetReachCache()
+
+	// Drain channels
+	drain := true
+	for drain {
+		select {
+		case <-ProxyAddedChan:
+		default:
+			drain = false
+		}
+	}
+	drain = true
+	for drain {
+		select {
+		case <-ProxyRemovedChan:
+		default:
+			drain = false
+		}
+	}
+	drain = true
+	for drain {
+		select {
+		case <-IPReadyChan:
+		default:
+			drain = false
+		}
+	}
 }
 
 func Shutdown() {

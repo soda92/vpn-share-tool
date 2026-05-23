@@ -45,13 +45,6 @@ class GoBridgeAndroid implements GoBridge {
     _methodChannel.invokeMethod('shareUrl', {'url': url});
   }
 
-  // This method is no longer used for polling, but we keep it to satisfy the interface.
-  // The actual event stream is exposed via eventStream.
-  @override
-  void pollEvents(dynamic args) {
-    // No-op, events are pushed via stream
-  }
-
   @override
   Future<String?> getIP() async {
     return await _methodChannel.invokeMethod('getIP');

@@ -1,0 +1,65 @@
+name: Go CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24.0'
+        cache: true
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xorg-dev libgl1-mesa-dev
+
+    - name: Create Build Stubs
+      run: |
+        mkdir -p core/debug/dist
+        touch core/debug/dist/placeholder.txt
+        mkdir -p discovery/api/dist
+        touch discovery/api/dist/placeholder.txt
+        mkdir -p gui
+        echo "dev" > gui/version.txt
+
+    - name: Install Frontend Dependencies & Build Core Debug Web
+      run: |
+        cd core/debug_web
+        npm ci
+        npm run build
+
+    - name: Install Frontend Dependencies & Build Discovery Web
+      run: |
+        cd discovery_web
+        npm ci
+        npm run build
+
+    - name: Build Desktop Application
+      run: go run ./dev build --no-frontend
+
+    - name: Build Discovery Server
+      run: go run ./dev build server --no-frontend
+
+    - name: Build Linux Shared Library
+      run: go run ./dev build linux-so
+
+    - name: Run Go Tests
+      run: go test -v ./...

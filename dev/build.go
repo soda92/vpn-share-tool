@@ -67,6 +67,14 @@ var buildServerCmd = &cobra.Command{
 	},
 }
 
+var buildLinuxSoCmd = &cobra.Command{
+	Use:   "linux-so",
+	Short: "Build Linux shared library for Flutter FFI",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildLinuxSo()
+	},
+}
+
 var noFrontend bool
 
 func init() {
@@ -77,8 +85,38 @@ func init() {
 	buildCmd.AddCommand(buildWindowsCmd)
 	buildCmd.AddCommand(buildTestCmd)
 	buildCmd.AddCommand(buildServerCmd)
+	buildCmd.AddCommand(buildLinuxSoCmd)
 
 	buildCmd.PersistentFlags().BoolVar(&noFrontend, "no-frontend", false, "Skip frontend build")
+}
+
+func runBuildLinuxSo() error {
+	fmt.Println("Building Linux Shared Library (libcore.so)...")
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	// Ensure certs are synced before building the library
+	if err := copyCertsToCore(); err != nil {
+		fmt.Printf("⚠️  Warning during cert copy: %v\n", err)
+	}
+
+	output := filepath.Join(rootDir, "flutter", "linux", "libcore.so")
+	header := filepath.Join(rootDir, "flutter", "linux", "libcore.h")
+
+	// Ensure target directory exists
+	if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
+		return err
+	}
+
+	if err := execCmd(rootDir, nil, "go", "build", "-buildmode=c-shared", "-o", output, "./mobile/ffi"); err != nil {
+		return fmt.Errorf("failed to build libcore.so: %w", err)
+	}
+
+	fmt.Printf("✅ Build successful: %s\n", output)
+	fmt.Printf("✅ Header generated: %s\n", header)
+	return nil
 }
 
 func copyServerCerts() error {
@@ -256,8 +294,7 @@ func runBuildAAR() error {
 		"ANDROID_NDK_HOME="+androidNdkHome,
 		"GOFLAGS=-mod=mod",
 	)
-
-	if err := execCmd(rootDir, env, "gomobile", "bind", "-target=android", "-androidapi", "21", "-o", "flutter_gui/android/libs/core.aar", "github.com/soda92/vpn-share-tool/mobile"); err != nil {
+	if err := execCmd(rootDir, env, "gomobile", "bind", "-target=android", "-androidapi", "21", "-o", "flutter/android/libs/core.aar", "github.com/soda92/vpn-share-tool/mobile"); err != nil {
 		return fmt.Errorf("gomobile bind failed: %w", err)
 	}
 
