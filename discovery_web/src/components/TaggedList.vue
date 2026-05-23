@@ -18,21 +18,25 @@
             <div v-if="url.proxies && url.proxies.length > 0" class="proxies-container">
               <div v-for="p in url.proxies" :key="p.proxy_url" class="proxy-status active">
                 <a :href="p.proxy_url" target="_blank">➤ {{ p.proxy_url }}</a>
-                <span class="node-badge" :title="p.node_address">
-                  Node: {{ p.node_address }}
-                </span>
-                <span class="stats-badge" :title="'Total Requests: ' + p.total_requests">
-                  ⚡ {{ p.request_rate ? p.request_rate.toFixed(1) : 0 }}/s
-                </span>
-                <button @click="$emit('open-settings', p)" class="action-btn settings" title="Settings">⚙️</button>
+                <div class="proxy-meta-row">
+                  <span class="node-badge" :title="p.node_address">
+                    Node: {{ p.node_address }}
+                  </span>
+                  <span class="stats-badge" :title="'Total Requests: ' + p.total_requests">
+                    ⚡ {{ p.request_rate ? p.request_rate.toFixed(1) : 0 }}/s
+                  </span>
+                  <button @click="$emit('open-settings', p)" class="action-btn settings" title="Settings">⚙️</button>
+                </div>
               </div>
             </div>
             <div v-else-if="url.proxy_url" class="proxy-status active">
               <a :href="url.proxy_url" target="_blank">➤ {{ url.proxy_url }}</a>
-              <span class="stats-badge" :title="'Total Requests: ' + url.total_requests">
-                ⚡ {{ url.request_rate ? url.request_rate.toFixed(1) : 0 }}/s
-              </span>
-              <button @click="$emit('open-settings', url)" class="action-btn settings" title="Settings">⚙️</button>
+              <div class="proxy-meta-row">
+                <span class="stats-badge" :title="'Total Requests: ' + url.total_requests">
+                  ⚡ {{ url.request_rate ? url.request_rate.toFixed(1) : 0 }}/s
+                </span>
+                <button @click="$emit('open-settings', url)" class="action-btn settings" title="Settings">⚙️</button>
+              </div>
             </div>
             <div v-else class="proxy-status inactive">
               Not proxied ({{ url.url.replace('http://', '').replace('https://', '') }})
@@ -255,24 +259,34 @@ h2 {
 
 .proxy-status {
   font-size: 0.85rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
+  width: 100%;
+  padding: 0.2rem 0;
 }
 
-.proxy-status.active a {
+.proxy-status a {
   color: #2ecc71;
   font-weight: 500;
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-grow: 1;
+  min-width: 0;
 }
 
-.proxy-status.active a:hover {
+.proxy-status a:hover {
   text-decoration: underline;
+}
+
+.proxy-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 
 .stats-badge {
@@ -407,5 +421,33 @@ h2 {
   color: #67c23a;
   font-size: 0.75rem;
   margin-left: 4px;
+}
+
+@media (max-width: 600px) {
+  .inline-form {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+  }
+  .compact-input {
+    width: 100%;
+    min-width: 0;
+  }
+  .compact-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .proxy-status {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.3rem;
+  }
+  .proxy-status a {
+    white-space: normal;
+    word-break: break-all;
+  }
+  .proxy-meta-row {
+    justify-content: flex-start;
+  }
 }
 </style>

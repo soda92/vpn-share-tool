@@ -289,6 +289,12 @@ body {
   grid-template-columns: 1fr;
 }
 
+@media (min-width: 769px) {
+  .main-grid:not(.single-column) {
+    grid-template-columns: 1.2fr 1fr;
+  }
+}
+
 .left-column {
   display: grid;
   grid-template-rows: 1fr auto;
