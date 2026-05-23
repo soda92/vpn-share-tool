@@ -76,6 +76,7 @@ var buildLinuxSoCmd = &cobra.Command{
 }
 
 var noFrontend bool
+var buildWindowsLocal bool
 
 func init() {
 	rootCmd.AddCommand(buildCmd)
@@ -88,6 +89,7 @@ func init() {
 	buildCmd.AddCommand(buildLinuxSoCmd)
 
 	buildCmd.PersistentFlags().BoolVar(&noFrontend, "no-frontend", false, "Skip frontend build")
+	buildWindowsCmd.Flags().BoolVar(&buildWindowsLocal, "local", false, "Build locally using mingw-w64 toolchain instead of fyne-cross")
 }
 
 func runBuildLinuxSo() error {
@@ -339,6 +341,28 @@ func runBuildWindows() error {
 		}
 	} else {
 		fmt.Println("Skipping frontend build.")
+	}
+
+	if buildWindowsLocal {
+		fmt.Println("Building locally using mingw-w64 toolchain...")
+		output := filepath.Join(rootDir, "dist", "vpn-share-tool.exe")
+		if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
+			return err
+		}
+
+		env := append(os.Environ(),
+			"CGO_ENABLED=1",
+			"GOOS=windows",
+			"GOARCH=amd64",
+			"CC=x86_64-w64-mingw32-gcc",
+			"CXX=x86_64-w64-mingw32-g++",
+		)
+
+		if err := execCmd(rootDir, env, "go", "build", "-ldflags=-H=windowsgui", "-o", output, "./cmd/vpn-share-tool"); err != nil {
+			return fmt.Errorf("local mingw64 build failed: %w", err)
+		}
+		fmt.Printf("✅ Windows build successful: %s\n", output)
+		return nil
 	}
 
 	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool", "./cmd/vpn-share-tool"); err != nil {

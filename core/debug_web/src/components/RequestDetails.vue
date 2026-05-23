@@ -94,21 +94,23 @@ const isImage = computed(() => {
 });
 
 const imageSrc = computed(() => {
-  if (!props.request || !isImage.value) return '';
+  const body = props.request?.response_body;
+  if (!props.request || !isImage.value || !body) return '';
   const contentType = props.request.response_headers['Content-Type']?.[0] || 'image/png';
-  return `data:${contentType};base64,${props.request.response_body}`;
+  return `data:${contentType};base64,${body}`;
 });
 
 const formattedResponseBody = computed(() => {
-  if (props.request && isJsonResponse.value) {
+  const body = props.request?.response_body;
+  if (body && isJsonResponse.value) {
     try {
-      const jsonObj = JSON.parse(props.request.response_body);
+      const jsonObj = JSON.parse(body);
       return JSON.stringify(jsonObj, null, 2);
     } catch {
-      return props.request.response_body;
+      return body;
     }
   }
-  return props.request?.response_body;
+  return body;
 });
 
 const queryString = computed(() => {
