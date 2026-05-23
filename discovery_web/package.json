@@ -12,8 +12,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@sentry/vue": "^10.53.1",
     "axios": "^1.13.1",
     "element-plus": "^2.11.7",
+    "posthog-js": "^1.376.0",
     "vue": "^3.5.22",
     "vue-i18n": "^11.1.12"
   },
