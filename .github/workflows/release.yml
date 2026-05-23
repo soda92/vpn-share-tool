@@ -89,8 +89,7 @@ jobs:
       run: |
         go install github.com/fyne-io/fyne-cross@latest
         go run ./dev build windows --no-frontend
-        cd fyne-cross/dist/windows-amd64
-        zip -r ../../../vpn-share-tool-windows-amd64-${{ github.ref_name }}.zip vpn-share-tool.exe
+        cp fyne-cross/dist/windows-amd64/vpn-share-tool.exe.zip vpn-share-tool-windows-amd64-${{ github.ref_name }}.zip
 
     - name: Build Python Library
       run: |
