@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
 import axios from 'axios';
 import type { CapturedRequest } from '../types';
 import RequestList from './RequestList.vue';
@@ -193,26 +193,62 @@ const shareRequest = async () => {
   hideContextMenu();
 };
 
-onMounted(() => {
-  fetchRequests();
-  if (props.isLive) {
-    const ws = new WebSocket(`ws://${window.location.host}/debug/ws`);
-    ws.onmessage = (event) => {
+let ws: WebSocket | null = null;
+let reconnectTimeout: number | undefined;
+
+const connectWebSocket = () => {
+  if (!props.isLive) return;
+
+  clearTimeout(reconnectTimeout);
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/debug/ws`;
+  console.log(`Connecting to WebSocket at ${wsUrl}...`);
+  ws = new WebSocket(wsUrl);
+
+  ws.onmessage = (event) => {
+    try {
       const newRequest = JSON.parse(event.data);
-      // Avoid full refetch for performance. Add to list if not present.
       const existingIndex = requests.value.findIndex(r => r.id === newRequest.id);
       if (existingIndex === -1) {
         requests.value.unshift(newRequest);
       } else {
         requests.value[existingIndex] = newRequest;
       }
-    };
-    ws.onclose = () => console.log('WebSocket connection closed');
-    ws.onerror = (error) => console.error('WebSocket error:', error);
+    } catch (e) {
+      console.error('Failed to parse WebSocket message:', e);
+    }
+  };
+
+  ws.onopen = () => {
+    console.log('WebSocket connection established');
+    fetchRequests(); // Refetch to catch up on any requests missed while disconnected
+  };
+
+  ws.onclose = (event) => {
+    console.log('WebSocket connection closed. Reconnecting in 3s...', event.reason);
+    reconnectTimeout = window.setTimeout(connectWebSocket, 3000);
+  };
+
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
+  };
+};
+
+onMounted(() => {
+  fetchRequests();
+  if (props.isLive) {
+    connectWebSocket();
     document.title = "Live Session";
   } else {
-    // In a real app, you'd fetch the session name
     document.title = `Session ${props.sessionId}`;
+  }
+});
+
+onUnmounted(() => {
+  clearTimeout(reconnectTimeout);
+  if (ws) {
+    ws.close();
   }
 });
 </script>
