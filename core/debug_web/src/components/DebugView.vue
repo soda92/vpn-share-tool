@@ -111,9 +111,22 @@ const clearHistory = async () => {
   }
 };
 
-const selectRequest = (request: CapturedRequest) => {
+const selectRequest = async (request: CapturedRequest) => {
   selectedRequest.value = request;
   showMobileDetails.value = true; // Show details on mobile
+
+  if (request.response_body === undefined) {
+    try {
+      const response = await axios.get(`/api/debug/requests/${activeSessionId.value}/${request.id}`);
+      if (selectedRequest.value?.id === request.id) {
+        request.request_body = response.data.request_body;
+        request.response_body = response.data.response_body;
+        request.is_base64 = response.data.is_base64;
+      }
+    } catch (error) {
+      console.error('Error fetching request details:', error);
+    }
+  }
 };
 
 const closeMobileDetails = () => {

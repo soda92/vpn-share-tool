@@ -28,21 +28,31 @@
       <pre>{{ request.request_headers }}</pre>
 
       <h3>Request Body</h3>
-      <UrlDecoder
-        v-if="isWwwFormUrlEncoded"
-        :encodedData="request.request_body"
-      />
-      <pre v-else>{{ request.request_body }}</pre>
+      <div v-if="request.request_body === undefined" class="loading-body">
+        Loading body...
+      </div>
+      <template v-else>
+        <UrlDecoder
+          v-if="isWwwFormUrlEncoded"
+          :encodedData="request.request_body"
+        />
+        <pre v-else>{{ request.request_body }}</pre>
+      </template>
 
       <h3>Response Headers</h3>
       <pre>{{ request.response_headers }}</pre>
 
       <h3>Response Body</h3>
-      <div v-if="isImage && request.is_base64" class="image-preview">
-        <img :src="imageSrc" alt="Response Image" style="max-width: 100%; border: 1px solid #ddd; border-radius: 4px;">
+      <div v-if="request.response_body === undefined" class="loading-body">
+        Loading body...
       </div>
-      <pre v-else-if="isJsonResponse">{{ formattedResponseBody }}</pre>
-      <pre v-else>{{ request.response_body }}</pre>
+      <template v-else>
+        <div v-if="isImage && request.is_base64" class="image-preview">
+          <img :src="imageSrc" alt="Response Image" style="max-width: 100%; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+        <pre v-else-if="isJsonResponse">{{ formattedResponseBody }}</pre>
+        <pre v-else>{{ request.response_body }}</pre>
+      </template>
     </div>
     <div v-else class="no-selection">
       Select a request to see details.
@@ -218,5 +228,15 @@ textarea {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-family: inherit;
+}
+
+.loading-body {
+  padding: 1rem;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  color: #666;
+  font-style: italic;
+  width: 100%;
 }
 </style>
