@@ -59,6 +59,13 @@ jobs:
         echo "$SERVER_CRT" > certs/server.crt
         echo "$SERVER_KEY" > certs/server.key
 
+    - name: Create Build Stubs
+      run: |
+        mkdir -p core/debug/dist
+        touch core/debug/dist/placeholder.txt
+        mkdir -p gui
+        echo "dev" > gui/version.txt
+
     - name: Install Frontend Dependencies & Build Core Debug Web
       run: |
         cd core/debug_web
