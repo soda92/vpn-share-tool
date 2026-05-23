@@ -237,6 +237,32 @@ func Reset() {
 	APIPort = 0
 	DiscoveryServerURL = ""
 	pipeline.ResetReachCache()
+
+	// Drain channels
+	drain := true
+	for drain {
+		select {
+		case <-ProxyAddedChan:
+		default:
+			drain = false
+		}
+	}
+	drain = true
+	for drain {
+		select {
+		case <-ProxyRemovedChan:
+		default:
+			drain = false
+		}
+	}
+	drain = true
+	for drain {
+		select {
+		case <-IPReadyChan:
+		default:
+			drain = false
+		}
+	}
 }
 
 func Shutdown() {
