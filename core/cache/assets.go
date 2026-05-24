@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"runtime/trace"
 	"time"
-
-	"github.com/soda92/vpn-share-tool/core/debug"
 )
 
 func (t *CachingTransport) handleStaticAsset(req *http.Request, reqBody []byte) (*http.Response, error) {
@@ -21,7 +19,7 @@ func (t *CachingTransport) handleStaticAsset(req *http.Request, reqBody []byte) 
 			Body:       io.NopCloser(bytes.NewReader(entry.Body)),
 			Request:    req,
 		}
-		debug.CaptureRequest(req, resp, reqBody, entry.Body)
+		t.captureAndRecord(req, resp, reqBody, entry.Body)
 		return resp, nil
 	}
 	log.Printf("Cache MISS for static: %s", req.URL.String())
@@ -57,7 +55,7 @@ func (t *CachingTransport) handleStaticAsset(req *http.Request, reqBody []byte) 
 	if respBody != nil {
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
 	}
-	debug.CaptureRequest(req, resp, reqBody, respBody)
+	t.captureAndRecord(req, resp, reqBody, respBody)
 	return resp, nil
 }
 
@@ -96,7 +94,7 @@ func (t *CachingTransport) handleDynamicAsset(req *http.Request, reqBody []byte)
 	resp.Header.Del("Pragma")
 
 	if resp.Body == nil {
-		debug.CaptureRequest(req, resp, reqBody, nil)
+		t.captureAndRecord(req, resp, reqBody, nil)
 		return resp, nil
 	}
 
@@ -136,6 +134,6 @@ func (t *CachingTransport) handleDynamicAsset(req *http.Request, reqBody []byte)
 	}
 
 	resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
-	debug.CaptureRequest(req, resp, reqBody, decompressedBody)
+	t.captureAndRecord(req, resp, reqBody, decompressedBody)
 	return resp, nil
 }

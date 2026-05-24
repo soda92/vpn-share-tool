@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f8f9fa;
+      color: #333;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #e0e0e0;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .header h2 {
+      font-size: 16px;
+      margin: 0;
+      color: #673ab7; /* Material Purple */
+      font-weight: 700;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .badge-disconnected {
+      background-color: #ffe0e0;
+      color: #d32f2f;
+    }
+    .badge-connected {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+    }
+    .badge-recording {
+      background-color: #f3e5f5;
+      color: #673ab7;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+    .section {
+      background: white;
+      padding: 12px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      font-weight: bold;
+      color: #757575;
+      margin-bottom: 8px;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+    .info-val {
+      font-weight: 600;
+      word-break: break-all;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .input-field {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 13px;
+      transition: border-color 0.2s;
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: #673ab7;
+    }
+    .btn {
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    .btn:active {
+      transform: scale(0.98);
+    }
+    .btn-primary {
+      background-color: #673ab7;
+      color: white;
+    }
+    .btn-primary:hover {
+      background-color: #512da8;
+    }
+    .btn-danger {
+      background-color: #d32f2f;
+      color: white;
+    }
+    .btn-danger:hover {
+      background-color: #c62828;
+    }
+    .btn-outline {
+      background-color: transparent;
+      border: 1px solid #673ab7;
+      color: #673ab7;
+    }
+    .btn-outline:hover {
+      background-color: #f3e5f5;
+    }
+    .history-list {
+      max-height: 120px;
+      overflow-y: auto;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .history-item {
+      padding: 6px 0;
+      border-bottom: 1px solid #f1f3f5;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .history-item:last-child {
+      border-bottom: none;
+    }
+    .history-link {
+      color: #673ab7;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .history-link:hover {
+      text-decoration: underline;
+    }
+    .history-meta {
+      color: #757575;
+      font-size: 11px;
+    }
+    .empty-state {
+      font-size: 12px;
+      color: #9e9e9e;
+      text-align: center;
+      padding: 8px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>VPN Share Archiver</h2>
+    <span id="status-badge" class="badge badge-disconnected">Checking...</span>
+  </div>
+
+  <div id="proxy-info-section" class="section" style="display: none;">
+    <div class="section-title">Proxy Info</div>
+    <div class="info-row">
+      <span>Original URL:</span>
+      <span id="proxy-orig-url" class="info-val">-</span>
+    </div>
+    <div class="info-row">
+      <span>Local Port:</span>
+      <span id="proxy-local-port" class="info-val">-</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Recording Controls</div>
+    <div class="control-group">
+      <div id="start-recording-group">
+        <input type="text" id="session-name-input" class="input-field" placeholder="Session Name (e.g. Test Flow)" style="margin-bottom: 10px;">
+        <button id="start-rec-btn" class="btn btn-primary">Start Recording Session</button>
+      </div>
+      <div id="stop-recording-group" style="display: none;">
+        <div class="info-row" style="margin-bottom: 10px;">
+          <span>Active Session ID:</span>
+          <span id="active-session-id" class="info-val">-</span>
+        </div>
+        <button id="stop-rec-btn" class="btn btn-danger">Stop Recording</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">History of this page</div>
+    <ul id="history-container" class="history-list">
+      <li class="empty-state">No snapshots found.</li>
+    </ul>
+  </div>
+
+  <button id="open-dashboard-btn" class="btn btn-outline" style="margin-top: 10px;">Open Debugger Dashboard</button>
+
+  <script src="popup.js"></script>
+</body>
+</html>

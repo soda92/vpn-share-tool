@@ -18,6 +18,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/posthog/posthog-go"
 	"github.com/soda92/vpn-share-tool/core"
+	"github.com/soda92/vpn-share-tool/core/archive"
 	"github.com/soda92/vpn-share-tool/core/proxy"
 )
 
@@ -96,7 +97,17 @@ func Run() {
 
 	proxyURL := flag.String("proxy-url", "", "URL to proxy on startup")
 	startMinimized := flag.Bool("minimized", false, "start minimized with windows start")
+	serveArchive := flag.String("serve-archive", "", "Serve a recorded archive session standalone on the specified port")
+	servePort := flag.Int("port", 8080, "Port to serve standalone archive on (used with --serve-archive)")
 	flag.Parse()
+
+	if *serveArchive != "" {
+		log.Printf("Starting standalone archive server for session %s on port %d...", *serveArchive, *servePort)
+		if err := archive.ServeStandalone(*serveArchive, *servePort); err != nil {
+			log.Fatalf("Failed to run standalone archive server: %v", err)
+		}
+		return
+	}
 
 	if v := strings.TrimSpace(versionFile); v != "" {
 		Version = v
