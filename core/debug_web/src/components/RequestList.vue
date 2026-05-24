@@ -229,107 +229,142 @@ const groupedRequests = computed(() => {
 
 <style scoped>
 .request-list-pane {
-  width: 35%;
-  min-width: 300px;
-  /* border-right: 1px solid #ddd; Removed */
   display: flex;
   flex-direction: column;
   background-color: #fff;
   height: 100%;
-  /* Ensure full height in flex container */
 }
 
 @media (max-width: 768px) {
   .request-list-pane {
-    width: 100%;
+    width: 100% !important;
     height: auto;
-    /* Grow with content */
     min-height: 0;
     border-right: none;
     border-bottom: none;
     overflow: visible;
-    /* Let window scroll */
   }
 
   .request-list {
     overflow-y: visible;
-    /* Let window scroll */
     height: auto;
   }
 }
 
 .request-list-header {
-  padding: 0.5rem;
-  border-bottom: 1px solid #ddd;
-  background-color: #f8f9fa;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f0f0f0;
+  background-color: #fafafa;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .request-list-header h2 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1rem;
-  display: none;
-  /* Hide title to save space */
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #333;
 }
 
 .filter-controls {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .search-input {
   flex-grow: 1;
-  padding: 0.4rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  padding: 0.5rem 0.8rem;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 8px;
   font-size: 0.9rem;
   min-width: 0;
-  /* Prevent overflow */
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+  background-color: #fff;
+}
+
+.search-input:focus {
+  border-color: #673ab7;
+  box-shadow: 0 0 0 3px rgba(103, 58, 183, 0.15);
 }
 
 .error-filter {
   display: flex;
   align-items: center;
   font-size: 0.8rem;
+  font-weight: 600;
+  color: #666;
   white-space: nowrap;
-  gap: 4px;
+  gap: 6px;
   cursor: pointer;
   user-select: none;
 }
 
+.error-filter input[type="checkbox"] {
+  accent-color: #673ab7;
+  width: 15px;
+  height: 15px;
+}
+
+.filter-controls button {
+  background: none;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  background-color: #fff;
+  flex-shrink: 0;
+}
+
+.filter-controls button:hover {
+  background-color: #ffebee;
+  border-color: #ef9a9a;
+}
+
 .type-filters {
   display: flex;
-  gap: 0.2rem;
+  gap: 0.3rem;
   overflow-x: auto;
   padding-bottom: 2px;
   scrollbar-width: none;
-  /* Firefox */
   -ms-overflow-style: none;
-  /* IE 10+ */
 }
 
 .type-filters::-webkit-scrollbar {
   display: none;
-  /* Chrome/Safari */
 }
 
 .type-filters button {
-  padding: 0.2rem 0.4rem;
-  /* Slightly reduced horizontal padding */
+  padding: 0.3rem 0.7rem;
   font-size: 0.75rem;
-  border: 1px solid #ccc;
+  font-weight: 600;
+  border: 1.5px solid #e0e0e0;
   background-color: #fff;
-  color: #333;
-  /* Explicitly set text color */
-  border-radius: 10px;
+  color: #666;
+  border-radius: 16px;
   cursor: pointer;
   white-space: nowrap;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.type-filters button:hover {
+  background-color: #f5f5f5;
+  border-color: #ccc;
+  color: #333;
 }
 
 .type-filters button.active {
-  background-color: #007bff;
+  background-color: #673ab7;
   color: white;
-  border-color: #007bff;
+  border-color: #673ab7;
+  box-shadow: 0 2px 4px rgba(103, 58, 183, 0.25);
 }
 
 .request-list {
@@ -341,29 +376,33 @@ const groupedRequests = computed(() => {
 }
 
 .request-list li {
-  padding: 0.5rem 0.8rem 0.5rem 0.5rem;
-  /* More right padding */
+  padding: 0.6rem 0.8rem;
   cursor: pointer;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #f0f0f0;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
-  transition: background-color 0.2s;
+  transition: all 0.15s ease;
   min-width: 0;
-  /* Allow flex children to shrink */
+  border-left: 3px solid transparent;
 }
 
 .request-list li:hover {
-  background-color: #f0f0f0;
+  background-color: #fafafa;
 }
 
 .request-list li.selected {
-  background-color: #d5e5f5;
+  background-color: #f3e5f5;
+  border-left-color: #673ab7;
+}
+
+.request-list li.selected .req-name {
+  color: #673ab7;
 }
 
 .request-list li.error .req-name {
-  color: #d32f2f;
+  color: #c62828;
 }
 
 .req-main {
@@ -372,6 +411,7 @@ const groupedRequests = computed(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
 .req-name {
@@ -380,7 +420,8 @@ const groupedRequests = computed(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #333;
+  color: #212121;
+  transition: color 0.15s ease;
 }
 
 .req-name-row {
@@ -390,22 +431,23 @@ const groupedRequests = computed(() => {
 }
 
 .repeat-badge {
-  background-color: #6c757d;
+  background-color: #78909c;
   color: white;
   font-size: 0.7rem;
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 10px;
   margin-left: 4px;
-  font-weight: bold;
+  font-weight: 700;
   flex-shrink: 0;
 }
 
 .req-path {
   font-size: 0.75rem;
-  color: #888;
+  color: #757575;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: monospace;
 }
 
 .req-meta {
@@ -416,45 +458,65 @@ const groupedRequests = computed(() => {
   gap: 2px;
   font-size: 0.75rem;
   flex-shrink: 0;
-  width: 45px;
-  margin-right: 0.5rem;
+  width: 48px;
+  margin-right: 0.3rem;
 }
 
 .status {
-  font-weight: bold;
+  font-weight: 700;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-align: center;
+  min-width: 28px;
 }
 
 .status.ok {
-  color: #28a745;
+  background-color: #e8f5e9;
+  color: #2e7d32;
 }
 
 .status.error {
-  color: #dc3545;
+  background-color: #ffebee;
+  color: #c62828;
 }
 
 .status.redirect {
-  color: #ffc107;
+  background-color: #fff3e0;
+  color: #ef6c00;
 }
 
 .method {
-  color: #555;
-  font-weight: bold;
+  font-weight: 700;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: #616161;
 }
 
+.method.GET { color: #1e88e5; }
+.method.POST { color: #43a047; }
+.method.PUT { color: #fb8c00; }
+.method.DELETE { color: #e53935; }
+
 .request-list li.group-header {
-  background-color: #e9ecef;
-  color: #495057;
-  font-weight: bold;
-  font-size: 0.8rem;
-  padding: 0.3rem 0.5rem;
+  background-color: #f5f5f5;
+  color: #673ab7;
+  font-weight: 700;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.8rem;
   position: sticky;
   top: 0;
   z-index: 10;
+  border-bottom: 1px solid #e0e0e0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .no-requests {
-  padding: 1rem;
+  padding: 2rem;
   text-align: center;
-  color: #777;
+  color: #757575;
+  font-size: 0.9rem;
+  font-style: italic;
 }
 </style>

@@ -20,8 +20,9 @@ func HandleUpdateProxySettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		URL      string               `json:"url"`
-		Settings models.ProxySettings `json:"settings"`
+		URL         string               `json:"url"`
+		Settings    models.ProxySettings `json:"settings"`
+		NodeAddress string               `json:"node_address"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -48,6 +49,9 @@ func HandleUpdateProxySettings(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	for _, instance := range activeInstances {
+		if req.NodeAddress != "" && instance.Address != req.NodeAddress {
+			continue
+		}
 		wg.Add(1)
 		go func(addr string) {
 			defer wg.Done()

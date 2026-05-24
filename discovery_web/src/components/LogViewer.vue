@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" title="Instance Logs" width="800px">
+  <el-dialog v-model="visible" title="Instance Logs" width="90%" style="max-width: 800px">
     <div class="log-container" ref="logContainer">
       <div v-if="loading" class="loading">Loading logs...</div>
       <pre v-else>{{ logs || 'No logs available.' }}</pre>

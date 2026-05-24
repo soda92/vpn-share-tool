@@ -6,7 +6,7 @@
       <!-- Left Column: Tagged URLs (Primary Action) -->
       <div class="left-column">
         <div class="tagged-list-wrapper">
-          <TaggedList :tagged-urls="taggedUrls" :add-form="newTag" :creating-proxy-urls="creatingProxyUrls"
+          <TaggedList :tagged-urls="taggedUrls" :add-form="newTag" :creating-proxy-urls="creatingProxyUrls" :servers="servers"
             @save-tag="saveTaggedUrl" @create-proxy="createProxy" @open-settings="openSettings" @rename-tag="renameTag"
             @delete-tag="deleteTag" />
         </div>
@@ -76,7 +76,8 @@ const handleSaveSettings = async (data) => {
   try {
     await axios.post('/update-proxy-settings', {
       url: data.url,
-      settings: data.settings
+      settings: data.settings,
+      node_address: data.node_address || ''
     });
     success = true;
   } catch (err) {
@@ -136,10 +137,10 @@ const saveTaggedUrl = async () => {
     ElNotification({ title: 'Error', message: 'Error saving URL.', type: 'error' });
   }
 };
-const createProxy = async (url) => {
+const createProxy = async (url, nodeAddress = '') => {
   creatingProxyUrls.value[url] = true;
   try {
-    const response = await axios.post('/create-proxy', { url });
+    const response = await axios.post('/create-proxy', { url, node_address: nodeAddress });
     let sharedUrl = response.data.shared_url;
 
     // Client-side fix for older nodes or partial backend responses:
@@ -288,6 +289,12 @@ body {
   grid-template-columns: 1fr;
 }
 
+@media (min-width: 769px) {
+  .main-grid:not(.single-column) {
+    grid-template-columns: 1.2fr 1fr;
+  }
+}
+
 .left-column {
   display: grid;
   grid-template-rows: 1fr auto;
@@ -314,6 +321,7 @@ body {
     margin: 0;
     border-radius: 0;
     box-shadow: none;
+    padding: 0.5rem;
   }
 
   .main-grid {

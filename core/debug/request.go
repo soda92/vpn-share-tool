@@ -1,6 +1,7 @@
 package debug
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -59,7 +60,14 @@ func getSingleRequest(w http.ResponseWriter, r *http.Request, sessionID, idStr s
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(foundRequest)
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		json.NewEncoder(gz).Encode(foundRequest)
+	} else {
+		json.NewEncoder(w).Encode(foundRequest)
+	}
 }
 
 func updateSingleRequest(w http.ResponseWriter, r *http.Request, sessionID, idStr string) {

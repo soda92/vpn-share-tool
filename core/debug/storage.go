@@ -1,6 +1,7 @@
 package debug
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -146,14 +147,14 @@ func createSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func getSessionRequests(w http.ResponseWriter, r *http.Request, sessionID string) {
-	var requests []*CapturedRequest
+	var requests []*CapturedRequestSummary
 	err := db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(sessionID))
 		if b == nil {
 			return fmt.Errorf("session not found")
 		}
 		return b.ForEach(func(k, v []byte) error {
-			var req CapturedRequest
+			var req CapturedRequestSummary
 			if err := json.Unmarshal(v, &req); err == nil {
 				requests = append(requests, &req)
 			}
@@ -172,7 +173,14 @@ func getSessionRequests(w http.ResponseWriter, r *http.Request, sessionID string
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(requests)
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		json.NewEncoder(gz).Encode(requests)
+	} else {
+		json.NewEncoder(w).Encode(requests)
+	}
 }
 
 func updateSession(w http.ResponseWriter, r *http.Request, sessionID string) {

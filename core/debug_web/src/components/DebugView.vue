@@ -1,7 +1,11 @@
 <template>
   <div class="debug-view" @click="hideContextMenu">
     <div class="main-layout">
-      <div class="pane-container list-pane" :class="{ 'hidden-on-mobile': showMobileDetails }">
+      <div 
+        class="pane-container list-pane" 
+        :style="!isMobileView ? { width: sidebarWidth + 'px' } : {}"
+        :class="{ 'hidden-on-mobile': showMobileDetails }"
+      >
         <RequestList
           :requests="requests"
           :selectedRequest="selectedRequest"
@@ -13,6 +17,12 @@
           @clear="clearHistory"
         />
       </div>
+      <div 
+        v-if="!isMobileView" 
+        class="resizer" 
+        :class="{ dragging: isDragging }" 
+        @mousedown="startResize"
+      ></div>
       <div class="pane-container details-pane" :class="{ 'active-on-mobile': showMobileDetails }">
         <RequestDetails
           :request="selectedRequest"
@@ -111,9 +121,33 @@ const clearHistory = async () => {
   }
 };
 
-const selectRequest = (request: CapturedRequest) => {
+const selectRequest = async (request: CapturedRequest) => {
   selectedRequest.value = request;
   showMobileDetails.value = true; // Show details on mobile
+
+  if (request.response_body === undefined) {
+    try {
+      const response = await axios.get(`/api/debug/requests/${activeSessionId.value}/${request.id}`);
+      
+      // Update original item in the reactive requests list
+      const originalReq = requests.value.find(r => r.id === request.id);
+      if (originalReq) {
+        originalReq.request_body = response.data.request_body;
+        originalReq.response_body = response.data.response_body;
+        originalReq.is_base64 = response.data.is_base64;
+      }
+      
+      // Update selectedRequest and trigger reactive updates in components
+      if (selectedRequest.value?.id === request.id) {
+        selectedRequest.value.request_body = response.data.request_body;
+        selectedRequest.value.response_body = response.data.response_body;
+        selectedRequest.value.is_base64 = response.data.is_base64;
+        selectedRequest.value = { ...selectedRequest.value };
+      }
+    } catch (error) {
+      console.error('Error fetching request details:', error);
+    }
+  }
 };
 
 const closeMobileDetails = () => {
@@ -235,6 +269,36 @@ const connectWebSocket = () => {
   };
 };
 
+const isMobileView = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+const sidebarWidth = ref(parseInt(localStorage.getItem('debug_sidebar_width') || '360', 10));
+const isDragging = ref(false);
+
+const handleResize = () => {
+  isMobileView.value = window.innerWidth <= 768;
+};
+
+const startResize = (event: MouseEvent) => {
+  event.preventDefault();
+  isDragging.value = true;
+  document.addEventListener('mousemove', doResize);
+  document.addEventListener('mouseup', stopResize);
+};
+
+const doResize = (event: MouseEvent) => {
+  if (!isDragging.value) return;
+  const newWidth = event.clientX;
+  if (newWidth >= 280 && newWidth <= 600) {
+    sidebarWidth.value = newWidth;
+  }
+};
+
+const stopResize = () => {
+  isDragging.value = false;
+  document.removeEventListener('mousemove', doResize);
+  document.removeEventListener('mouseup', stopResize);
+  localStorage.setItem('debug_sidebar_width', sidebarWidth.value.toString());
+};
+
 onMounted(() => {
   fetchRequests();
   if (props.isLive) {
@@ -243,6 +307,7 @@ onMounted(() => {
   } else {
     document.title = `Session ${props.sessionId}`;
   }
+  window.addEventListener('resize', handleResize);
 });
 
 onUnmounted(() => {
@@ -250,13 +315,14 @@ onUnmounted(() => {
   if (ws) {
     ws.close();
   }
+  window.removeEventListener('resize', handleResize);
 });
 </script>
 
 <style scoped>
 .debug-view {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  height: 100vh;
+  height: 100%;
   margin: 0;
   background-color: #f5f5f5;
   color: #333;
@@ -285,10 +351,24 @@ onUnmounted(() => {
 }
 
 .list-pane {
-  width: 35%;
-  min-width: 320px;
-  max-width: 450px; /* Prevent becoming too wide on large screens */
-  border-right: 1px solid #e0e0e0; /* Restore border for separation */
+  min-width: 280px;
+  border-right: 1px solid #e0e0e0;
+}
+
+.resizer {
+  width: 6px;
+  cursor: col-resize;
+  background-color: #e0e0e0;
+  transition: background-color 0.2s, width 0.2s;
+  height: 100%;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.resizer:hover,
+.resizer.dragging {
+  background-color: #673ab7;
+  width: 8px;
 }
 
 .details-pane {

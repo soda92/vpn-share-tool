@@ -37,7 +37,9 @@ func init() {
 
 	// 2. Android NDK Home
 	// Priority: Env var -> Default path (~/Android/Sdk/ndk/27.0.12077973)
-	if v := os.Getenv("ANDROID_NDK_HOME"); v != "" {
+	if v := os.Getenv("ANDROID_NDK_LATEST_HOME"); v != "" {
+		androidNdkHome = v
+	} else if v := os.Getenv("ANDROID_NDK_HOME"); v != "" {
 		androidNdkHome = v
 	} else {
 		// Using the specific version from previous configuration as default fallback

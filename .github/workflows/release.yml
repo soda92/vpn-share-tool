@@ -20,7 +20,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.24.0'
+        go-version: '1.26.x'
         cache: true
 
     - name: Set up Node.js
@@ -37,14 +37,14 @@ jobs:
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.22.x' # Or adjust to your required version
+        flutter-version: '3.35.x'
         channel: 'stable'
         cache: true
 
     - name: Install System Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y xorg-dev libgl1-mesa-dev zip
+        sudo apt-get install -y xorg-dev libgl1-mesa-dev zip gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
 
     - name: Write certs from secrets
       env:
@@ -85,12 +85,10 @@ jobs:
         go run ./dev build server --no-frontend
         tar -czvf discovery-server-linux-amd64-${{ github.ref_name }}.tar.gz -C dist discovery
 
-    - name: Build Windows Desktop Binary (via Docker/fyne-cross)
+    - name: Build Windows Desktop Binary (via local MinGW)
       run: |
-        go install github.com/fyne-io/fyne-cross@latest
-        go run ./dev build windows --no-frontend
-        cd fyne-cross/dist/windows-amd64
-        zip -r ../../../vpn-share-tool-windows-amd64-${{ github.ref_name }}.zip vpn-share-tool.exe
+        go run ./dev build windows --local --no-frontend
+        zip -j vpn-share-tool-windows-amd64-${{ github.ref_name }}.zip dist/vpn-share-tool.exe
 
     - name: Build Python Library
       run: |
@@ -98,9 +96,6 @@ jobs:
         cp dist/libproxy.py dist/libproxy-${{ github.ref_name }}.py
 
     - name: Setup Gomobile and Build Android AAR
-      env:
-        ANDROID_HOME: /usr/local/lib/android/sdk
-        ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk-bundle
       run: |
         go install golang.org/x/mobile/cmd/gomobile@latest
         gomobile init

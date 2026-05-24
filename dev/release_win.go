@@ -197,9 +197,13 @@ func runRelease() error {
 	}
 
 	// Source file (built by `build windows`)
-	srcPath := filepath.Join(rootDir, "fyne-cross", "bin", "windows-amd64", "vpn-share-tool.exe")
+	srcPath := filepath.Join(rootDir, "dist", "vpn-share-tool.exe")
 	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		return fmt.Errorf("source file not found: %s. Please run 'go run ./cmd/dev build windows' first", srcPath)
+		// Fallback to legacy fyne-cross path
+		srcPath = filepath.Join(rootDir, "fyne-cross", "bin", "windows-amd64", "vpn-share-tool.exe")
+		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+			return fmt.Errorf("source file not found. Please run 'go run dev.go build windows --local' first")
+		}
 	}
 
 	// Get CURRENT version (bumped during build)

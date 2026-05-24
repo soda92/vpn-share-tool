@@ -41,6 +41,20 @@ type CapturedRequest struct {
 	VpnShareToolMeta string      `json:"_vpnShareToolMetadata,omitempty"` // Field for HAR metadata
 }
 
+// CapturedRequestSummary holds summary details of an intercepted HTTP request.
+type CapturedRequestSummary struct {
+	ID               int64       `json:"id"`
+	Timestamp        time.Time   `json:"timestamp"`
+	Method           string      `json:"method"`
+	URL              string      `json:"url"`
+	RequestHeaders   http.Header `json:"request_headers"`
+	ResponseStatus   int         `json:"response_status"`
+	ResponseHeaders  http.Header `json:"response_headers"`
+	Bookmarked       bool        `json:"bookmarked"`
+	Note             string      `json:"note"`
+	VpnShareToolMeta string      `json:"_vpnShareToolMetadata,omitempty"`
+}
+
 // RegisterDebugRoutes registers the debug UI and API routes.
 func RegisterDebugRoutes(mux *http.ServeMux) {
 	dbPath := "debug_requests.db"

@@ -100,6 +100,7 @@ defineEmits(['update-server', 'open-logs']);
 @media (max-width: 768px) {
   .server-info-bar {
     white-space: normal;
+    max-height: none;
     overflow: visible;
     text-align: left;
   }

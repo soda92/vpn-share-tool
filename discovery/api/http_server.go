@@ -15,10 +15,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/soda92/vpn-share-tool/discovery/proxy"
 	"github.com/soda92/vpn-share-tool/discovery/registry"
 	"github.com/soda92/vpn-share-tool/discovery/resources"
 	"github.com/soheilhy/cmux"
+	"time"
 )
 
 const (
@@ -173,6 +175,19 @@ func handleGetInstances(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func SentryPanicRecovery(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				sentry.CurrentHub().Recover(err)
+				sentry.Flush(2 * time.Second)
+				panic(err)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
 func StartHTTPServer(insecure bool) {
 	// Protected Mux for Dashboard and Management APIs
 	protectedMux := http.NewServeMux()
@@ -186,6 +201,9 @@ func StartHTTPServer(insecure bool) {
 	protectedMux.HandleFunc("/update-proxy-settings", HandleUpdateProxySettings)
 	protectedMux.HandleFunc("/trigger-update-remote", handleTriggerUpdateRemote)
 	protectedMux.HandleFunc("/logs", handleGetLogs)
+	protectedMux.HandleFunc("/debug-panic", func(w http.ResponseWriter, r *http.Request) {
+		panic("Sentry Go Test Panic!")
+	})
 
 	// Serve the Vue frontend (Protected)
 	fsys, err := fs.Sub(frontendDist, "dist")
@@ -213,11 +231,14 @@ func StartHTTPServer(insecure bool) {
 	// Delegate everything else to Protected Mux
 	rootMux.Handle("/", BasicAuth(protectedMux))
 
+	// Wrap root handler with Sentry recovery middleware
+	mainHandler := SentryPanicRecovery(rootMux)
+
 	if insecure {
 		log.Printf("Starting discovery HTTP server (INSECURE) on port %s", httpListenPort)
 		server := &http.Server{
 			Addr:    ":" + httpListenPort,
-			Handler: rootMux,
+			Handler: mainHandler,
 		}
 		if err := server.ListenAndServe(); err != nil {
 			log.Fatalf("HTTP Server error: %v", err)
@@ -253,7 +274,7 @@ func StartHTTPServer(insecure bool) {
 	// Start HTTPS Server
 	go func() {
 		server := &http.Server{
-			Handler:   rootMux,
+			Handler:   mainHandler,
 			TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}},
 		}
 		if err := server.ServeTLS(httpsL, "", ""); err != nil {

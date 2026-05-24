@@ -8,10 +8,12 @@
             <div class="tag-name">{{ proxy.original_url }}</div>
             <div class="proxy-status active">
               <a :href="proxy.shared_url" target="_blank">➤ {{ proxy.shared_url }}</a>
-              <span class="stats-badge" :title="'Total Requests: ' + proxy.total_requests">
-                ⚡ {{ proxy.request_rate ? proxy.request_rate.toFixed(1) : 0 }}/s
-              </span>
-              <button @click="$emit('open-settings', proxy)" class="action-btn settings" title="Settings">⚙️</button>
+              <div class="proxy-meta-row">
+                <span class="stats-badge" :title="'Total Requests: ' + proxy.total_requests">
+                  ⚡ {{ proxy.request_rate ? proxy.request_rate.toFixed(1) : 0 }}/s
+                </span>
+                <button @click="$emit('open-settings', proxy)" class="action-btn settings" title="Settings">⚙️</button>
+              </div>
             </div>
           </div>
         </div>
@@ -71,6 +73,7 @@ h2 {
   border: 1px solid #e0e0e0;
   transition: background-color 0.2s;
   margin-right: 4px;
+  min-width: 0;
 }
 
 .dense-list li:hover {
@@ -83,6 +86,7 @@ h2 {
   align-items: flex-start;
   gap: 0.5rem;
   overflow: hidden;
+  min-width: 0;
 }
 
 .url-info {
@@ -103,24 +107,35 @@ h2 {
 
 .proxy-status {
   font-size: 0.85rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
+  width: 100%;
+  padding: 0.2rem 0;
 }
 
-.proxy-status.active a {
+.proxy-status a {
   color: #2ecc71;
   font-weight: 500;
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-grow: 1;
+  min-width: 0;
 }
 
-.proxy-status.active a:hover {
+.proxy-status a:hover {
   text-decoration: underline;
+}
+
+.proxy-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .stats-badge {
@@ -163,16 +178,37 @@ h2 {
     max-height: none;
     overflow: visible;
     margin-bottom: 1rem;
+    padding: 0.5rem;
   }
 
   .dense-list {
-    max-height: 400px;
-    overflow-y: auto;
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .dense-list li {
+    padding: 0.5rem;
+    margin-right: 0;
   }
 
   .url-row {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (max-width: 600px) {
+  .proxy-status {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.3rem;
+  }
+  .proxy-status a {
+    white-space: normal;
+    word-break: break-all;
+  }
+  .proxy-meta-row {
+    justify-content: flex-start;
   }
 }
 </style>

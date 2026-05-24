@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" title="Proxy Settings" width="500px">
+  <el-dialog v-model="visible" title="Proxy Settings" width="90%" style="max-width: 500px">
     <el-form :model="form" label-width="180px">
       <el-form-item label="Internal URL Rewrite">
         <el-switch v-model="form.enable_url_rewrite" />
@@ -70,6 +70,7 @@ watch(visible, (val) => {
 const save = () => {
   emit('save', {
     url: props.proxyData.original_url || props.proxyData.url, // Handle different naming conventions if any
+    node_address: props.proxyData.node_address || '',
     settings: {
         enable_url_rewrite: form.value.enable_url_rewrite,
         enable_content_mod: form.value.enable_content_mod,
