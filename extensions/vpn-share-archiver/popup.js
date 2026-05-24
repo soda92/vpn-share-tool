@@ -1,4 +1,4 @@
-const LOCAL_API = "http://127.0.0.1:10081";
+let activeAPI = "http://127.0.0.1:10081";
 
 document.addEventListener("DOMContentLoaded", async () => {
   const statusBadge = document.getElementById("status-badge");
@@ -28,6 +28,50 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.error("Failed to query tabs:", err);
   }
 
+  // Helper to dynamically detect remote API host using injected meta tags or hostname fallback
+  async function detectAPIEndpoint(tab) {
+    if (!tab || !tab.url) return null;
+
+    try {
+      // Execute content script to look for vpn-share-api meta tags
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          const apiMeta = document.querySelector('meta[name="vpn-share-api"]');
+          const portMeta = document.querySelector('meta[name="vpn-share-proxy-port"]');
+          return {
+            api: apiMeta ? apiMeta.content : null,
+            port: portMeta ? parseInt(portMeta.content, 10) : null
+          };
+        }
+      });
+
+      if (results && results[0] && results[0].result) {
+        const { api, port } = results[0].result;
+        if (api) {
+          return { api, port };
+        }
+      }
+    } catch (err) {
+      console.log("Could not inspect page DOM (likely a non-HTML resource or permission limit):", err);
+    }
+
+    // Fallback: Use active tab's hostname on port 10081
+    try {
+      const tabUrl = new URL(tab.url);
+      if (tabUrl.port && tabUrl.port !== "10081") {
+        return {
+          api: `http://${tabUrl.hostname}:10081`,
+          port: parseInt(tabUrl.port, 10)
+        };
+      }
+    } catch (err) {
+      console.error("Fallback hostname parsing failed:", err);
+    }
+
+    return null;
+  }
+
   // 2. Poll API status
   async function checkStatus() {
     if (!activeTab || !activeTab.url) {
@@ -36,15 +80,25 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
+    // Detect the API Endpoint dynamically
+    const detected = await detectAPIEndpoint(activeTab);
+    let tabPort = 0;
+    if (detected) {
+      activeAPI = detected.api;
+      tabPort = detected.port;
+    } else {
+      const tabUrl = new URL(activeTab.url);
+      tabPort = parseInt(tabUrl.port, 10) || 80;
+      activeAPI = `http://${tabUrl.hostname}:10081`;
+    }
+
     try {
-      const response = await fetch(`${LOCAL_API}/active-proxies`);
+      const response = await fetch(`${activeAPI}/active-proxies`);
       if (!response.ok) throw new Error("API Offline");
       
       const proxies = await response.json();
-      const tabUrl = new URL(activeTab.url);
-      const tabPort = parseInt(tabUrl.port, 10);
 
-      // Match tab's port with any proxy's RemotePort
+      // Match tab's port with any proxy's RemotePort on the target API server
       activeProxy = proxies.find(p => p.remote_port === tabPort);
 
       if (activeProxy) {
@@ -58,6 +112,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         // Reconstruct original page URL
         const originalProxyURL = new URL(activeProxy.original_url);
+        const tabUrl = new URL(activeTab.url);
         pageOriginalURL = originalProxyURL.protocol + "//" + originalProxyURL.host + tabUrl.pathname + tabUrl.search;
 
         // Toggle groups
@@ -85,7 +140,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       statusBadge.textContent = "Offline";
       statusBadge.className = "badge badge-disconnected";
       proxyInfoSection.style.display = "none";
-      disableControls("Start vpn-share-tool local server");
+      disableControls(`API Offline (${new URL(activeAPI).host})`);
     }
   }
 
@@ -101,7 +156,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!pageOriginalURL) return;
 
     try {
-      const res = await fetch(`${LOCAL_API}/archive/history?url=${encodeURIComponent(pageOriginalURL)}`);
+      const res = await fetch(`${activeAPI}/archive/history?url=${encodeURIComponent(pageOriginalURL)}`);
       if (!res.ok) throw new Error("History error");
       const history = await res.json();
 
@@ -113,7 +168,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           
           const a = document.createElement("a");
           a.className = "history-link";
-          a.href = `${LOCAL_API}${item.playback_url}`;
+          a.href = `${activeAPI}${item.playback_url}`;
           a.target = "_blank";
           a.textContent = item.formatted;
 
@@ -142,7 +197,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     startRecBtn.textContent = "Starting...";
 
     try {
-      const res = await fetch(`${LOCAL_API}/archive/toggle-recording`, {
+      const res = await fetch(`${activeAPI}/archive/toggle-recording`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -170,7 +225,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     stopRecBtn.textContent = "Stopping...";
 
     try {
-      const res = await fetch(`${LOCAL_API}/archive/toggle-recording`, {
+      const res = await fetch(`${activeAPI}/archive/toggle-recording`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -190,7 +245,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   openDashboardBtn.addEventListener("click", () => {
-    chrome.tabs.create({ url: `${LOCAL_API}/debug/#/archives` });
+    chrome.tabs.create({ url: `${activeAPI}/debug/#/archives` });
   });
 
   // Initial check

@@ -26,6 +26,9 @@ func RunPipeline(ctx *models.ProcessingContext, body string) string {
 		// Run Debug Script injection (if it's HTML)
 		body = InjectDebugScript(ctx, body)
 
+		// Inject API metadata tags for browser extension discovery
+		body = InjectMetaTag(ctx, body)
+
 		// Run System Specific Processors
 		for _, activeSysID := range ctx.Proxy.ActiveSystems {
 			for _, defSys := range DefinedSystems {
