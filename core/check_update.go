@@ -18,7 +18,7 @@ func CheckForUpdates() (*UpdateInfo, error) {
 	}
 
 	client := GetHTTPClient()
-	resp, err := client.Get(DiscoveryServerURL + "/latest-version?format=zip")
+	resp, err := client.Get(DiscoveryServerURL + "/latest-app-version?format=zip")
 	if err != nil {
 		return nil, err
 	}

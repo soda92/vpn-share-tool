@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -124,10 +123,14 @@ func ApplyUpdate(info *UpdateInfo) error {
 		// Make executable
 		os.Chmod(updaterExe, 0755)
 
+		// Write DiscoveryServerURL to server.txt so the updater doesn't need to do LAN discovery
+		if err := os.WriteFile("server.txt", []byte(DiscoveryServerURL), 0644); err != nil {
+			log.Printf("Warning: failed to write server.txt: %v", err)
+		}
+
 		// 3. Launch updater and exit
 		log.Printf("Launching updater and exiting...")
-		cmd := exec.Command(updaterExe, "--source", currentExe)
-		if err := cmd.Start(); err != nil {
+		if err := spawnUpdater(updaterExe, currentExe); err != nil {
 			return fmt.Errorf("failed to start updater: %w", err)
 		}
 

@@ -30,7 +30,10 @@ import (
 
 const (
 	httpListenPort = "8080"
-	SharePath      = "/sambashare/VPN共享工具"
+)
+
+var (
+	SharePath = "/sambashare/VPN共享工具"
 )
 
 type updateInfo struct {
@@ -99,22 +102,27 @@ func handleVersionRequest(w http.ResponseWriter, r *http.Request, isApp bool) {
 			// Check if corresponding .sha256 file exists (marking copy completion)
 			sha256Path := filepath.Join(SharePath, e.Name()+".sha256")
 			shaBytes, err := os.ReadFile(sha256Path)
+			var hash string
 			if err != nil {
-				// Skip if .sha256 doesn't exist (copy incomplete)
-				continue
-			}
-			hash := strings.TrimSpace(string(shaBytes))
-			fields := strings.Fields(hash)
-			if len(fields) > 0 {
-				hash = fields[0]
-			}
+				if isApp {
+					// Skip if .sha256 doesn't exist (copy incomplete) for app
+					continue
+				}
+				// For updater, it's ok if there's no .sha256 file
+			} else {
+				hash = strings.TrimSpace(string(shaBytes))
+				fields := strings.Fields(hash)
+				if len(fields) > 0 {
+					hash = fields[0]
+				}
 
-			// Verify that the actual hash of the file on disk matches the expected hash in the .sha256 file.
-			// This prevents serving an incomplete file during release copy.
-			exePath := filepath.Join(SharePath, e.Name())
-			if err := verifyLocalFileHash(exePath, hash); err != nil {
-				log.Printf("Version %s has .sha256 file but actual file verification failed: %v", e.Name(), err)
-				continue
+				// Verify that the actual hash of the file on disk matches the expected hash in the .sha256 file.
+				// This prevents serving an incomplete file during release copy.
+				exePath := filepath.Join(SharePath, e.Name())
+				if err := verifyLocalFileHash(exePath, hash); err != nil {
+					log.Printf("Version %s has .sha256 file but actual file verification failed: %v", e.Name(), err)
+					continue
+				}
 			}
 
 			counter, err := strconv.Atoi(matches[1])

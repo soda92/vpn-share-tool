@@ -308,12 +308,6 @@ func runRelease() error {
 	if releaseUpdater {
 		exeFilename := fmt.Sprintf("%s_%s.exe", filePrefix, versionStr)
 		destExePath := filepath.Join(sharePath, exeFilename)
-		exeSha256Path := destExePath + ".sha256"
-
-		// Delete old .sha256 file first if it exists
-		if err := os.Remove(exeSha256Path); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to remove old exe sha256 file: %w", err)
-		}
 
 		fmt.Printf("Publishing EXE release %s...\n", versionStr)
 		fmt.Printf("Source: %s\n", srcPath)
@@ -322,27 +316,11 @@ func runRelease() error {
 		if err := copyFile(srcPath, destExePath); err != nil {
 			return fmt.Errorf("failed to copy exe file: %w", err)
 		}
-
-		exeHash, err := computeSHA256(srcPath)
-		if err != nil {
-			return fmt.Errorf("failed to compute exe sha256: %w", err)
-		}
-
-		if err := os.WriteFile(exeSha256Path, []byte(exeHash), 0644); err != nil {
-			return fmt.Errorf("failed to write exe sha256 file: %w", err)
-		}
-		fmt.Printf("EXE SHA256: %s -> %s\n", exeHash, exeSha256Path)
 	}
 
 	// 2. Publish ZIP package (for both updater and app)
 	zipFilename := fmt.Sprintf("%s_%s.zip", filePrefix, versionStr)
 	destZipPath := filepath.Join(sharePath, zipFilename)
-	zipSha256Path := destZipPath + ".sha256"
-
-	// Delete old .sha256 file first if it exists
-	if err := os.Remove(zipSha256Path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove old zip sha256 file: %w", err)
-	}
 
 	fmt.Printf("Publishing ZIP release %s...\n", versionStr)
 	fmt.Printf("Source: %s\n", srcPath)
@@ -352,15 +330,25 @@ func runRelease() error {
 		return fmt.Errorf("failed to create zip file: %w", err)
 	}
 
-	zipHash, err := computeSHA256(destZipPath)
-	if err != nil {
-		return fmt.Errorf("failed to compute zip sha256: %w", err)
-	}
+	// Only compute and upload hash for the main application (not the updater)
+	if !releaseUpdater {
+		zipSha256Path := destZipPath + ".sha256"
 
-	if err := os.WriteFile(zipSha256Path, []byte(zipHash), 0644); err != nil {
-		return fmt.Errorf("failed to write zip sha256 file: %w", err)
+		// Delete old .sha256 file first if it exists
+		if err := os.Remove(zipSha256Path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove old zip sha256 file: %w", err)
+		}
+
+		zipHash, err := computeSHA256(destZipPath)
+		if err != nil {
+			return fmt.Errorf("failed to compute zip sha256: %w", err)
+		}
+
+		if err := os.WriteFile(zipSha256Path, []byte(zipHash), 0644); err != nil {
+			return fmt.Errorf("failed to write zip sha256 file: %w", err)
+		}
+		fmt.Printf("ZIP SHA256: %s -> %s\n", zipHash, zipSha256Path)
 	}
-	fmt.Printf("ZIP SHA256: %s -> %s\n", zipHash, zipSha256Path)
 
 	fmt.Println("✅ Published successfully.")
 	return nil

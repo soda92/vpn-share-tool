@@ -13,7 +13,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -63,8 +62,7 @@ func runBootstrapMode(exePath string) {
 	}
 
 	fmt.Println("[Bootstrap] Launching updater.exe...")
-	cmd := exec.Command(updaterExe, "--source", exePath)
-	if err := cmd.Start(); err != nil {
+	if err := spawnProcess(updaterExe, "--source", exePath); err != nil {
 		log.Fatalf("[Bootstrap] Failed to start updater.exe: %v", err)
 	}
 
@@ -161,8 +159,7 @@ func performUpgrade(sourceExe string) error {
 		fmt.Println("      Applying updater update...")
 		os.Chmod(sourceExe, 0755)
 
-		cmd := exec.Command(sourceExe)
-		if err := cmd.Start(); err != nil {
+		if err := spawnProcess(sourceExe); err != nil {
 			return fmt.Errorf("failed to restart updater bootstrap: %w", err)
 		}
 		os.Exit(0)
@@ -210,8 +207,7 @@ func performUpgrade(sourceExe string) error {
 	fmt.Println("      Starting application...")
 	os.Chmod(sourceExe, 0755)
 
-	cmd := exec.Command(sourceExe)
-	if err := cmd.Start(); err != nil {
+	if err := spawnProcess(sourceExe); err != nil {
 		return fmt.Errorf("failed to start application: %w", err)
 	}
 
