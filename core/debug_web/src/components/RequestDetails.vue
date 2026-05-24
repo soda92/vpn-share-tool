@@ -16,17 +16,7 @@
         <div>{{ new Date(request.timestamp).toLocaleString() }}</div>
       </div>
 
-      <div v-if="queryString">
-        <h3>Query Parameters</h3>
-        <UrlDecoder :encodedData="queryString" />
-      </div>
-
-      <h3>Notes</h3>
-      <textarea :value="note" @input="$emit('update:note', ($event.target as HTMLTextAreaElement).value)" placeholder="Add notes here..."></textarea>
-
-      <h3>Request Headers</h3>
-      <pre>{{ request.request_headers }}</pre>
-
+      <!-- Request Body -->
       <h3>Request Body</h3>
       <div v-if="request.request_body === undefined" class="loading-body">
         Loading body...
@@ -39,9 +29,7 @@
         <pre v-else>{{ request.request_body }}</pre>
       </template>
 
-      <h3>Response Headers</h3>
-      <pre>{{ request.response_headers }}</pre>
-
+      <!-- Response Body -->
       <h3>Response Body</h3>
       <div v-if="request.response_body === undefined" class="loading-body">
         Loading body...
@@ -53,6 +41,37 @@
         <pre v-else-if="isJsonResponse">{{ formattedResponseBody }}</pre>
         <pre v-else>{{ request.response_body }}</pre>
       </template>
+
+      <!-- Collapsible details sections at the bottom -->
+      <div class="collapsible-sections">
+        <details v-if="queryString">
+          <summary>Query Parameters</summary>
+          <div class="details-content">
+            <UrlDecoder :encodedData="queryString" />
+          </div>
+        </details>
+
+        <details>
+          <summary>Notes</summary>
+          <div class="details-content">
+            <textarea :value="note" @input="$emit('update:note', ($event.target as HTMLTextAreaElement).value)" placeholder="Add notes here..."></textarea>
+          </div>
+        </details>
+
+        <details>
+          <summary>Request Headers</summary>
+          <div class="details-content">
+            <pre class="headers-pre">{{ request.request_headers }}</pre>
+          </div>
+        </details>
+
+        <details>
+          <summary>Response Headers</summary>
+          <div class="details-content">
+            <pre class="headers-pre">{{ request.response_headers }}</pre>
+          </div>
+        </details>
+      </div>
     </div>
     <div v-else class="no-selection">
       Select a request to see details.
@@ -274,5 +293,62 @@ textarea:focus {
   width: 100%;
   font-size: 0.85rem;
   text-align: center;
+}
+
+.collapsible-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 2rem;
+  width: 100%;
+}
+
+details {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background-color: #fafafa;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+details[open] {
+  background-color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-color: #673ab7;
+}
+
+summary {
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #455a64;
+  outline: none;
+  user-select: none;
+  transition: background-color 0.2s;
+  border-bottom: 1px solid transparent;
+}
+
+details[open] summary {
+  border-bottom-color: #f0f0f0;
+  background-color: #f3e5f5;
+  color: #673ab7;
+}
+
+summary:hover {
+  background-color: #f5f5f5;
+}
+
+.details-content {
+  padding: 1rem;
+  background-color: #fff;
+}
+
+.headers-pre {
+  margin: 0;
+  border: none;
+  background-color: #fff;
+  padding: 0;
 }
 </style>
