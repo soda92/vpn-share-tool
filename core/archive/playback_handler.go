@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -59,7 +60,7 @@ func handleArchiveSessions(w http.ResponseWriter, r *http.Request) {
 
 func handleSingleArchiveSession(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, DELETE, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)
@@ -69,6 +70,17 @@ func handleSingleArchiveSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := strings.TrimPrefix(r.URL.Path, "/archive/sessions/")
 	if sessionID == "" {
 		http.Error(w, "Session ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Route GET /archive/sessions/{id}/download
+	if strings.HasSuffix(sessionID, "/download") {
+		sessionID = strings.TrimSuffix(sessionID, "/download")
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		handleDownloadArchive(w, r, sessionID)
 		return
 	}
 
@@ -83,6 +95,57 @@ func handleSingleArchiveSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func handleDownloadArchive(w http.ResponseWriter, r *http.Request, sessionID string) {
+	platform := r.URL.Query().Get("platform")
+	if platform != "windows" && platform != "linux" {
+		ua := strings.ToLower(r.Header.Get("User-Agent"))
+		if strings.Contains(ua, "windows") || strings.Contains(ua, "win32") || strings.Contains(ua, "win64") {
+			platform = "windows"
+		} else {
+			platform = "linux"
+		}
+	}
+
+	db := debug.GetDB()
+	var sessionName string
+	if db != nil {
+		db.View(func(tx *bbolt.Tx) error {
+			b := tx.Bucket([]byte(metadataBucketName))
+			if b != nil {
+				var meta SessionMetadata
+				data := b.Get([]byte(sessionID))
+				if data != nil {
+					if err := json.Unmarshal(data, &meta); err == nil {
+						sessionName = meta.Name
+					}
+				}
+			}
+			return nil
+		})
+	}
+	if sessionName == "" {
+		sessionName = "recording"
+	}
+
+	// Clean filename (replace non-alphanumeric chars with underscore)
+	reg := regexp.MustCompile(`[^a-zA-Z0-9_\-]`)
+	cleanName := reg.ReplaceAllString(sessionName, "_")
+	
+	shortID := sessionID
+	if len(sessionID) > 8 {
+		shortID = sessionID[:8]
+	}
+	filename := fmt.Sprintf("archive_%s_%s.zip", cleanName, shortID)
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if err := ExportSessionZip(sessionID, platform, w); err != nil {
+		log.Printf("[Archive Export] Error generating zip: %v", err)
+	}
 }
 
 type ToggleReq struct {

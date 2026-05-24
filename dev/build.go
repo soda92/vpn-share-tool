@@ -260,6 +260,10 @@ func runBuildDesktop() error {
 		fmt.Println("Skipping frontend build.")
 	}
 
+	if err := buildViewers(); err != nil {
+		return fmt.Errorf("failed to build archive viewers: %w", err)
+	}
+
 	toolCmdDir := filepath.Join(rootDir, "cmd", "vpn-share-tool")
 
 	// Build Go binary
@@ -342,6 +346,10 @@ func runBuildWindows() error {
 	versionFile := filepath.Join(rootDir, "gui", "version.txt")
 	if err := os.WriteFile(versionFile, []byte(version), 0644); err != nil {
 		return fmt.Errorf("failed to write version file: %w", err)
+	}
+
+	if err := buildViewers(); err != nil {
+		return fmt.Errorf("failed to build archive viewers: %w", err)
 	}
 
 	// Build frontend
@@ -481,5 +489,36 @@ func runBuildUpdater() error {
 	}
 
 	fmt.Printf("✅ Updater build successful: %s\n", output)
+	return nil
+}
+
+func buildViewers() error {
+	fmt.Println("Building standalone archive viewers...")
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	embedDir := filepath.Join(rootDir, "core", "archive", "embed")
+	if err := os.MkdirAll(embedDir, 0755); err != nil {
+		return err
+	}
+
+	// 1. Build Linux viewer
+	linuxOut := filepath.Join(embedDir, "viewer_linux")
+	envLinux := append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH=amd64")
+	if err := execCmd(rootDir, envLinux, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", linuxOut, "./cmd/viewer"); err != nil {
+		return fmt.Errorf("failed to build linux viewer: %w", err)
+	}
+	fmt.Printf("✅ Linux viewer built: %s\n", linuxOut)
+
+	// 2. Build Windows viewer
+	windowsOut := filepath.Join(embedDir, "viewer_windows.exe")
+	envWin := append(os.Environ(), "CGO_ENABLED=0", "GOOS=windows", "GOARCH=amd64")
+	if err := execCmd(rootDir, envWin, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", windowsOut, "./cmd/viewer"); err != nil {
+		return fmt.Errorf("failed to build windows viewer: %w", err)
+	}
+	fmt.Printf("✅ Windows viewer built: %s\n", windowsOut)
+
 	return nil
 }

@@ -1,12 +1,15 @@
 package archive
 
 import (
+	"archive/zip"
+	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -20,6 +23,9 @@ import (
 	"github.com/soda92/vpn-share-tool/core/models"
 	"go.etcd.io/bbolt"
 )
+
+//go:embed embed/viewer_linux embed/viewer_windows.exe
+var ViewerFS embed.FS
 
 const (
 	metadataBucketName = "archive_sessions_metadata"
@@ -565,4 +571,149 @@ func DeleteSession(sessionID string) error {
 		}
 		return nil
 	})
+}
+
+// ExportSessionZip generates a zip package containing a sliced archive.db database,
+// the platform-specific viewer binary, and startup script.
+func ExportSessionZip(sessionID string, platform string, w io.Writer) error {
+	db := debug.GetDB()
+	if db == nil {
+		return fmt.Errorf("debug database not initialized")
+	}
+
+	// 1. Create a temporary bbolt file for the sliced database
+	tempFile, err := os.CreateTemp("", "archive_*.db")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	tempFile.Close()
+	defer os.Remove(tempPath)
+
+	tempDB, err := bbolt.Open(tempPath, 0600, nil)
+	if err != nil {
+		return fmt.Errorf("failed to open temporary database: %w", err)
+	}
+
+	// Copy session data from main DB to temporary DB
+	err = db.View(func(tx *bbolt.Tx) error {
+		return tempDB.Update(func(tempTx *bbolt.Tx) error {
+			// Copy metadata bucket & only this session's key
+			bMeta := tx.Bucket([]byte(metadataBucketName))
+			if bMeta != nil {
+				tempMeta, err := tempTx.CreateBucketIfNotExists([]byte(metadataBucketName))
+				if err != nil {
+					return err
+				}
+				data := bMeta.Get([]byte(sessionID))
+				if data != nil {
+					if err := tempMeta.Put([]byte(sessionID), data); err != nil {
+						return err
+					}
+				}
+			}
+
+			// Copy the session data bucket itself
+			sessionBucketName := "archive_session_" + sessionID
+			bData := tx.Bucket([]byte(sessionBucketName))
+			if bData != nil {
+				tempData, err := tempTx.CreateBucketIfNotExists([]byte(sessionBucketName))
+				if err != nil {
+					return err
+				}
+				return bData.ForEach(func(k, v []byte) error {
+					return tempData.Put(k, v)
+				})
+			}
+			return nil
+		})
+	})
+
+	tempDB.Close()
+	if err != nil {
+		return fmt.Errorf("failed to slice database: %w", err)
+	}
+
+	// 2. Build the Zip Archive
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	// Write database file as archive.db
+	dbFileHeader := &zip.FileHeader{
+		Name:   "archive.db",
+		Method: zip.Deflate,
+	}
+	dbFileHeader.Modified = time.Now()
+	zipFile, err := zipWriter.CreateHeader(dbFileHeader)
+	if err != nil {
+		return err
+	}
+	tempDiskFile, err := os.Open(tempPath)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(zipFile, tempDiskFile)
+	tempDiskFile.Close()
+	if err != nil {
+		return err
+	}
+
+	// Write viewer executable and script based on platform
+	var viewerFilename string
+	var viewerEmbedPath string
+	var scriptFilename string
+	var scriptContent string
+
+	if platform == "windows" {
+		viewerFilename = "viewer_windows.exe"
+		viewerEmbedPath = "embed/viewer_windows.exe"
+		scriptFilename = "run.bat"
+		scriptContent = "@echo off\r\necho Starting VPN Share Tool Archive Viewer...\r\nstart viewer_windows.exe\r\n"
+	} else {
+		viewerFilename = "viewer_linux"
+		viewerEmbedPath = "embed/viewer_linux"
+		scriptFilename = "run.sh"
+		scriptContent = "#!/bin/bash\necho \"Starting VPN Share Tool Archive Viewer...\"\nchmod +x viewer_linux\n./viewer_linux\n"
+	}
+
+	// Copy embedded viewer binary to zip
+	viewerData, err := ViewerFS.ReadFile(viewerEmbedPath)
+	if err != nil {
+		return fmt.Errorf("failed to read embedded viewer binary: %w", err)
+	}
+
+	viewerHeader := &zip.FileHeader{
+		Name:   viewerFilename,
+		Method: zip.Deflate,
+	}
+	viewerHeader.Modified = time.Now()
+	if platform != "windows" {
+		viewerHeader.SetMode(0755)
+	}
+	viewerZipFile, err := zipWriter.CreateHeader(viewerHeader)
+	if err != nil {
+		return err
+	}
+	if _, err := viewerZipFile.Write(viewerData); err != nil {
+		return err
+	}
+
+	// Write startup script to zip
+	scriptHeader := &zip.FileHeader{
+		Name:   scriptFilename,
+		Method: zip.Deflate,
+	}
+	scriptHeader.Modified = time.Now()
+	if platform != "windows" {
+		scriptHeader.SetMode(0755)
+	}
+	scriptZipFile, err := zipWriter.CreateHeader(scriptHeader)
+	if err != nil {
+		return err
+	}
+	if _, err := scriptZipFile.Write([]byte(scriptContent)); err != nil {
+		return err
+	}
+
+	return nil
 }
