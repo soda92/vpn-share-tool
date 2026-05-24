@@ -25,7 +25,10 @@ var releaseCmd = &cobra.Command{
 	},
 }
 
+var releaseUpdater bool
+
 func init() {
+	releaseCmd.Flags().BoolVar(&releaseUpdater, "updater", false, "Release the updater instead of the main application")
 	rootCmd.AddCommand(releaseCmd)
 }
 
@@ -255,13 +258,26 @@ func runRelease() error {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
 
-	// Source file (built by `build windows`)
-	srcPath := filepath.Join(rootDir, "dist", "vpn-share-tool.exe")
-	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		// Fallback to legacy fyne-cross path
-		srcPath = filepath.Join(rootDir, "fyne-cross", "bin", "windows-amd64", "vpn-share-tool.exe")
+	var filePrefix string
+	var srcPath string
+
+	if releaseUpdater {
+		filePrefix = "vpn-share-tool"
+		srcPath = filepath.Join(rootDir, "dist", "updater.exe")
 		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-			return fmt.Errorf("source file not found. Please run 'go run dev.go build windows --local' first")
+			srcPath = filepath.Join(rootDir, "fyne-cross", "bin", "windows-amd64", "updater.exe")
+			if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+				return fmt.Errorf("updater source file not found. Please run 'go run dev.go build updater' first")
+			}
+		}
+	} else {
+		filePrefix = "vpn-share-tool-app"
+		srcPath = filepath.Join(rootDir, "dist", "vpn-share-tool.exe")
+		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+			srcPath = filepath.Join(rootDir, "fyne-cross", "bin", "windows-amd64", "vpn-share-tool.exe")
+			if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+				return fmt.Errorf("application source file not found. Please run 'go run dev.go build windows --local' first")
+			}
 		}
 	}
 
@@ -288,36 +304,38 @@ func runRelease() error {
 		return fmt.Errorf("share path is unreachable: %s (%w)", sharePath, err)
 	}
 
-	// 1. Publish raw EXE for backwards compatibility
-	exeFilename := fmt.Sprintf("vpn-share-tool_%s.exe", versionStr)
-	destExePath := filepath.Join(sharePath, exeFilename)
-	exeSha256Path := destExePath + ".sha256"
+	// 1. Publish raw EXE (ONLY for the updater binary, which is small, so old clients can download it)
+	if releaseUpdater {
+		exeFilename := fmt.Sprintf("%s_%s.exe", filePrefix, versionStr)
+		destExePath := filepath.Join(sharePath, exeFilename)
+		exeSha256Path := destExePath + ".sha256"
 
-	// Delete old .sha256 file first if it exists
-	if err := os.Remove(exeSha256Path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove old exe sha256 file: %w", err)
+		// Delete old .sha256 file first if it exists
+		if err := os.Remove(exeSha256Path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove old exe sha256 file: %w", err)
+		}
+
+		fmt.Printf("Publishing EXE release %s...\n", versionStr)
+		fmt.Printf("Source: %s\n", srcPath)
+		fmt.Printf("Dest:   %s\n", destExePath)
+
+		if err := copyFile(srcPath, destExePath); err != nil {
+			return fmt.Errorf("failed to copy exe file: %w", err)
+		}
+
+		exeHash, err := computeSHA256(srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to compute exe sha256: %w", err)
+		}
+
+		if err := os.WriteFile(exeSha256Path, []byte(exeHash), 0644); err != nil {
+			return fmt.Errorf("failed to write exe sha256 file: %w", err)
+		}
+		fmt.Printf("EXE SHA256: %s -> %s\n", exeHash, exeSha256Path)
 	}
 
-	fmt.Printf("Publishing EXE release %s...\n", versionStr)
-	fmt.Printf("Source: %s\n", srcPath)
-	fmt.Printf("Dest:   %s\n", destExePath)
-
-	if err := copyFile(srcPath, destExePath); err != nil {
-		return fmt.Errorf("failed to copy exe file: %w", err)
-	}
-
-	exeHash, err := computeSHA256(srcPath)
-	if err != nil {
-		return fmt.Errorf("failed to compute exe sha256: %w", err)
-	}
-
-	if err := os.WriteFile(exeSha256Path, []byte(exeHash), 0644); err != nil {
-		return fmt.Errorf("failed to write exe sha256 file: %w", err)
-	}
-	fmt.Printf("EXE SHA256: %s -> %s\n", exeHash, exeSha256Path)
-
-	// 2. Publish ZIP package to bypass AV/network corruption
-	zipFilename := fmt.Sprintf("vpn-share-tool_%s.zip", versionStr)
+	// 2. Publish ZIP package (for both updater and app)
+	zipFilename := fmt.Sprintf("%s_%s.zip", filePrefix, versionStr)
 	destZipPath := filepath.Join(sharePath, zipFilename)
 	zipSha256Path := destZipPath + ".sha256"
 
@@ -344,7 +362,7 @@ func runRelease() error {
 	}
 	fmt.Printf("ZIP SHA256: %s -> %s\n", zipHash, zipSha256Path)
 
-	fmt.Println("✅ Published both formats successfully.")
+	fmt.Println("✅ Published successfully.")
 	return nil
 }
 

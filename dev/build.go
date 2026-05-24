@@ -75,6 +75,14 @@ var buildLinuxSoCmd = &cobra.Command{
 	},
 }
 
+var buildUpdaterCmd = &cobra.Command{
+	Use:   "updater",
+	Short: "Build Windows updater application",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildUpdater()
+	},
+}
+
 var noFrontend bool
 var buildWindowsLocal bool
 
@@ -87,9 +95,11 @@ func init() {
 	buildCmd.AddCommand(buildTestCmd)
 	buildCmd.AddCommand(buildServerCmd)
 	buildCmd.AddCommand(buildLinuxSoCmd)
+	buildCmd.AddCommand(buildUpdaterCmd)
 
 	buildCmd.PersistentFlags().BoolVar(&noFrontend, "no-frontend", false, "Skip frontend build")
 	buildWindowsCmd.Flags().BoolVar(&buildWindowsLocal, "local", false, "Build locally using mingw-w64 toolchain instead of fyne-cross")
+	buildUpdaterCmd.Flags().BoolVar(&buildWindowsLocal, "local", false, "Build locally using mingw-w64 toolchain instead of fyne-cross")
 }
 
 func runBuildLinuxSo() error {
@@ -437,5 +447,31 @@ func runBuildPylib() error {
 	}
 
 	fmt.Printf("✅ Pylib build successful: %s\n", dstFile)
+	return nil
+}
+
+func runBuildUpdater() error {
+	fmt.Println("Building Updater application (pure Go, console)...")
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get cwd: %w", err)
+	}
+
+	output := filepath.Join(rootDir, "dist", "updater.exe")
+	if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
+		return err
+	}
+
+	env := append(os.Environ(),
+		"CGO_ENABLED=0",
+		"GOOS=windows",
+		"GOARCH=amd64",
+	)
+
+	if err := execCmd(rootDir, env, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", output, "./cmd/updater"); err != nil {
+		return fmt.Errorf("updater build failed: %w", err)
+	}
+
+	fmt.Printf("✅ Updater build successful: %s\n", output)
 	return nil
 }

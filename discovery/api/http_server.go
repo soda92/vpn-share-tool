@@ -40,17 +40,37 @@ type updateInfo struct {
 }
 
 var (
-	reVersionExe = regexp.MustCompile(`^vpn-share-tool_v(\d+)([a-z]+)\.exe$`)
-	reVersionZip = regexp.MustCompile(`^vpn-share-tool_v(\d+)([a-z]+)\.zip$`)
+	reVersionExe    = regexp.MustCompile(`^vpn-share-tool_v(\d+)([a-z]+)\.exe$`)
+	reVersionZip    = regexp.MustCompile(`^vpn-share-tool_v(\d+)([a-z]+)\.zip$`)
+	reVersionAppExe = regexp.MustCompile(`^vpn-share-tool-app_v(\d+)([a-z]+)\.exe$`)
+	reVersionAppZip = regexp.MustCompile(`^vpn-share-tool-app_v(\d+)([a-z]+)\.zip$`)
 )
 
 func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
+	handleVersionRequest(w, r, false)
+}
+
+func handleLatestAppVersion(w http.ResponseWriter, r *http.Request) {
+	handleVersionRequest(w, r, true)
+}
+
+func handleVersionRequest(w http.ResponseWriter, r *http.Request, isApp bool) {
 	format := r.URL.Query().Get("format")
 	useZip := format == "zip"
 
-	reVersion := reVersionExe
-	if useZip {
-		reVersion = reVersionZip
+	var reVersion *regexp.Regexp
+	if isApp {
+		if useZip {
+			reVersion = reVersionAppZip
+		} else {
+			reVersion = reVersionAppExe
+		}
+	} else {
+		if useZip {
+			reVersion = reVersionZip
+		} else {
+			reVersion = reVersionExe
+		}
 	}
 
 	entries, err := os.ReadDir(SharePath)
@@ -265,6 +285,7 @@ func StartHTTPServer(insecure bool) {
 
 	// Public Routes (for Auto-Update)
 	rootMux.HandleFunc("/latest-version", handleLatestVersion)
+	rootMux.HandleFunc("/latest-app-version", handleLatestAppVersion)
 	rootMux.Handle("/download/", http.StripPrefix("/download/", http.FileServer(http.Dir(SharePath))))
 	rootMux.HandleFunc("/solve-captcha", handleSolveCaptchaRequest)
 	rootMux.HandleFunc("/upload-logs", handleUploadLogs)
