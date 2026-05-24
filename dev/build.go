@@ -376,7 +376,7 @@ func runBuildWindows() error {
 			"CXX=x86_64-w64-mingw32-g++",
 		)
 
-		if err := execCmd(rootDir, env, "go", "build", "-ldflags=-H=windowsgui", "-o", output, "./cmd/vpn-share-tool"); err != nil {
+		if err := execCmd(rootDir, env, "fyne", "build", "-os", "windows", "-o", output, "--src", "./cmd/vpn-share-tool"); err != nil {
 			return fmt.Errorf("local mingw64 build failed: %w", err)
 		}
 		fmt.Printf("✅ Windows build successful: %s\n", output)
