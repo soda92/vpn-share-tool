@@ -1,9 +1,11 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"math"
 	"net"
@@ -19,6 +21,11 @@ import (
 
 	"go.etcd.io/bbolt"
 )
+
+//go:embed 404.html
+var notFoundHTML string
+
+var notFoundTemplate = template.Must(template.New("404").Parse(notFoundHTML))
 
 type SessionMetadata struct {
 	ID        string    `json:"id"`
@@ -279,31 +286,12 @@ func serveCustom404(w http.ResponseWriter, urlStr string, sessionID string, time
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
 
-	html := fmt.Sprintf(`
-<!DOCTYPE html>
-<html>
-<head>
-	<title>Resource Not Archived</title>
-	<style>
-		body { font-family: sans-serif; background-color: #f8f9fa; color: #333; text-align: center; padding: 50px; }
-		.card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display: inline-block; max-width: 600px; border-top: 4px solid #673ab7; }
-		h1 { color: #673ab7; font-size: 24px; margin-top: 0; }
-		p { font-size: 15px; line-height: 1.5; color: #666; }
-		code { background: #f1f3f5; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 14px; word-break: break-all; }
-	</style>
-</head>
-<body>
-	<div class="card">
-		<h1>Offline Archive: Resource Not Found</h1>
-		<p>The following resource was not captured during the recording session:</p>
-		<p><code>%%s</code></p>
-		<p>To record it, make sure to browse/trigger this specific page or AJAX endpoint while the recording session is running.</p>
-	</div>
-</body>
-</html>
-`, urlStr)
-
-	w.Write([]byte(html))
+	err := notFoundTemplate.Execute(w, map[string]interface{}{
+		"URL": urlStr,
+	})
+	if err != nil {
+		log.Printf("failed to execute 404 template: %v", err)
+	}
 }
 
 func openBrowser(url string) {
