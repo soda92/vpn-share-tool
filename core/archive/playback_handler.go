@@ -478,10 +478,57 @@ func FindResource(sessionID string, targetURL string, targetTimestamp int64) (*A
 	return &resp, nil
 }
 
+func GetHTMLEndpoints(sessionID string) []string {
+	db := debug.GetDB()
+	if db == nil {
+		return nil
+	}
+	var endpoints []string
+	seen := make(map[string]bool)
+	_ = db.View(func(tx *bbolt.Tx) error {
+		bucketName := "archive_session_" + sessionID
+		b := tx.Bucket([]byte(bucketName))
+		if b == nil {
+			return nil
+		}
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var resp ArchivedResponse
+			if err := json.Unmarshal(v, &resp); err != nil {
+				continue
+			}
+			contentType := strings.ToLower(resp.ResponseHeaders.Get("Content-Type"))
+			if strings.Contains(contentType, "text/html") {
+				if !seen[resp.URL] {
+					seen[resp.URL] = true
+					endpoints = append(endpoints, resp.URL)
+				}
+			}
+		}
+		return nil
+	})
+	return endpoints
+}
+
 func serveCustom404(w http.ResponseWriter, urlStr string, sessionID string, timestamp int64) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	endpoints := GetHTMLEndpoints(sessionID)
+	var linksHTML strings.Builder
+	if len(endpoints) > 0 {
+		linksHTML.WriteString("<div style='margin-top:20px; text-align:left; max-height:200px; overflow-y:auto; padding:10px; background:#f8f9fa; border-radius:4px;'>")
+		linksHTML.WriteString("<h3 style='margin-top:0; font-size:16px; color:#673ab7;'>Available HTML Pages:</h3>")
+		linksHTML.WriteString("<ul style='padding-left:20px; margin:0;'>")
+		for _, ep := range endpoints {
+			link := fmt.Sprintf("/archive/view/%s/%d/%s", sessionID, timestamp, ep)
+			linksHTML.WriteString(fmt.Sprintf("<li style='margin-bottom:5px;'><a href='%s' style='color:#673ab7; text-decoration:none; word-break:break-all;'>%s</a></li>", link, ep))
+		}
+		linksHTML.WriteString("</ul></div>")
+	} else {
+		linksHTML.WriteString("<p style='color:#999; font-style:italic;'>No HTML pages found in this archive session.</p>")
+	}
 
 	html := fmt.Sprintf(`
 <!DOCTYPE html>
@@ -490,12 +537,13 @@ func serveCustom404(w http.ResponseWriter, urlStr string, sessionID string, time
 	<title>Resource Not Archived</title>
 	<style>
 		body { font-family: sans-serif; background-color: #f8f9fa; color: #333; text-align: center; padding: 50px; }
-		.card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display: inline-block; max-width: 600px; border-top: 4px solid #673ab7; }
-		h1 { color: #673ab7; font-size: 24px; margin-top: 0; }
+		.card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display: inline-block; max-width: 600px; border-top: 4px solid #673ab7; text-align: left; }
+		h1 { color: #673ab7; font-size: 24px; margin-top: 0; text-align: center; }
 		p { font-size: 15px; line-height: 1.5; color: #666; }
 		code { background: #f1f3f5; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 14px; word-break: break-all; }
-		.btn { display: inline-block; margin-top: 20px; padding: 10px 20px; background-color: #673ab7; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; }
+		.btn { display: inline-block; margin-top: 20px; padding: 10px 20px; background-color: #673ab7; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; text-align: center; }
 		.btn:hover { background-color: #512da8; }
+		.btn-container { text-align: center; }
 	</style>
 </head>
 <body>
@@ -504,11 +552,16 @@ func serveCustom404(w http.ResponseWriter, urlStr string, sessionID string, time
 		<p>The following resource was not captured during the recording session:</p>
 		<p><code>%s</code></p>
 		<p>To record it, make sure to browse/trigger this specific page or AJAX endpoint while the recording session is running.</p>
-		<a href="/debug/#/archives" class="btn">Back to Archives</a>
+
+		%s
+
+		<div class="btn-container">
+			<a href="/debug/#/archives" class="btn">Back to Archives</a>
+		</div>
 	</div>
 </body>
 </html>
-`, urlStr)
+`, urlStr, linksHTML.String())
 
 	w.Write([]byte(html))
 }

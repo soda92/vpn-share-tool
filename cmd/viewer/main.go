@@ -124,7 +124,7 @@ func main() {
 		resp, err := FindResource(db, meta.ID, targetURL, targetTimestamp)
 		if err != nil {
 			log.Printf("Resource not found: %s", targetURL)
-			serveCustom404(w, targetURL, meta.ID, targetTimestamp)
+			serveCustom404(w, targetURL, meta.ID, db)
 			return
 		}
 
@@ -282,12 +282,60 @@ func stripQuery(urlStr string) string {
 	return urlStr
 }
 
-func serveCustom404(w http.ResponseWriter, urlStr string, sessionID string, timestamp int64) {
+type EndpointEntry struct {
+	Path string
+	URL  string
+}
+
+func GetHTMLEndpoints(db *bbolt.DB, sessionID string) []string {
+	var endpoints []string
+	seen := make(map[string]bool)
+	_ = db.View(func(tx *bbolt.Tx) error {
+		bucketName := "archive_session_" + sessionID
+		b := tx.Bucket([]byte(bucketName))
+		if b == nil {
+			return nil
+		}
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var resp ArchivedResponse
+			if err := json.Unmarshal(v, &resp); err != nil {
+				continue
+			}
+			contentType := strings.ToLower(resp.ResponseHeaders.Get("Content-Type"))
+			if strings.Contains(contentType, "text/html") {
+				if !seen[resp.URL] {
+					seen[resp.URL] = true
+					endpoints = append(endpoints, resp.URL)
+				}
+			}
+		}
+		return nil
+	})
+	return endpoints
+}
+
+func serveCustom404(w http.ResponseWriter, urlStr string, sessionID string, db *bbolt.DB) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
 
+	var entries []EndpointEntry
+	endpoints := GetHTMLEndpoints(db, sessionID)
+	for _, ep := range endpoints {
+		u, err := url.Parse(ep)
+		if err != nil {
+			continue
+		}
+		path := u.RequestURI()
+		entries = append(entries, EndpointEntry{
+			Path: path,
+			URL:  ep,
+		})
+	}
+
 	err := notFoundTemplate.Execute(w, map[string]interface{}{
-		"URL": urlStr,
+		"URL":       urlStr,
+		"Endpoints": entries,
 	})
 	if err != nil {
 		log.Printf("failed to execute 404 template: %v", err)

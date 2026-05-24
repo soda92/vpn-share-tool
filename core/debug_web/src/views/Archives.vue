@@ -14,6 +14,9 @@
             </div>
           </div>
           <div class="session-actions">
+            <button @click="viewArchive(session)" class="action-btn view-btn">
+              View 👁️
+            </button>
             <button @click="downloadArchive(session.id, 'windows')" class="action-btn download-btn">
               Download (Win) 🪟
             </button>
@@ -40,10 +43,22 @@ const toast = useToast();
 const fetchSessions = async () => {
   try {
     const response = await axios.get('/archive/sessions');
-    sessions.value = response.data || [];
+    const data = response.data || [];
+    // Sort by created_at (latest first)
+    data.sort((a, b) => {
+      const timeA = new Date(a.created_at).getTime();
+      const timeB = new Date(b.created_at).getTime();
+      return timeB - timeA;
+    });
+    sessions.value = data;
   } catch (e) {
     console.error('Failed to fetch archive sessions', e);
   }
+};
+
+const viewArchive = (session) => {
+  const timestamp = new Date(session.created_at).getTime() * 1000000; // convert to nanoseconds
+  window.open(`/archive/view/${session.id}/${timestamp}/${session.proxy_url}`, '_blank');
 };
 
 const deleteSession = async (id) => {
@@ -162,6 +177,14 @@ onMounted(fetchSessions);
 
 .download-btn:hover {
   background-color: #0056b3;
+}
+
+.view-btn {
+  background-color: #673ab7;
+}
+
+.view-btn:hover {
+  background-color: #512da8;
 }
 
 .delete-btn {
