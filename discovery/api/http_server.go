@@ -39,7 +39,7 @@ type updateInfo struct {
 	Sha256  string `json:"sha256"`
 }
 
-var reVersion = regexp.MustCompile(`vpn-share-tool_v(\d+)([a-z]+)\.exe`)
+var reVersion = regexp.MustCompile(`^vpn-share-tool_v(\d+)([a-z]+)\.exe$`)
 
 func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 	entries, err := os.ReadDir(SharePath)
