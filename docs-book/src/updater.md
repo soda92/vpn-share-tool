@@ -57,7 +57,7 @@ To build and release updates to the updater binary itself (e.g., when improving 
    ```bash
    go run ./dev build updater
    ```
-   This generates `dist/updater.exe` (~6.5MB) using compile-time optimization flags (`-trimpath` and `-ldflags="-s -w"`).
+   This reads the current version from `Release.toml` and compiles `dist/updater.exe` (~6.5MB) using compile-time optimization and version injection flags (`-trimpath` and `-ldflags="-s -w -X main.UpdaterVersion=vXX"`). This ensures the updater knows its own version and avoids infinite update loops.
 
 2. **Release**:
    ```bash

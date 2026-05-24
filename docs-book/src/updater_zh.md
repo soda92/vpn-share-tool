@@ -57,7 +57,7 @@ sequenceDiagram
    ```bash
    go run ./dev build updater
    ```
-   该命令会应用 `-trimpath` 与 `-ldflags="-s -w"` 编译优化，在 `dist/` 目录下生成约 6.5MB 的 `updater.exe`。
+   该命令会从 `Release.toml` 读取当前版本，应用 `-trimpath` 与 `-ldflags="-s -w -X main.UpdaterVersion=vXX"` 编译参数，进行编译优化并动态注入版本号，在 `dist/` 目录下生成约 6.5MB 的 `updater.exe`。这能确保更新程序明确知道自身的版本，避免陷入无限更新循环。
 
 2. **发布**：
    ```bash
