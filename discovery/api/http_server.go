@@ -39,9 +39,20 @@ type updateInfo struct {
 	Sha256  string `json:"sha256"`
 }
 
-var reVersion = regexp.MustCompile(`^vpn-share-tool_v(\d+)([a-z]+)\.exe$`)
+var (
+	reVersionExe = regexp.MustCompile(`^vpn-share-tool_v(\d+)([a-z]+)\.exe$`)
+	reVersionZip = regexp.MustCompile(`^vpn-share-tool_v(\d+)([a-z]+)\.zip$`)
+)
 
 func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
+	format := r.URL.Query().Get("format")
+	useZip := format == "zip"
+
+	reVersion := reVersionExe
+	if useZip {
+		reVersion = reVersionZip
+	}
+
 	entries, err := os.ReadDir(SharePath)
 	if err != nil {
 		log.Printf("Failed to read share path: %v", err)
@@ -78,7 +89,7 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 				hash = fields[0]
 			}
 
-			// Verify that the actual hash of the exe file on disk matches the expected hash in the .sha256 file.
+			// Verify that the actual hash of the file on disk matches the expected hash in the .sha256 file.
 			// This prevents serving an incomplete file during release copy.
 			exePath := filepath.Join(SharePath, e.Name())
 			if err := verifyLocalFileHash(exePath, hash); err != nil {

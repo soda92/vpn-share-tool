@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -188,8 +189,64 @@ func copyFile(src, dst string) error {
 	}
 	defer destFile.Close()
 
-	_, err = io.Copy(destFile, sourceFile)
-	return err
+	if _, err = io.Copy(destFile, sourceFile); err != nil {
+		return err
+	}
+
+	return destFile.Sync()
+}
+
+func zipFile(src, dst string) error {
+	// Create destination directory if it doesn't exist
+	destDir := filepath.Dir(dst)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	archive, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer archive.Close()
+
+	zipWriter := zip.NewWriter(archive)
+	defer zipWriter.Close()
+
+	fileToZip, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer fileToZip.Close()
+
+	info, err := fileToZip.Stat()
+	if err != nil {
+		return err
+	}
+
+	header, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+
+	header.Name = "vpn-share-tool.exe"
+	header.Method = zip.Deflate
+
+	writer, err := zipWriter.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	if _, err = io.Copy(writer, fileToZip); err != nil {
+		return err
+	}
+
+	// Close zipWriter first to write central directory structure to archive
+	if err := zipWriter.Close(); err != nil {
+		return err
+	}
+
+	// Sync file system buffers for archive file
+	return archive.Sync()
 }
 
 func runRelease() error {
@@ -231,31 +288,63 @@ func runRelease() error {
 		return fmt.Errorf("share path is unreachable: %s (%w)", sharePath, err)
 	}
 
-	// Construct destination
-	filename := fmt.Sprintf("vpn-share-tool_%s.exe", versionStr)
-	destPath := filepath.Join(sharePath, filename)
+	// 1. Publish raw EXE for backwards compatibility
+	exeFilename := fmt.Sprintf("vpn-share-tool_%s.exe", versionStr)
+	destExePath := filepath.Join(sharePath, exeFilename)
+	exeSha256Path := destExePath + ".sha256"
 
-	fmt.Printf("Publishing release %s...\n", versionStr)
+	// Delete old .sha256 file first if it exists
+	if err := os.Remove(exeSha256Path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove old exe sha256 file: %w", err)
+	}
+
+	fmt.Printf("Publishing EXE release %s...\n", versionStr)
 	fmt.Printf("Source: %s\n", srcPath)
-	fmt.Printf("Dest:   %s\n", destPath)
+	fmt.Printf("Dest:   %s\n", destExePath)
 
-	if err := copyFile(srcPath, destPath); err != nil {
-		return fmt.Errorf("failed to copy file: %w", err)
+	if err := copyFile(srcPath, destExePath); err != nil {
+		return fmt.Errorf("failed to copy exe file: %w", err)
 	}
 
-	// Calculate SHA256 and write to .sha256 file to mark the copy as finished
-	hash, err := computeSHA256(srcPath)
+	exeHash, err := computeSHA256(srcPath)
 	if err != nil {
-		return fmt.Errorf("failed to compute sha256: %w", err)
+		return fmt.Errorf("failed to compute exe sha256: %w", err)
 	}
 
-	sha256Path := destPath + ".sha256"
-	if err := os.WriteFile(sha256Path, []byte(hash), 0644); err != nil {
-		return fmt.Errorf("failed to write sha256 file: %w", err)
+	if err := os.WriteFile(exeSha256Path, []byte(exeHash), 0644); err != nil {
+		return fmt.Errorf("failed to write exe sha256 file: %w", err)
+	}
+	fmt.Printf("EXE SHA256: %s -> %s\n", exeHash, exeSha256Path)
+
+	// 2. Publish ZIP package to bypass AV/network corruption
+	zipFilename := fmt.Sprintf("vpn-share-tool_%s.zip", versionStr)
+	destZipPath := filepath.Join(sharePath, zipFilename)
+	zipSha256Path := destZipPath + ".sha256"
+
+	// Delete old .sha256 file first if it exists
+	if err := os.Remove(zipSha256Path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove old zip sha256 file: %w", err)
 	}
 
-	fmt.Printf("SHA256: %s -> %s\n", hash, sha256Path)
-	fmt.Println("✅ Published successfully.")
+	fmt.Printf("Publishing ZIP release %s...\n", versionStr)
+	fmt.Printf("Source: %s\n", srcPath)
+	fmt.Printf("Dest:   %s\n", destZipPath)
+
+	if err := zipFile(srcPath, destZipPath); err != nil {
+		return fmt.Errorf("failed to create zip file: %w", err)
+	}
+
+	zipHash, err := computeSHA256(destZipPath)
+	if err != nil {
+		return fmt.Errorf("failed to compute zip sha256: %w", err)
+	}
+
+	if err := os.WriteFile(zipSha256Path, []byte(zipHash), 0644); err != nil {
+		return fmt.Errorf("failed to write zip sha256 file: %w", err)
+	}
+	fmt.Printf("ZIP SHA256: %s -> %s\n", zipHash, zipSha256Path)
+
+	fmt.Println("✅ Published both formats successfully.")
 	return nil
 }
 

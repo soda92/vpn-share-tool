@@ -1,6 +1,7 @@
 package core
 
 import (
+	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -53,6 +54,13 @@ func ApplyUpdate(info *UpdateInfo) error {
 	exeName := filepath.Base(currentExe)
 	newExe := filepath.Join(exeDir, exeName+".new")
 
+	// Determine download destination path (if URL ends with .zip, download to .new.zip)
+	isZip := strings.HasSuffix(info.URL, ".zip")
+	downloadDest := newExe
+	if isZip {
+		downloadDest = newExe + ".zip"
+	}
+
 	// Get restart args
 	var args []string
 	if RestartArgsProvider != nil {
@@ -61,7 +69,7 @@ func ApplyUpdate(info *UpdateInfo) error {
 	argsStr := strings.Join(args, " ")
 
 	// Download
-	log.Printf("Downloading %s to %s...", info.URL, newExe)
+	log.Printf("Downloading %s to %s...", info.URL, downloadDest)
 	client := GetHTTPClient()
 	resp, err := client.Get(DiscoveryServerURL + info.URL)
 	if err != nil {
@@ -73,22 +81,56 @@ func ApplyUpdate(info *UpdateInfo) error {
 		return fmt.Errorf("download failed: server returned status %d", resp.StatusCode)
 	}
 
-	out, err := os.Create(newExe)
+	out, err := os.Create(downloadDest)
 	if err != nil {
 		return err
 	}
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		out.Close()
-		os.Remove(newExe)
+		os.Remove(downloadDest)
 		return err
 	}
 	out.Close()
 
-	// Verify checksum before applying
-	if err := verifySHA256(newExe, info.Sha256); err != nil {
-		os.Remove(newExe)
+	// Validate file size against Content-Length if specified
+	if resp.ContentLength > 0 {
+		fi, err := os.Stat(downloadDest)
+		if err != nil {
+			os.Remove(downloadDest)
+			return fmt.Errorf("failed to stat downloaded file: %w", err)
+		}
+		if fi.Size() != resp.ContentLength {
+			os.Remove(downloadDest)
+			return fmt.Errorf("download incomplete: expected %d bytes, got %d", resp.ContentLength, fi.Size())
+		}
+	}
+
+	// Verify checksum before applying (checks downloaded ZIP if isZip, otherwise EXE)
+	if err := verifySHA256(downloadDest, info.Sha256); err != nil {
+		os.Remove(downloadDest)
 		return fmt.Errorf("download verification failed: %w", err)
+	}
+
+	var exeHash string
+	if isZip {
+		log.Printf("Extracting %s to %s...", downloadDest, newExe)
+		if err := unzipFile(downloadDest, newExe); err != nil {
+			os.Remove(downloadDest)
+			os.Remove(newExe)
+			return fmt.Errorf("failed to unzip update: %w", err)
+		}
+		os.Remove(downloadDest) // Clean up ZIP
+
+		// Calculate the SHA256 hash of the extracted EXE for batch script verification
+		var err error
+		exeHash, err = getFileSHA256(newExe)
+		if err != nil {
+			os.Remove(newExe)
+			return fmt.Errorf("failed to compute extracted exe hash: %w", err)
+		}
+	} else {
+		exeHash = info.Sha256
 	}
 
 	// Make executable
@@ -99,7 +141,7 @@ func ApplyUpdate(info *UpdateInfo) error {
 		batPath := filepath.Join(exeDir, "update.bat")
 
 		var hashCheck string
-		if info.Sha256 != "" {
+		if exeHash != "" {
 			hashCheck = fmt.Sprintf("rem Verify hash of new executable using powershell\r\n"+
 				"powershell -Command \"if ((Get-FileHash -Path '%s' -Algorithm SHA256).Hash.ToLower() -ne '%s') { exit 1 }\"\r\n"+
 				"if errorlevel 1 (\r\n"+
@@ -107,7 +149,7 @@ func ApplyUpdate(info *UpdateInfo) error {
 				"    del \"%s\"\r\n"+
 				"    pause\r\n"+
 				"    exit\r\n"+
-				")\r\n", filepath.Base(newExe), strings.ToLower(info.Sha256), filepath.Base(newExe))
+				")\r\n", filepath.Base(newExe), strings.ToLower(exeHash), filepath.Base(newExe))
 		}
 
 		batContent := fmt.Sprintf(`@echo off
@@ -182,26 +224,80 @@ func startNewProcess(exePath string, args []string) {
 	}
 }
 
-func verifySHA256(filePath, expectedHash string) error {
-	if expectedHash == "" {
-		return nil // Skip validation if server didn't provide a hash (e.g. legacy/local test)
-	}
-
+func getFileSHA256(filePath string) (string, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer f.Close()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func verifySHA256(filePath, expectedHash string) error {
+	if expectedHash == "" {
+		return nil // Skip validation if server didn't provide a hash (e.g. legacy/local test)
+	}
+
+	actualHash, err := getFileSHA256(filePath)
+	if err != nil {
 		return err
 	}
 
-	actualHash := hex.EncodeToString(h.Sum(nil))
 	if !strings.EqualFold(actualHash, expectedHash) {
 		return fmt.Errorf("hash mismatch! expected %s, got %s", expectedHash, actualHash)
 	}
 
 	return nil
+}
+
+func unzipFile(zipPath, destPath string) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	var targetFile *zip.File
+	for _, f := range r.File {
+		// Check for the executable inside zip
+		if filepath.Base(f.Name) == "vpn-share-tool.exe" {
+			targetFile = f
+			break
+		}
+	}
+
+	// Fallback to the first file if we can't find one with the exact name
+	if targetFile == nil && len(r.File) > 0 {
+		targetFile = r.File[0]
+	}
+
+	if targetFile == nil {
+		return fmt.Errorf("no files found in zip archive")
+	}
+
+	rc, err := targetFile.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	// Ensure destination directory exists
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return err
+	}
+
+	out, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, rc)
+	return err
 }
