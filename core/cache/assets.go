@@ -24,6 +24,11 @@ func (t *CachingTransport) handleStaticAsset(req *http.Request, reqBody []byte) 
 	}
 	log.Printf("Cache MISS for static: %s", req.URL.String())
 
+	// Force a full fetch by removing cache validation headers on cache miss.
+	// This ensures we always get the full body to populate our cache and record it in the archive.
+	req.Header.Del("If-Modified-Since")
+	req.Header.Del("If-None-Match")
+
 	// Fetch
 	transport := t.Transport
 	if transport == nil {

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -340,3 +341,178 @@ func TestPlaybackFallback(t *testing.T) {
 		t.Errorf("expected 404 for request without referer, got %d", rr2.Code)
 	}
 }
+
+func TestFindResourceFuzzy(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "archive_fuzzy_test_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test_archive_fuzzy.db")
+	if err := debug.InitDB(dbPath); err != nil {
+		t.Fatalf("failed to init db: %v", err)
+	}
+
+	p := &models.SharedProxy{
+		OriginalURL: "http://example.com",
+		RemotePort:  10082,
+		Ctx:         context.Background(),
+	}
+
+	sessionID, err := StartSession(p, "Fuzzy Session")
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+	defer StopSession(p)
+
+	// Record an image with a specific query parameter
+	imageURL := "http://example.com/images/navbg.png?version=123"
+	req := httptest.NewRequest("GET", imageURL, nil)
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+	}
+	resp.Header.Set("Content-Type", "image/png")
+	Record(p, req, resp, []byte(""), []byte("pngdata"))
+	time.Sleep(100 * time.Millisecond)
+
+	// Seek using different query parameter (should match fuzzy)
+	now := time.Now().UnixNano()
+	res, err := FindResource(sessionID, "http://example.com/images/navbg.png?version=456", now)
+	if err != nil {
+		t.Fatalf("FindResource failed to find fuzzy match: %v", err)
+	}
+	if res.ResponseBody != "cG5nZGF0YQ==" {
+		t.Errorf("expected cG5nZGF0YQ==, got %s", res.ResponseBody)
+	}
+
+	// Seek using no query parameter (should also match fuzzy)
+	res2, err := FindResource(sessionID, "http://example.com/images/navbg.png", now)
+	if err != nil {
+		t.Fatalf("FindResource failed to find fuzzy match without query: %v", err)
+	}
+	if res2.ResponseBody != "cG5nZGF0YQ==" {
+		t.Errorf("expected cG5nZGF0YQ==, got %s", res2.ResponseBody)
+	}
+}
+
+func TestSimulateRender(t *testing.T) {
+	// 1. Setup mux
+	mux := http.NewServeMux()
+	p := &models.SharedProxy{
+		OriginalURL: "http://example.com",
+		RemotePort:  10082,
+		Ctx:         context.Background(),
+	}
+	RegisterArchiveRoutes(mux, func() []*models.SharedProxy { return []*models.SharedProxy{p} })
+
+	// Request missing CSS asset using collapsed slash URL
+	req1 := httptest.NewRequest("GET", "/archive/view/somesession/12345/http:/example.com/missing.css", nil)
+	rr1 := httptest.NewRecorder()
+	mux.ServeHTTP(rr1, req1)
+
+	if rr1.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for simulated missing CSS, got %d", rr1.Code)
+	}
+	if !strings.Contains(rr1.Body.String(), "simulated placeholder") {
+		t.Errorf("expected simulated placeholder in body, got: %s", rr1.Body.String())
+	}
+
+	// Request missing Image asset using collapsed slash URL
+	req2 := httptest.NewRequest("GET", "/archive/view/somesession/12345/http:/example.com/missing.png", nil)
+	rr2 := httptest.NewRecorder()
+	mux.ServeHTTP(rr2, req2)
+
+	if rr2.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for simulated missing image, got %d", rr2.Code)
+	}
+	if rr2.Header().Get("Content-Type") != "image/png" {
+		t.Errorf("expected image/png content type, got: %s", rr2.Header().Get("Content-Type"))
+	}
+}
+
+func TestPrefetchAssets(t *testing.T) {
+	// 1. Setup temporary database
+	tmpDir, err := os.MkdirTemp("", "archive_prefetch_test_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test_archive_prefetch.db")
+	if err := debug.InitDB(dbPath); err != nil {
+		t.Fatalf("failed to init db: %v", err)
+	}
+
+	// 2. Start a mock server to serve the assets
+	var cssFetched, imgFetched, fontFetched int
+	var mu sync.Mutex
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if r.URL.Path == "/styles.css" {
+			cssFetched++
+			w.Header().Set("Content-Type", "text/css")
+			w.Write([]byte(`body { background: url('/bg.png'); font-family: url("fonts/font.woff2"); }`))
+		} else if r.URL.Path == "/bg.png" {
+			imgFetched++
+			w.Header().Set("Content-Type", "image/png")
+			w.Write([]byte("fake-png-data"))
+		} else if r.URL.Path == "/fonts/font.woff2" {
+			fontFetched++
+			w.Header().Set("Content-Type", "font/woff2")
+			w.Write([]byte("fake-woff-data"))
+		}
+	}))
+	defer ts.Close()
+
+	// 3. Define the HTML and SharedProxy
+	html := `
+<html>
+<head>
+	<link rel="stylesheet" href="/styles.css">
+	<img src="/bg.png">
+</head>
+<body>
+</body>
+</html>
+`
+
+	p := &models.SharedProxy{
+		OriginalURL: ts.URL,
+		RemotePort:  10085,
+		Ctx:         context.Background(),
+	}
+
+	sessionID, err := StartSession(p, "Prefetch Session")
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+	defer StopSession(p)
+
+	// 4. Trigger prefetch
+	origReq := httptest.NewRequest("GET", ts.URL+"/index.html", nil)
+	prefetchAssets(sessionID, origReq, []byte(html))
+
+	// Sleep to allow async fetching and recursive CSS prefetching to complete
+	time.Sleep(300 * time.Millisecond)
+
+	mu.Lock()
+	cCSS := cssFetched
+	cImg := imgFetched
+	cFont := fontFetched
+	mu.Unlock()
+
+	if cCSS != 1 {
+		t.Errorf("expected CSS to be fetched once, got %d", cCSS)
+	}
+	if cImg != 1 {
+		t.Errorf("expected Image to be fetched once (via HTML or CSS deduplicated), got %d", cImg)
+	}
+	if cFont != 1 {
+		t.Errorf("expected Font to be fetched once (via CSS), got %d", cFont)
+	}
+}
+

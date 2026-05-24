@@ -1,6 +1,9 @@
 <template>
   <div class="container">
-    <h2 class="view-title">Saved Sessions</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+      <h2 class="view-title" style="margin: 0;">Saved Sessions</h2>
+      <button @click="downloadDb" class="action-btn" style="background-color: #28a745; font-weight: bold; padding: 0.5rem 1rem;">Download bbolt DB</button>
+    </div>
     <div class="session-list-container">
       <ul v-if="sessions.length" class="session-list">
         <li v-for="session in sessions" :key="session.id" class="session-item">
@@ -33,6 +36,10 @@ const sessions = ref([]);
 const fileInput = ref(null);
 const router = useRouter();
 const toast = useToast();
+
+const downloadDb = () => {
+  window.open('/api/debug/download-db', '_blank');
+};
 
 const fetchSessions = async () => {
   try {

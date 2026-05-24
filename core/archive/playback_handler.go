@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -200,6 +201,9 @@ func servePlaybackResource(w http.ResponseWriter, r *http.Request, sessionID str
 	resp, err := FindResource(sessionID, targetURL, targetTimestamp)
 	if err != nil {
 		log.Printf("[Playback] Resource not found: %s at %d. Error: %v", targetURL, targetTimestamp, err)
+		if trySimulateRender(w, r, targetURL) {
+			return
+		}
 		serveCustom404(w, targetURL, sessionID, targetTimestamp)
 		return
 	}
@@ -235,14 +239,15 @@ func servePlaybackResource(w http.ResponseWriter, r *http.Request, sessionID str
 (function() {
 	const sessionID = "%s";
 	const timestamp = "%d";
+	const originalPageURL = "%s";
 
 	const origFetch = window.fetch;
 	window.fetch = function(input, init) {
 		let url = typeof input === 'string' ? input : (input && input.url);
 		if (url) {
-			let targetURL = new URL(url, document.baseURI).href;
+			let targetURL = new URL(url, originalPageURL).href;
 			if (!targetURL.includes('/archive/')) {
-				url = "/archive/ajax/" + sessionID + "/" + timestamp + "/" + targetURL;
+				url = "/archive/ajax/" + sessionID + "/" + timestamp + "/" + targetURL.replace("://", ":/");
 			}
 		}
 		return origFetch(url, init);
@@ -251,16 +256,16 @@ func servePlaybackResource(w http.ResponseWriter, r *http.Request, sessionID str
 	const origOpen = XMLHttpRequest.prototype.open;
 	XMLHttpRequest.prototype.open = function(method, url, ...args) {
 		if (url) {
-			let targetURL = new URL(url, document.baseURI).href;
+			let targetURL = new URL(url, originalPageURL).href;
 			if (!targetURL.includes('/archive/')) {
-				url = "/archive/ajax/" + sessionID + "/" + timestamp + "/" + targetURL;
+				url = "/archive/ajax/" + sessionID + "/" + timestamp + "/" + targetURL.replace("://", ":/");
 			}
 		}
 		return origOpen.call(this, method, url, ...args);
 	};
 })();
 </script>
-`, sessionID, targetTimestamp)
+`, sessionID, targetTimestamp, targetURL)
 
 		// Locate injection point (after head)
 		if idx := strings.Index(bodyStr, "<head>"); idx != -1 {
@@ -337,6 +342,42 @@ func FindResource(sessionID string, targetURL string, targetTimestamp int64) (*A
 				minDiff = diff
 				closestKey = k
 				closestVal = v
+			}
+		}
+
+		// If closestKey was not found, try fuzzy lookup by stripping query parameters
+		if closestKey == nil {
+			strippedTarget := stripQuery(targetURL)
+			
+			// Seek to the start of strippedTarget prefix
+			for k, v := c.Seek([]byte(strippedTarget)); k != nil; k, v = c.Next() {
+				keyStr := string(k)
+				parts := strings.Split(keyStr, "#")
+				if len(parts) < 2 {
+					continue
+				}
+				keyURL := parts[0]
+				
+				// Check if this key matches strippedTarget when its query is stripped
+				if stripQuery(keyURL) != strippedTarget {
+					// Since keys are sorted, once we pass the prefix we can stop
+					if !strings.HasPrefix(keyURL, strippedTarget) {
+						break
+					}
+					continue
+				}
+
+				keyTime, err := strconv.ParseInt(parts[len(parts)-1], 10, 64)
+				if err != nil {
+					continue
+				}
+
+				diff := int64(math.Abs(float64(keyTime - targetTimestamp)))
+				if diff < minDiff {
+					minDiff = diff
+					closestKey = k
+					closestVal = v
+				}
 			}
 		}
 
@@ -462,7 +503,7 @@ func handleArchiveHistory(w http.ResponseWriter, r *http.Request) {
 					SessionName: session.Name,
 					Timestamp:   ts,
 					Formatted:   time.Unix(0, ts).Format("2006-01-02 15:04:05"),
-					PlaybackURL: fmt.Sprintf("/archive/view/%s/%d/%s", session.ID, ts, targetURL),
+					PlaybackURL: fmt.Sprintf("/archive/view/%s/%d/%s", session.ID, ts, strings.Replace(targetURL, "://", ":/", 1)),
 				})
 			}
 		}
@@ -523,4 +564,70 @@ func handlePlaybackFallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.NotFound(w, r)
+}
+
+func stripQuery(urlStr string) string {
+	if idx := strings.Index(urlStr, "?"); idx != -1 {
+		return urlStr[:idx]
+	}
+	return urlStr
+}
+
+func trySimulateRender(w http.ResponseWriter, r *http.Request, targetURL string) bool {
+	// Parse URL path to check extension
+	parsed, err := url.Parse(targetURL)
+	var ext string
+	if err == nil {
+		ext = strings.ToLower(filepath.Ext(parsed.Path))
+	}
+
+	accept := strings.ToLower(r.Header.Get("Accept"))
+
+	// 1. CSS
+	if ext == ".css" || strings.Contains(accept, "text/css") {
+		w.Header().Set("Content-Type", "text/css")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("/* simulated placeholder */"))
+		return true
+	}
+
+	// 2. JavaScript
+	if ext == ".js" || ext == ".mjs" || strings.Contains(accept, "javascript") {
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("// simulated placeholder"))
+		return true
+	}
+
+	// 3. Images (PNG, JPG, ICO, SVG, etc.)
+	isImage := false
+	imageExtensions := map[string]bool{
+		".png":  true,
+		".jpg":  true,
+		".jpeg": true,
+		".gif":  true,
+		".ico":  true,
+		".svg":  true,
+		".webp": true,
+		".bmp":  true,
+	}
+	if imageExtensions[ext] || strings.Contains(accept, "image/") {
+		isImage = true
+	}
+
+	if isImage {
+		// 1x1 pixel transparent PNG base64
+		const transparentPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+		imgBytes, _ := base64.StdEncoding.DecodeString(transparentPNG)
+		
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.WriteHeader(http.StatusOK)
+		w.Write(imgBytes)
+		return true
+	}
+
+	return false
 }
