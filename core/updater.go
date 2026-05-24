@@ -29,7 +29,7 @@ func TriggerUpdate() (bool, error) {
 		return false, err
 	}
 
-	if info.Version == Version {
+	if !IsNewerVersion(Version, info.Version) {
 		return false, nil // No update
 	}
 

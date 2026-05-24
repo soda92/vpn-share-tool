@@ -15,7 +15,7 @@ func checkUpdate(w fyne.Window) {
 		return
 	}
 
-	if info.Version != Version && Version != "dev" {
+	if core.IsNewerVersion(Version, info.Version) {
 		dialog.ShowConfirm(
 			l("updateAvailableTitle"),
 			l("updateAvailableContent", map[string]interface{}{"version": info.Version}),

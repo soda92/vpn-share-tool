@@ -70,3 +70,33 @@ func TestUnzipAndSHA256(t *testing.T) {
 		t.Errorf("extracted content mismatch: expected %q, got %q", string(exeContent), string(extractedContent))
 	}
 }
+
+func TestIsNewerVersion(t *testing.T) {
+	tests := []struct {
+		current   string
+		candidate string
+		expected  bool
+	}{
+		{"dev", "v40d", false},
+		{"", "v40d", false},
+		{"v40d", "v41c", true},
+		{"v41c", "v40d", false},
+		{"v40d", "v40d", false},
+		{"v40z", "v40aa", true},
+		{"v40aa", "v40z", false},
+		{"v40ab", "v40ac", true},
+		{"v40ac", "v40ab", false},
+		{"v100a", "v100b", true},
+		{"v100b", "v100a", false},
+		{"v99z", "v100a", true},
+		{"v100a", "v99z", false},
+	}
+
+	for _, tc := range tests {
+		actual := IsNewerVersion(tc.current, tc.candidate)
+		if actual != tc.expected {
+			t.Errorf("IsNewerVersion(%q, %q) = %v; expected %v", tc.current, tc.candidate, actual, tc.expected)
+		}
+	}
+}
+
