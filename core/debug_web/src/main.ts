@@ -8,25 +8,31 @@ import posthog from 'posthog-js';
 
 const app = createApp(App);
 
-// Initialize PostHog
-posthog.init('phc_ym4rdoQgT2oeKEBvyYb35qacFPTEwQyLNMf3jUojXoiq', {
-  api_host: 'https://benefit.sodacris.com',
-  person_profiles: 'identified_only',
-  capture_pageview: true,
-});
+const posthogKey = import.meta.env.VITE_POSTHOG_KEY;
+const posthogHost = import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
+const sentryDsn = import.meta.env.VITE_SENTRY_DSN;
 
-// Initialize Sentry
-Sentry.init({
-  app,
-  dsn: 'https://bc888ace3f8f6751be2c1a8b8d71c71f@benefit.sodacris.com/4511405673480272',
-  integrations: [
-    Sentry.browserTracingIntegration(),
-    Sentry.replayIntegration(),
-  ],
-  tracesSampleRate: 1.0,
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
-});
+if (posthogKey) {
+  posthog.init(posthogKey, {
+    api_host: posthogHost,
+    person_profiles: 'identified_only',
+    capture_pageview: true,
+  });
+}
+
+if (sentryDsn) {
+  Sentry.init({
+    app,
+    dsn: sentryDsn,
+    integrations: [
+      Sentry.browserTracingIntegration(),
+      Sentry.replayIntegration(),
+    ],
+    tracesSampleRate: 1.0,
+    replaysSessionSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1.0,
+  });
+}
 
 app.use(router);
 app.use(Toast);

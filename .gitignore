@@ -51,3 +51,5 @@ certs/
 certs/*.key
 discovery-server/*.key
 core/resources/ca.crt
+/env.fish
+
