@@ -37,8 +37,41 @@ func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
 	var lastError string
 	reachableNodeFound := false
 
+	nodesWithActiveProxy := make(map[string]bool)
+	if req.NodeAddress == "auto_another" {
+		for _, instance := range activeInstances {
+			client := &http.Client{Timeout: 3 * time.Second}
+			resp, err := client.Get(fmt.Sprintf("http://%s/active-proxies", instance.Address))
+			if err != nil {
+				continue
+			}
+			var proxies []struct {
+				OriginalURL string `json:"original_url"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&proxies); err == nil {
+				for _, p := range proxies {
+					if p.OriginalURL == req.URL {
+						nodesWithActiveProxy[instance.Address] = true
+						break
+					}
+				}
+			}
+			resp.Body.Close()
+		}
+
+		if len(nodesWithActiveProxy) == len(activeInstances) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Proxy is already active on all available nodes."})
+			return
+		}
+	}
+
 	for _, instance := range activeInstances {
-		if req.NodeAddress != "" && instance.Address != req.NodeAddress {
+		if req.NodeAddress != "" && req.NodeAddress != "auto" && req.NodeAddress != "auto_another" && instance.Address != req.NodeAddress {
+			continue
+		}
+		if req.NodeAddress == "auto_another" && nodesWithActiveProxy[instance.Address] {
 			continue
 		}
 		// Check if the instance can reach the URL

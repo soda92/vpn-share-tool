@@ -55,6 +55,7 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="auto">Auto (First Reachable)</el-dropdown-item>
+                  <el-dropdown-item command="auto_another">Auto (Create Another)</el-dropdown-item>
                   <el-dropdown-item 
                     v-for="server in servers" 
                     :key="server.address" 
