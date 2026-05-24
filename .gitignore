@@ -53,4 +53,6 @@ certs/*.key
 discovery-server/*.key
 core/resources/ca.crt
 /env.fish
+/common/secrets_gen.go
+
 

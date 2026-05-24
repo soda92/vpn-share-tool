@@ -13,6 +13,9 @@ import (
 var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "Build main application (desktop)",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		return generateSecretsGo()
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runBuildDesktop()
 	},
@@ -205,7 +208,7 @@ func runBuildServer() error {
 		return err
 	}
 
-	if err := execCmd(rootDir, nil, "go", "build", "-o", output, "./cmd/discovery"); err != nil {
+	if err := execCmd(rootDir, nil, "go", "build", "-tags", "secrets_gen", "-o", output, "./cmd/discovery"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
@@ -267,7 +270,7 @@ func runBuildDesktop() error {
 	toolCmdDir := filepath.Join(rootDir, "cmd", "vpn-share-tool")
 
 	// Build Go binary
-	if err := execCmdFiltered(toolCmdDir, nil, "go", "build", "-o", "vpn-share-tool"); err != nil {
+	if err := execCmdFiltered(toolCmdDir, nil, "go", "build", "-tags", "secrets_gen", "-o", "vpn-share-tool"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
@@ -376,14 +379,14 @@ func runBuildWindows() error {
 			"CXX=x86_64-w64-mingw32-g++",
 		)
 
-		if err := execCmd(rootDir, env, "fyne", "build", "-os", "windows", "-o", output, "--src", "./cmd/vpn-share-tool"); err != nil {
+		if err := execCmd(rootDir, env, "fyne", "build", "-os", "windows", "--tags", "secrets_gen", "-o", output, "--src", "./cmd/vpn-share-tool"); err != nil {
 			return fmt.Errorf("local mingw64 build failed: %w", err)
 		}
 		fmt.Printf("✅ Windows build successful: %s\n", output)
 		return nil
 	}
 
-	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool", "./cmd/vpn-share-tool"); err != nil {
+	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "-tags", "secrets_gen", "--app-id", "vpn.share.tool", "./cmd/vpn-share-tool"); err != nil {
 		return fmt.Errorf("fyne-cross failed: %w", err)
 	}
 	fmt.Println("✅ Windows build successful.")
@@ -520,5 +523,80 @@ func buildViewers() error {
 	}
 	fmt.Printf("✅ Windows viewer built: %s\n", windowsOut)
 
+	return nil
+}
+
+// generateSecretsGo reads .env and/or system environment variables,
+// and writes common/secrets_gen.go so Go builds can embed telemetry secrets.
+func generateSecretsGo() error {
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	envFile := filepath.Join(rootDir, ".env")
+	envMap := make(map[string]string)
+
+	// Try reading .env
+	if data, err := os.ReadFile(envFile); err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			// Strip quotes
+			if (strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"")) ||
+				(strings.HasPrefix(val, "'") && strings.HasSuffix(val, "'")) {
+				if len(val) >= 2 {
+					val = val[1 : len(val)-1]
+				}
+			}
+			envMap[key] = val
+		}
+	}
+
+	getSecret := func(key string) string {
+		if val, ok := envMap[key]; ok && val != "" {
+			return val
+		}
+		return os.Getenv(key)
+	}
+
+	sentryDSN := getSecret("VITE_SENTRY_DSN")
+	posthogKey := getSecret("VITE_POSTHOG_KEY")
+	posthogHost := getSecret("VITE_POSTHOG_HOST")
+	if posthogHost == "" {
+		posthogHost = "https://us.i.posthog.com"
+	}
+
+	secretsFile := filepath.Join(rootDir, "common", "secrets_gen.go")
+	content := fmt.Sprintf(`//go:build secrets_gen
+
+package common
+
+var (
+	SentryDSN   = "%s"
+	PosthogKey  = "%s"
+	PosthogHost = "%s"
+)
+`, sentryDSN, posthogKey, posthogHost)
+
+	// Ensure common directory exists
+	if err := os.MkdirAll(filepath.Dir(secretsFile), 0755); err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(secretsFile, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write secrets_gen.go: %w", err)
+	}
+
+	fmt.Println("✅ Generated common/secrets_gen.go from environment.")
 	return nil
 }

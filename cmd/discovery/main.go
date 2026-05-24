@@ -8,6 +8,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/posthog/posthog-go"
+	"github.com/soda92/vpn-share-tool/common"
 	"github.com/soda92/vpn-share-tool/discovery/api"
 	"github.com/soda92/vpn-share-tool/discovery/proxy"
 	"github.com/soda92/vpn-share-tool/discovery/store"
@@ -19,7 +20,10 @@ func main() {
 	flag.Parse()
 
 	// Initialize Sentry
-	sentryDsn := os.Getenv("VITE_SENTRY_DSN")
+	sentryDsn := common.SentryDSN
+	if sentryDsn == "" {
+		sentryDsn = os.Getenv("VITE_SENTRY_DSN")
+	}
 	if sentryDsn != "" {
 		err := sentry.Init(sentry.ClientOptions{
 			Dsn:              sentryDsn,
@@ -44,9 +48,15 @@ func main() {
 	}
 
 	// Initialize PostHog
-	phKey := os.Getenv("VITE_POSTHOG_KEY")
+	phKey := common.PosthogKey
+	if phKey == "" {
+		phKey = os.Getenv("VITE_POSTHOG_KEY")
+	}
 	if phKey != "" {
-		phEndpoint := os.Getenv("VITE_POSTHOG_HOST")
+		phEndpoint := common.PosthogHost
+		if phEndpoint == "" {
+			phEndpoint = os.Getenv("VITE_POSTHOG_HOST")
+		}
 		if phEndpoint == "" {
 			phEndpoint = "https://us.i.posthog.com"
 		}
