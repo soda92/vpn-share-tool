@@ -1,26 +1,31 @@
 package api
 
 import (
+	"crypto/sha256"
 	"crypto/tls"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/soda92/vpn-share-tool/discovery/proxy"
 	"github.com/soda92/vpn-share-tool/discovery/registry"
 	"github.com/soda92/vpn-share-tool/discovery/resources"
 	"github.com/soheilhy/cmux"
-	"time"
 )
 
 const (
@@ -31,6 +36,7 @@ const (
 type updateInfo struct {
 	Version string `json:"version"`
 	URL     string `json:"url"`
+	Sha256  string `json:"sha256"`
 }
 
 var reVersion = regexp.MustCompile(`vpn-share-tool_v(\d+)([a-z]+)\.exe`)
@@ -48,6 +54,7 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 		Suffix  string
 		Full    string
 		File    string
+		Sha256  string
 	}
 
 	var versions []version
@@ -58,6 +65,27 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 		}
 		matches := reVersion.FindStringSubmatch(e.Name())
 		if len(matches) == 3 {
+			// Check if corresponding .sha256 file exists (marking copy completion)
+			sha256Path := filepath.Join(SharePath, e.Name()+".sha256")
+			shaBytes, err := os.ReadFile(sha256Path)
+			if err != nil {
+				// Skip if .sha256 doesn't exist (copy incomplete)
+				continue
+			}
+			hash := strings.TrimSpace(string(shaBytes))
+			fields := strings.Fields(hash)
+			if len(fields) > 0 {
+				hash = fields[0]
+			}
+
+			// Verify that the actual hash of the exe file on disk matches the expected hash in the .sha256 file.
+			// This prevents serving an incomplete file during release copy.
+			exePath := filepath.Join(SharePath, e.Name())
+			if err := verifyLocalFileHash(exePath, hash); err != nil {
+				log.Printf("Version %s has .sha256 file but actual file verification failed: %v", e.Name(), err)
+				continue
+			}
+
 			counter, err := strconv.Atoi(matches[1])
 			if err != nil {
 				log.Printf("Failed to parse version counter from %s: %v", e.Name(), err)
@@ -69,6 +97,7 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 				Suffix:  suffix,
 				Full:    fmt.Sprintf("v%d%s", counter, suffix),
 				File:    e.Name(),
+				Sha256:  hash,
 			})
 		}
 	}
@@ -94,6 +123,7 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 	resp := updateInfo{
 		Version: latest.Full,
 		URL:     fmt.Sprintf("/download/%s", latest.File),
+		Sha256:  latest.Sha256,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -299,4 +329,43 @@ func StartHTTPServer(insecure bool) {
 	if err := m.Serve(); err != nil {
 		log.Fatalf("Multiplexer error: %v", err)
 	}
+}
+
+var (
+	verifiedHashesCache     = make(map[string]string)
+	verifiedHashesCacheLock sync.RWMutex
+)
+
+func verifyLocalFileHash(filePath string, expectedHash string) error {
+	verifiedHashesCacheLock.RLock()
+	cachedHash, ok := verifiedHashesCache[filePath]
+	verifiedHashesCacheLock.RUnlock()
+
+	if ok && strings.EqualFold(cachedHash, expectedHash) {
+		return nil
+	}
+
+	// Not cached or mismatch, compute hash
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	actualHash := hex.EncodeToString(h.Sum(nil))
+
+	if !strings.EqualFold(actualHash, expectedHash) {
+		return fmt.Errorf("hash mismatch: expected %s, got %s", expectedHash, actualHash)
+	}
+
+	// Cache the verified hash
+	verifiedHashesCacheLock.Lock()
+	verifiedHashesCache[filePath] = actualHash
+	verifiedHashesCacheLock.Unlock()
+
+	return nil
 }

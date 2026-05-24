@@ -9,6 +9,7 @@ import (
 type UpdateInfo struct {
 	Version string `json:"version"`
 	URL     string `json:"url"`
+	Sha256  string `json:"sha256"`
 }
 
 func CheckForUpdates() (*UpdateInfo, error) {

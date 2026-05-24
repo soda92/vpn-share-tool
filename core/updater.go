@@ -1,6 +1,8 @@
 package core
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -73,9 +75,16 @@ func ApplyUpdate(info *UpdateInfo) error {
 
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		out.Close()
+		os.Remove(newExe)
 		return err
 	}
 	out.Close()
+
+	// Verify checksum before applying
+	if err := verifySHA256(newExe, info.Sha256); err != nil {
+		os.Remove(newExe)
+		return fmt.Errorf("download verification failed: %w", err)
+	}
 
 	// Make executable
 	os.Chmod(newExe, 0755)
@@ -83,7 +92,21 @@ func ApplyUpdate(info *UpdateInfo) error {
 	if runtime.GOOS == "windows" {
 		// Windows: Use batch script to handle file locking
 		batPath := filepath.Join(exeDir, "update.bat")
+
+		var hashCheck string
+		if info.Sha256 != "" {
+			hashCheck = fmt.Sprintf("rem Verify hash of new executable using certutil\r\n"+
+				"certutil -hashfile \"%s\" SHA256 | findstr /i \"%s\" >nul\r\n"+
+				"if errorlevel 1 (\r\n"+
+				"    echo Error: Hash verification of new executable failed.\r\n"+
+				"    del \"%s\"\r\n"+
+				"    pause\r\n"+
+				"    exit\r\n"+
+				")\r\n", filepath.Base(newExe), info.Sha256, filepath.Base(newExe))
+		}
+
 		batContent := fmt.Sprintf(`@echo off
+%s
 set /a retries=0
 :loop
 set /a retries+=1
@@ -97,7 +120,7 @@ exit
 :fail
 echo Failed to update after 30 retries.
 pause
-`, filepath.Base(newExe), exeName, exeName, argsStr)
+`, hashCheck, filepath.Base(newExe), exeName, exeName, argsStr)
 
 		if err := os.WriteFile(batPath, []byte(batContent), 0755); err != nil {
 			return fmt.Errorf("failed to create update script: %w", err)
@@ -151,4 +174,28 @@ func startNewProcess(exePath string, args []string) {
 	if err != nil {
 		log.Printf("Failed to restart process: %v", err)
 	}
+}
+
+func verifySHA256(filePath, expectedHash string) error {
+	if expectedHash == "" {
+		return nil // Skip validation if server didn't provide a hash (e.g. legacy/local test)
+	}
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+
+	actualHash := hex.EncodeToString(h.Sum(nil))
+	if !strings.EqualFold(actualHash, expectedHash) {
+		return fmt.Errorf("hash mismatch! expected %s, got %s", expectedHash, actualHash)
+	}
+
+	return nil
 }

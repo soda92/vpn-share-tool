@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -241,6 +243,33 @@ func runRelease() error {
 		return fmt.Errorf("failed to copy file: %w", err)
 	}
 
+	// Calculate SHA256 and write to .sha256 file to mark the copy as finished
+	hash, err := computeSHA256(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to compute sha256: %w", err)
+	}
+
+	sha256Path := destPath + ".sha256"
+	if err := os.WriteFile(sha256Path, []byte(hash), 0644); err != nil {
+		return fmt.Errorf("failed to write sha256 file: %w", err)
+	}
+
+	fmt.Printf("SHA256: %s -> %s\n", hash, sha256Path)
 	fmt.Println("✅ Published successfully.")
 	return nil
+}
+
+func computeSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
