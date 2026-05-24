@@ -35,18 +35,39 @@ func TestVerifyLocalFileHash(t *testing.T) {
 		t.Error("expected error for wrong hash, got nil")
 	}
 
-	// 3. Test caching (change file content but keep path; cached hash should hit and succeed)
-	// Modify the file on disk to have different content
-	if err := os.WriteFile(filePath, []byte("changed content"), 0644); err != nil {
+	// 3. Test caching (change file content but keep path, size, and mod time; cached hash should hit and succeed)
+	fi, err := os.Stat(filePath)
+	if err != nil {
+		t.Fatalf("failed to stat file: %v", err)
+	}
+	originalModTime := fi.ModTime()
+
+	// Modify the file on disk to have different content but identical size (11 bytes)
+	newContent := []byte("world hello")
+	if err := os.WriteFile(filePath, newContent, 0644); err != nil {
 		t.Fatalf("failed to rewrite file: %v", err)
 	}
 
-	// Since it's cached, it should still succeed for the original expectedHash
+	// Restore original modification time
+	if err := os.Chtimes(filePath, originalModTime, originalModTime); err != nil {
+		t.Fatalf("failed to restore mod time: %v", err)
+	}
+
+	// Since it's cached and size/modtime match, it should still succeed for the original expectedHash
 	if err := verifyLocalFileHash(filePath, expectedHash); err != nil {
 		t.Errorf("expected cached success, got error: %v", err)
 	}
 
-	// But if we clear the cache entry, it should re-evaluate and fail for the original expectedHash
+	// 4. Test cache invalidation (change size; cached hash should NOT hit and should fail)
+	if err := os.WriteFile(filePath, []byte("changed content size"), 0644); err != nil {
+		t.Fatalf("failed to rewrite file with different size: %v", err)
+	}
+
+	if err := verifyLocalFileHash(filePath, expectedHash); err == nil {
+		t.Error("expected error after size change (cache invalidation), got nil")
+	}
+
+	// 5. Test cache invalidation after clearing cache entry
 	verifiedHashesCacheLock.Lock()
 	delete(verifiedHashesCache, filePath)
 	verifiedHashesCacheLock.Unlock()

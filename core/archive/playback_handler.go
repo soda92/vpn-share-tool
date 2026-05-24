@@ -554,6 +554,15 @@ func handlePlaybackFallback(w http.ResponseWriter, r *http.Request) {
 							resolvedURL := refBase.ResolveReference(r.URL).String()
 							log.Printf("[Playback Fallback] Resolved %s relative to referer %s -> %s", r.URL.String(), refererOriginalURL, resolvedURL)
 
+							// If it's a page navigation request (Accept contains text/html), redirect the browser
+							// to the proper /archive/view/... path to preserve the session and timestamp context.
+							accept := strings.ToLower(r.Header.Get("Accept"))
+							if strings.Contains(accept, "text/html") {
+								redirectURL := fmt.Sprintf("/archive/view/%s/%d/%s", sessionID, timestamp, strings.Replace(resolvedURL, "://", ":/", 1))
+								http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
+								return
+							}
+
 							servePlaybackResource(w, r, sessionID, timestamp, resolvedURL, false)
 							return
 						}

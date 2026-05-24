@@ -9,9 +9,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/soda92/vpn-share-tool/core/archive"
 	"github.com/soda92/vpn-share-tool/core/proxy"
 	"github.com/soda92/vpn-share-tool/core/resources"
 )
+
+func init() {
+	archive.HTTPClient = GetHTTPClient()
+}
 
 const (
 	discoverySrvPort = "45679"

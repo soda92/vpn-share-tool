@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -68,6 +69,10 @@ func ApplyUpdate(info *UpdateInfo) error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed: server returned status %d", resp.StatusCode)
+	}
+
 	out, err := os.Create(newExe)
 	if err != nil {
 		return err
@@ -95,17 +100,18 @@ func ApplyUpdate(info *UpdateInfo) error {
 
 		var hashCheck string
 		if info.Sha256 != "" {
-			hashCheck = fmt.Sprintf("rem Verify hash of new executable using certutil\r\n"+
-				"certutil -hashfile \"%s\" SHA256 | findstr /i \"%s\" >nul\r\n"+
+			hashCheck = fmt.Sprintf("rem Verify hash of new executable using powershell\r\n"+
+				"powershell -Command \"if ((Get-FileHash -Path '%s' -Algorithm SHA256).Hash.ToLower() -ne '%s') { exit 1 }\"\r\n"+
 				"if errorlevel 1 (\r\n"+
 				"    echo Error: Hash verification of new executable failed.\r\n"+
 				"    del \"%s\"\r\n"+
 				"    pause\r\n"+
 				"    exit\r\n"+
-				")\r\n", filepath.Base(newExe), info.Sha256, filepath.Base(newExe))
+				")\r\n", filepath.Base(newExe), strings.ToLower(info.Sha256), filepath.Base(newExe))
 		}
 
 		batContent := fmt.Sprintf(`@echo off
+pushd "%%~dp0"
 %s
 set /a retries=0
 :loop

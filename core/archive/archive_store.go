@@ -51,6 +51,9 @@ var (
 
 	// Track assets already pre-fetched in active session
 	prefetchedURLs sync.Map
+
+	// HTTPClient is injected by core package to trust the custom root CA pool
+	HTTPClient *http.Client
 )
 
 // StartSession initializes a recording session for a proxy port
@@ -440,8 +443,11 @@ func prefetchCSSAssets(sessionID string, origReq *http.Request, cssBody []byte) 
 }
 
 func fetchAndRecordAssets(sessionID string, origReq *http.Request, uniqueURLs map[string]bool) {
-	client := &http.Client{
-		Timeout: 5 * time.Second,
+	client := HTTPClient
+	if client == nil {
+		client = &http.Client{
+			Timeout: 5 * time.Second,
+		}
 	}
 
 	for assetURL := range uniqueURLs {

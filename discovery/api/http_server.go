@@ -331,21 +331,32 @@ func StartHTTPServer(insecure bool) {
 	}
 }
 
+type cacheEntry struct {
+	Hash    string
+	Size    int64
+	ModTime time.Time
+}
+
 var (
-	verifiedHashesCache     = make(map[string]string)
+	verifiedHashesCache     = make(map[string]cacheEntry)
 	verifiedHashesCacheLock sync.RWMutex
 )
 
 func verifyLocalFileHash(filePath string, expectedHash string) error {
+	fi, err := os.Stat(filePath)
+	if err != nil {
+		return err
+	}
+
 	verifiedHashesCacheLock.RLock()
-	cachedHash, ok := verifiedHashesCache[filePath]
+	cached, ok := verifiedHashesCache[filePath]
 	verifiedHashesCacheLock.RUnlock()
 
-	if ok && strings.EqualFold(cachedHash, expectedHash) {
+	if ok && cached.Size == fi.Size() && cached.ModTime.Equal(fi.ModTime()) && strings.EqualFold(cached.Hash, expectedHash) {
 		return nil
 	}
 
-	// Not cached or mismatch, compute hash
+	// Not cached or modified, compute hash
 	f, err := os.Open(filePath)
 	if err != nil {
 		return err
@@ -362,9 +373,13 @@ func verifyLocalFileHash(filePath string, expectedHash string) error {
 		return fmt.Errorf("hash mismatch: expected %s, got %s", expectedHash, actualHash)
 	}
 
-	// Cache the verified hash
+	// Cache the verified hash along with size and mod time
 	verifiedHashesCacheLock.Lock()
-	verifiedHashesCache[filePath] = actualHash
+	verifiedHashesCache[filePath] = cacheEntry{
+		Hash:    actualHash,
+		Size:    fi.Size(),
+		ModTime: fi.ModTime(),
+	}
 	verifiedHashesCacheLock.Unlock()
 
 	return nil
