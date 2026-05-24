@@ -128,10 +128,21 @@ const selectRequest = async (request: CapturedRequest) => {
   if (request.response_body === undefined) {
     try {
       const response = await axios.get(`/api/debug/requests/${activeSessionId.value}/${request.id}`);
+      
+      // Update original item in the reactive requests list
+      const originalReq = requests.value.find(r => r.id === request.id);
+      if (originalReq) {
+        originalReq.request_body = response.data.request_body;
+        originalReq.response_body = response.data.response_body;
+        originalReq.is_base64 = response.data.is_base64;
+      }
+      
+      // Update selectedRequest and trigger reactive updates in components
       if (selectedRequest.value?.id === request.id) {
-        request.request_body = response.data.request_body;
-        request.response_body = response.data.response_body;
-        request.is_base64 = response.data.is_base64;
+        selectedRequest.value.request_body = response.data.request_body;
+        selectedRequest.value.response_body = response.data.response_body;
+        selectedRequest.value.is_base64 = response.data.is_base64;
+        selectedRequest.value = { ...selectedRequest.value };
       }
     } catch (error) {
       console.error('Error fetching request details:', error);
@@ -311,7 +322,7 @@ onUnmounted(() => {
 <style scoped>
 .debug-view {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  height: 100vh;
+  height: 100%;
   margin: 0;
   background-color: #f5f5f5;
   color: #333;
