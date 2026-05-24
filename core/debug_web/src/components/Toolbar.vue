@@ -15,13 +15,13 @@
 <style scoped>
 .toolbar {
   display: flex;
-  justify-content: center; /* Center links since actions are gone */
+  justify-content: center;
   align-items: center;
   background-color: #ffffff;
   padding: 0 1rem;
   height: 60px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .toolbar-nav {
@@ -35,22 +35,24 @@
 .toolbar-link {
   margin: 0 0.5rem;
   text-decoration: none;
-  color: #555;
+  color: #666;
   font-weight: 600;
-  padding: 0.5rem 0.8rem;
-  border-radius: 5px;
+  font-size: 0.95rem;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
   white-space: nowrap;
-  transition: background-color 0.2s, color 0.2s;
+  transition: all 0.2s ease;
 }
 
 .toolbar-link:hover {
-  background-color: #f0f0f0;
+  background-color: #f5f5f5;
   color: #333;
 }
 
 .toolbar-link.router-link-exact-active {
-  background-color: #007bff;
+  background-color: #673ab7;
   color: white;
+  box-shadow: 0 2px 4px rgba(103, 58, 183, 0.25);
 }
 
 @media (max-width: 600px) {
@@ -60,8 +62,8 @@
   }
   
   .toolbar-link {
-    font-size: 0.9rem;
-    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
   }
 }
 </style>
