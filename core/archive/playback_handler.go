@@ -198,6 +198,12 @@ func handlePlaybackAjax(w http.ResponseWriter, r *http.Request) {
 }
 
 func servePlaybackResource(w http.ResponseWriter, r *http.Request, sessionID string, targetTimestamp int64, targetURL string, injectBanner bool) {
+	// Disable banner injection inside iframes/frames
+	dest := strings.ToLower(r.Header.Get("Sec-Fetch-Dest"))
+	if dest == "iframe" || dest == "frame" {
+		injectBanner = false
+	}
+
 	resp, err := FindResource(sessionID, targetURL, targetTimestamp)
 	if err != nil {
 		log.Printf("[Playback] Resource not found: %s at %d. Error: %v", targetURL, targetTimestamp, err)
@@ -285,7 +291,15 @@ func servePlaybackResource(w http.ResponseWriter, r *http.Request, sessionID str
 		<button onclick="document.getElementById('wayback-banner').style.display='none'" style="background:none; border:none; color:#999; font-weight:bold; cursor:pointer; font-size:18px; line-height:1;">&times;</button>
 	</div>
 </div>
-<div style="height: 45px; width: 100%%; display: block; box-sizing: border-box;"></div>
+<div id="wayback-banner-spacer" style="height: 45px; width: 100%%; display: block; box-sizing: border-box;"></div>
+<script>
+if (window.self !== window.top) {
+	const banner = document.getElementById('wayback-banner');
+	const spacer = document.getElementById('wayback-banner-spacer');
+	if (banner) banner.style.setProperty('display', 'none', 'important');
+	if (spacer) spacer.style.setProperty('display', 'none', 'important');
+}
+</script>
 `, formattedTime)
 
 			// Locate <body> or insert at start
