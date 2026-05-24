@@ -21,7 +21,7 @@ import (
 	"github.com/soda92/vpn-share-tool/core/resources"
 )
 
-const UpdaterVersion = "v40a"
+var UpdaterVersion = "dev"
 
 var ServerIPs = []string{"127.0.0.1", "192.168.0.81", "192.168.1.81"}
 
@@ -41,9 +41,10 @@ func main() {
 	}
 
 	filename := filepath.Base(exePath)
+	nameWithoutExt := strings.TrimSuffix(filename, filepath.Ext(filename))
 
-	// If named vpn-share-tool.exe, we are in Bootstrap Mode (started by old client upgrade)
-	if strings.EqualFold(filename, "vpn-share-tool.exe") {
+	// If NOT named "updater" (ignoring case/extension), we are in Bootstrap Mode (started by old client upgrade)
+	if !strings.EqualFold(nameWithoutExt, "updater") {
 		runBootstrapMode(exePath)
 		return
 	}
@@ -62,7 +63,7 @@ func runBootstrapMode(exePath string) {
 	}
 
 	fmt.Println("[Bootstrap] Launching updater.exe...")
-	if err := spawnProcess(updaterExe, "--source", exePath); err != nil {
+	if err := spawnProcessInNewConsole(updaterExe, "--source", exePath); err != nil {
 		log.Fatalf("[Bootstrap] Failed to start updater.exe: %v", err)
 	}
 
@@ -159,7 +160,7 @@ func performUpgrade(sourceExe string) error {
 		fmt.Println("      Applying updater update...")
 		os.Chmod(sourceExe, 0755)
 
-		if err := spawnProcess(sourceExe); err != nil {
+		if err := spawnProcessInNewConsole(sourceExe); err != nil {
 			return fmt.Errorf("failed to restart updater bootstrap: %w", err)
 		}
 		os.Exit(0)
@@ -207,7 +208,7 @@ func performUpgrade(sourceExe string) error {
 	fmt.Println("      Starting application...")
 	os.Chmod(sourceExe, 0755)
 
-	if err := spawnProcess(sourceExe); err != nil {
+	if err := spawnProcessDetached(sourceExe); err != nil {
 		return fmt.Errorf("failed to start application: %w", err)
 	}
 
@@ -216,15 +217,17 @@ func performUpgrade(sourceExe string) error {
 
 func waitForFileRelease(path string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
+	var lastErr error
 	for time.Now().Before(deadline) {
 		f, err := os.OpenFile(path, os.O_WRONLY, 0666)
 		if err == nil {
 			f.Close()
 			return nil
 		}
+		lastErr = err
 		time.Sleep(500 * time.Millisecond)
 	}
-	return fmt.Errorf("file lock timeout")
+	return fmt.Errorf("file lock timeout (last error: %v)", lastErr)
 }
 
 func discoverServer(timeout time.Duration) (string, error) {

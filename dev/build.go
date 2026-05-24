@@ -468,7 +468,15 @@ func runBuildUpdater() error {
 		"GOARCH=amd64",
 	)
 
-	if err := execCmd(rootDir, env, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", output, "./cmd/updater"); err != nil {
+	version, _, err := GetCurrentVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get current version: %w", err)
+	}
+	fmt.Printf("Updater Build Version: %s\n", version)
+
+	ldflags := fmt.Sprintf("-s -w -X main.UpdaterVersion=%s", version)
+
+	if err := execCmd(rootDir, env, "go", "build", "-trimpath", "-ldflags="+ldflags, "-o", output, "./cmd/updater"); err != nil {
 		return fmt.Errorf("updater build failed: %w", err)
 	}
 
