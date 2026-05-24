@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"go.etcd.io/bbolt"
 	"github.com/soda92/vpn-share-tool/core/debug"
+	"go.etcd.io/bbolt"
 )
 
 // ServeStandalone spins up a web server at the root of a port to host a specific archived session
@@ -55,13 +56,15 @@ func ServeStandalone(sessionID string, port int) error {
 		Addr: fmt.Sprintf(":%d", port),
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Resolve URL relative to the original domain
-			targetURL := meta.ProxyURL
-			if !strings.HasSuffix(targetURL, "/") && !strings.HasPrefix(r.URL.Path, "/") {
-				targetURL += "/"
-			}
-			targetURL += r.URL.Path
-			if r.URL.RawQuery != "" {
-				targetURL += "?" + r.URL.RawQuery
+			var targetURL string
+			base, err := url.Parse(meta.ProxyURL)
+			if err != nil {
+				targetURL = meta.ProxyURL + r.URL.Path
+				if r.URL.RawQuery != "" {
+					targetURL += "?" + r.URL.RawQuery
+				}
+			} else {
+				targetURL = base.ResolveReference(r.URL).String()
 			}
 
 			// We query using current timestamp to always retrieve the latest snapshot available

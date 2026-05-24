@@ -2,6 +2,7 @@ package archive
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -258,5 +259,84 @@ func TestFindClosestTimestamp(t *testing.T) {
 	}
 	if archivedIntermediate2.ResponseBody != "snapshot_2" {
 		t.Errorf("expected intermediate closer to 2 to yield snapshot_2, got %s", archivedIntermediate2.ResponseBody)
+	}
+}
+
+func TestPlaybackFallback(t *testing.T) {
+	// 1. Setup temporary database
+	tmpDir, err := os.MkdirTemp("", "archive_fallback_test_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test_archive_fallback.db")
+	if err := debug.InitDB(dbPath); err != nil {
+		t.Fatalf("failed to init db: %v", err)
+	}
+
+	p := &models.SharedProxy{
+		OriginalURL: "http://192.168.1.230:8080",
+		RemotePort:  10082,
+		Ctx:         context.Background(),
+	}
+
+	sessionID, err := StartSession(p, "Fallback Session")
+	if err != nil {
+		t.Fatalf("StartSession failed: %v", err)
+	}
+	defer StopSession(p)
+
+	// 2. Record stylesheet relative to the proxy
+	cssURL := "http://192.168.1.230:8080/Content/platform.css"
+	reqBody := []byte("")
+	respBody := []byte("body { background: red; }")
+
+	cssReq := httptest.NewRequest("GET", cssURL, nil)
+	cssResp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+	}
+	cssResp.Header.Set("Content-Type", "text/css")
+
+	Record(p, cssReq, cssResp, reqBody, respBody)
+	time.Sleep(100 * time.Millisecond)
+
+	// 3. Setup http.ServeMux and register route
+	mux := http.NewServeMux()
+	RegisterArchiveRoutes(mux, func() []*models.SharedProxy { return []*models.SharedProxy{p} })
+
+	// 4. Perform a request to an absolute-path relative asset WITHOUT /archive/... prefix,
+	// but WITH the Referer header pointing to an archived page.
+	targetTimestamp := time.Now().UnixNano()
+	req := httptest.NewRequest("GET", "/Content/platform.css", nil)
+	refererURL := fmt.Sprintf("http://127.0.0.1:10081/archive/view/%s/%d/http://192.168.1.230:8080/index.html", sessionID, targetTimestamp)
+	req.Header.Set("Referer", refererURL)
+
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	// Verify the response
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+
+	contentType := rr.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "text/css") {
+		t.Errorf("expected Content-Type text/css, got %s", contentType)
+	}
+
+	body := rr.Body.String()
+	if body != "body { background: red; }" {
+		t.Errorf("expected css body, got %s", body)
+	}
+
+	// 5. Perform a request WITHOUT Referer header - should return 404
+	req2 := httptest.NewRequest("GET", "/Content/platform.css", nil)
+	rr2 := httptest.NewRecorder()
+	mux.ServeHTTP(rr2, req2)
+
+	if rr2.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for request without referer, got %d", rr2.Code)
 	}
 }

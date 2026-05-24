@@ -7,13 +7,14 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
-	"go.etcd.io/bbolt"
 	"github.com/soda92/vpn-share-tool/core/debug"
 	"github.com/soda92/vpn-share-tool/core/models"
+	"go.etcd.io/bbolt"
 )
 
 // RegisterArchiveRoutes registers archive-related API and playback routes
@@ -27,6 +28,8 @@ func RegisterArchiveRoutes(mux *http.ServeMux, getProxies func() []*models.Share
 	// Capture all wildcard subpaths for playback and AJAX
 	mux.HandleFunc("/archive/view/", handlePlaybackView)
 	mux.HandleFunc("/archive/ajax/", handlePlaybackAjax)
+	// Catch-all route to resolve absolute-path relative assets using Referer headers
+	mux.HandleFunc("/", handlePlaybackFallback)
 }
 
 func handleArchiveSessions(w http.ResponseWriter, r *http.Request) {
@@ -473,4 +476,51 @@ func handleArchiveHistory(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(history)
+}
+
+func handlePlaybackFallback(w http.ResponseWriter, r *http.Request) {
+	referer := r.Header.Get("Referer")
+	if referer != "" {
+		// Try to parse referer to see if it is an archive page request
+		refURL, err := url.Parse(referer)
+		if err == nil {
+			var prefix string
+			if strings.Contains(refURL.Path, "/archive/view/") {
+				prefix = "/archive/view/"
+			} else if strings.Contains(refURL.Path, "/archive/ajax/") {
+				prefix = "/archive/ajax/"
+			}
+
+			if prefix != "" {
+				idx := strings.Index(refURL.Path, prefix)
+				remaining := refURL.Path[idx+len(prefix):]
+				parts := strings.SplitN(remaining, "/", 3)
+				if len(parts) >= 3 {
+					sessionID := parts[0]
+					timestamp, err := strconv.ParseInt(parts[1], 10, 64)
+					if err == nil {
+						refererOriginalURL := parts[2]
+						if strings.HasPrefix(refererOriginalURL, "http:/") && !strings.HasPrefix(refererOriginalURL, "http://") {
+							refererOriginalURL = "http://" + strings.TrimPrefix(refererOriginalURL, "http:/")
+						} else if strings.HasPrefix(refererOriginalURL, "https:/") && !strings.HasPrefix(refererOriginalURL, "https://") {
+							refererOriginalURL = "https://" + strings.TrimPrefix(refererOriginalURL, "https:/")
+						}
+
+						// Parse the referer original URL
+						refBase, err := url.Parse(refererOriginalURL)
+						if err == nil {
+							// Resolve the requested path relative to the referer's original base URL
+							resolvedURL := refBase.ResolveReference(r.URL).String()
+							log.Printf("[Playback Fallback] Resolved %s relative to referer %s -> %s", r.URL.String(), refererOriginalURL, resolvedURL)
+
+							servePlaybackResource(w, r, sessionID, timestamp, resolvedURL, false)
+							return
+						}
+					}
+				}
+			}
+		}
+	}
+
+	http.NotFound(w, r)
 }
