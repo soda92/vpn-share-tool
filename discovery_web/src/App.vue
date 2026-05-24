@@ -113,7 +113,7 @@ const fetchTaggedURLs = async () => {
 };
 const fetchLatestVersion = async () => {
   try {
-    const response = await axios.get('/latest-version');
+    const response = await axios.get('/latest-app-version?format=zip');
     if (response.data && response.data.version) {
       latestVersion.value = response.data.version;
     }
