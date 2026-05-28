@@ -171,22 +171,11 @@ func Record(p *models.SharedProxy, req *http.Request, resp *http.Response, reqBo
 
 	urlPath := strings.ToLower(req.URL.Path)
 	ext := filepath.Ext(urlPath)
-	videoExts := map[string]bool{
-		".mp4":  true,
-		".webm": true,
-		".mov":  true,
-		".mkv":  true,
-		".avi":  true,
-		".flv":  true,
-		".wmv":  true,
-		".m4v":  true,
-		".3gp":  true,
-	}
-	if videoExts[ext] {
+	switch ext {
+	case ".mp4", ".webm", ".mov", ".mkv", ".avi", ".flv", ".wmv", ".m4v", ".3gp":
 		log.Printf("[Archive] Skipping video file extension: %s", ext)
 		return
 	}
-
 	// Capture response details
 	method := req.Method
 	urlStr := req.URL.String()
@@ -202,20 +191,82 @@ func Record(p *models.SharedProxy, req *http.Request, resp *http.Response, reqBo
 		respHeaders[k] = v
 	}
 
-	// Copy body asynchronously to database
-	go func() {
-		saveResourceRecord(sessionID, method, urlStr, reqHeaders, reqBody, respStatus, respHeaders, respBody)
+	// Copy body asynchronously to database via write queue
+	saveResourceRecord(sessionID, method, urlStr, reqHeaders, reqBody, respStatus, respHeaders, respBody)
 
-		// Proactively pre-fetch static assets to resolve browser cache issues
-		if strings.Contains(contentType, "text/html") {
-			go prefetchAssets(sessionID, req, respBody)
-		} else if strings.Contains(contentType, "text/css") {
-			go prefetchCSSAssets(sessionID, req, respBody)
+	// Proactively pre-fetch static assets to resolve browser cache issues
+	if strings.Contains(contentType, "text/html") {
+		prefetchAssets(sessionID, req, respBody)
+	} else if strings.Contains(contentType, "text/css") {
+		prefetchCSSAssets(sessionID, req, respBody)
+	}
+}
+
+type dbWriteTask struct {
+	sessionID   string
+	method      string
+	urlStr      string
+	reqHeaders  http.Header
+	reqBody     []byte
+	respStatus  int
+	respHeaders http.Header
+	respBody    []byte
+}
+
+type prefetchTask struct {
+	sessionID string
+	origReq   *http.Request
+	urlStr    string
+}
+
+var (
+	dbWriteQueue   chan dbWriteTask
+	prefetchQueue  chan prefetchTask
+	workerInitOnce sync.Once
+)
+
+func startWorkers() {
+	workerInitOnce.Do(func() {
+		dbWriteQueue = make(chan dbWriteTask, 10000)
+		prefetchQueue = make(chan prefetchTask, 10000)
+
+		// Single writer worker to serialize all database writes and avoid bbolt lock contention
+		go func() {
+			for task := range dbWriteQueue {
+				performSaveResourceRecord(task.sessionID, task.method, task.urlStr, task.reqHeaders, task.reqBody, task.respStatus, task.respHeaders, task.respBody)
+			}
+		}()
+
+		// Worker pool for parallel assets prefetching to avoid unrestricted goroutine spawning
+		for i := 0; i < 5; i++ {
+			go func() {
+				for task := range prefetchQueue {
+					performPrefetchTask(task)
+				}
+			}()
 		}
-	}()
+	})
 }
 
 func saveResourceRecord(sessionID string, method string, urlStr string, reqHeaders http.Header, reqBody []byte, respStatus int, respHeaders http.Header, respBody []byte) {
+	startWorkers()
+	select {
+	case dbWriteQueue <- dbWriteTask{
+		sessionID:   sessionID,
+		method:      method,
+		urlStr:      urlStr,
+		reqHeaders:  reqHeaders,
+		reqBody:     reqBody,
+		respStatus:  respStatus,
+		respHeaders: respHeaders,
+		respBody:    respBody,
+	}:
+	default:
+		log.Printf("[Archive] Write queue full, dropping record: %s %s", method, urlStr)
+	}
+}
+
+func performSaveResourceRecord(sessionID string, method string, urlStr string, reqHeaders http.Header, reqBody []byte, respStatus int, respHeaders http.Header, respBody []byte) {
 	db := debug.GetDB()
 	if db == nil {
 		return
@@ -316,18 +367,8 @@ func prefetchAssets(sessionID string, origReq *http.Request, htmlBody []byte) {
 		ext := strings.ToLower(filepath.Ext(resolved.Path))
 		
 		// Filter out video extensions to prevent DB bloating
-		videoExts := map[string]bool{
-			".mp4":  true,
-			".webm": true,
-			".mov":  true,
-			".mkv":  true,
-			".avi":  true,
-			".flv":  true,
-			".wmv":  true,
-			".m4v":  true,
-			".3gp":  true,
-		}
-		if videoExts[ext] {
+		switch ext {
+		case ".mp4", ".webm", ".mov", ".mkv", ".avi", ".flv", ".wmv", ".m4v", ".3gp":
 			return
 		}
 
@@ -388,7 +429,7 @@ func prefetchAssets(sessionID string, origReq *http.Request, htmlBody []byte) {
 	}
 
 	log.Printf("[Archive Pre-fetch] Found %d static assets to pre-fetch for %s", len(uniqueURLs), origReq.URL.String())
-	fetchAndRecordAssets(sessionID, origReq, uniqueURLs)
+	queuePrefetchAssets(sessionID, origReq, uniqueURLs)
 }
 
 func prefetchCSSAssets(sessionID string, origReq *http.Request, cssBody []byte) {
@@ -414,18 +455,8 @@ func prefetchCSSAssets(sessionID string, origReq *http.Request, cssBody []byte) 
 		ext := strings.ToLower(filepath.Ext(resolved.Path))
 		
 		// Filter out video extensions
-		videoExts := map[string]bool{
-			".mp4":  true,
-			".webm": true,
-			".mov":  true,
-			".mkv":  true,
-			".avi":  true,
-			".flv":  true,
-			".wmv":  true,
-			".m4v":  true,
-			".3gp":  true,
-		}
-		if videoExts[ext] {
+		switch ext {
+		case ".mp4", ".webm", ".mov", ".mkv", ".avi", ".flv", ".wmv", ".m4v", ".3gp":
 			return
 		}
 
@@ -445,17 +476,11 @@ func prefetchCSSAssets(sessionID string, origReq *http.Request, cssBody []byte) 
 	}
 
 	log.Printf("[CSS Pre-fetch] Found %d assets to pre-fetch for %s", len(uniqueURLs), origReq.URL.String())
-	fetchAndRecordAssets(sessionID, origReq, uniqueURLs)
+	queuePrefetchAssets(sessionID, origReq, uniqueURLs)
 }
 
-func fetchAndRecordAssets(sessionID string, origReq *http.Request, uniqueURLs map[string]bool) {
-	client := HTTPClient
-	if client == nil {
-		client = &http.Client{
-			Timeout: 5 * time.Second,
-		}
-	}
-
+func queuePrefetchAssets(sessionID string, origReq *http.Request, uniqueURLs map[string]bool) {
+	startWorkers()
 	for assetURL := range uniqueURLs {
 		// Dedup check using prefetchedURLs map
 		key := sessionID + "#" + assetURL
@@ -463,50 +488,67 @@ func fetchAndRecordAssets(sessionID string, origReq *http.Request, uniqueURLs ma
 			continue
 		}
 
-		go func(urlStr string) {
-			req, err := http.NewRequest("GET", urlStr, nil)
-			if err != nil {
-				return
-			}
+		select {
+		case prefetchQueue <- prefetchTask{
+			sessionID: sessionID,
+			origReq:   origReq,
+			urlStr:    assetURL,
+		}:
+		default:
+			log.Printf("[Archive Pre-fetch] Prefetch queue full, skipping URL: %s", assetURL)
+		}
+	}
+}
 
-			// Copy original request headers (cookies/session state)
-			headersToCopy := []string{"Cookie", "User-Agent", "Authorization", "Accept-Language"}
-			for _, h := range headersToCopy {
-				if val := origReq.Header.Get(h); val != "" {
-					req.Header.Set(h, val)
-				}
-			}
-			// Set Referer to the parent request's URL
-			req.Header.Set("Referer", origReq.URL.String())
+func performPrefetchTask(task prefetchTask) {
+	client := HTTPClient
+	if client == nil {
+		client = &http.Client{
+			Timeout: 5 * time.Second,
+		}
+	}
 
-			resp, err := client.Do(req)
-			if err != nil {
-				log.Printf("[Archive Pre-fetch] Failed to pre-fetch %s: %v", urlStr, err)
-				return
-			}
-			defer resp.Body.Close()
+	req, err := http.NewRequest("GET", task.urlStr, nil)
+	if err != nil {
+		return
+	}
 
-			if resp.StatusCode != http.StatusOK {
-				log.Printf("[Archive Pre-fetch] Non-OK status for %s: %d", urlStr, resp.StatusCode)
-				return
-			}
+	// Copy original request headers (cookies/session state)
+	headersToCopy := []string{"Cookie", "User-Agent", "Authorization", "Accept-Language"}
+	for _, h := range headersToCopy {
+		if val := task.origReq.Header.Get(h); val != "" {
+			req.Header.Set(h, val)
+		}
+	}
+	// Set Referer to the parent request's URL
+	req.Header.Set("Referer", task.origReq.URL.String())
 
-			bodyBytes, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return
-			}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[Archive Pre-fetch] Failed to pre-fetch %s: %v", task.urlStr, err)
+		return
+	}
+	defer resp.Body.Close()
 
-			// Record directly to active session database
-			saveResourceRecord(sessionID, "GET", urlStr, req.Header, []byte(""), resp.StatusCode, resp.Header, bodyBytes)
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[Archive Pre-fetch] Non-OK status for %s: %d", task.urlStr, resp.StatusCode)
+		return
+	}
 
-			// Recursively pre-fetch if this asset is a CSS or HTML
-			cType := strings.ToLower(resp.Header.Get("Content-Type"))
-			if strings.Contains(cType, "text/html") {
-				go prefetchAssets(sessionID, req, bodyBytes)
-			} else if strings.Contains(cType, "text/css") {
-				go prefetchCSSAssets(sessionID, req, bodyBytes)
-			}
-		}(assetURL)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	// Record directly to active session database
+	saveResourceRecord(task.sessionID, "GET", task.urlStr, req.Header, []byte(""), resp.StatusCode, resp.Header, bodyBytes)
+
+	// Recursively pre-fetch if this asset is a CSS or HTML
+	cType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if strings.Contains(cType, "text/html") {
+		prefetchAssets(task.sessionID, req, bodyBytes)
+	} else if strings.Contains(cType, "text/css") {
+		prefetchCSSAssets(task.sessionID, req, bodyBytes)
 	}
 }
 
