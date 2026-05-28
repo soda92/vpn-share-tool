@@ -1,8 +1,12 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -86,6 +90,14 @@ var buildUpdaterCmd = &cobra.Command{
 	},
 }
 
+var buildMSICmd = &cobra.Command{
+	Use:   "msi",
+	Short: "Build Windows MSI installer package (requires wixl on Linux or candle/light on Windows)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildMSI()
+	},
+}
+
 var noFrontend bool
 var buildWindowsLocal bool
 
@@ -99,6 +111,7 @@ func init() {
 	buildCmd.AddCommand(buildServerCmd)
 	buildCmd.AddCommand(buildLinuxSoCmd)
 	buildCmd.AddCommand(buildUpdaterCmd)
+	buildCmd.AddCommand(buildMSICmd)
 
 	buildCmd.PersistentFlags().BoolVar(&noFrontend, "no-frontend", false, "Skip frontend build")
 	buildWindowsCmd.Flags().BoolVar(&buildWindowsLocal, "local", false, "Build locally using mingw-w64 toolchain instead of fyne-cross")
@@ -599,4 +612,201 @@ var (
 
 	fmt.Println("✅ Generated common/secrets_gen.go from environment.")
 	return nil
+}
+
+func runBuildMSI() error {
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	config, err := loadReleaseConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load release config: %w", err)
+	}
+	minorVal := parseSuffixToInt(config.Version.Suffix)
+	versionStr := fmt.Sprintf("%d.%d.0", config.Version.Counter, minorVal)
+	fmt.Printf("Building MSI for version: %s\n", versionStr)
+
+	// Locate source exe
+	var exePath string
+	candidates := []string{
+		filepath.Join(rootDir, "dist", "vpn-share-tool.exe"),
+		filepath.Join(rootDir, "fyne-cross", "bin", "windows-amd64", "vpn-share-tool.exe"),
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			exePath = c
+			break
+		}
+	}
+
+	if exePath == "" {
+		return fmt.Errorf("could not find vpn-share-tool.exe. Please run 'go run ./dev build windows' first")
+	}
+	fmt.Printf("Source EXE: %s\n", exePath)
+
+	wxsPath := filepath.Join(rootDir, "packaging", "wix", "vpn-share-tool.wxs")
+	msiOutPath := filepath.Join(rootDir, "packaging", "wix", fmt.Sprintf("vpn-share-tool-%s.msi", versionStr))
+
+	if runtime.GOOS == "windows" {
+		candle := "candle.exe"
+		light := "light.exe"
+
+		_, errCandle := exec.LookPath(candle)
+		_, errLight := exec.LookPath(light)
+
+		wixBinDir := filepath.Join(rootDir, "packaging", "wix", "wix_bin")
+		if errCandle != nil || errLight != nil {
+			candleLocal := filepath.Join(wixBinDir, "candle.exe")
+			lightLocal := filepath.Join(wixBinDir, "light.exe")
+			if _, errC := os.Stat(candleLocal); errC == nil {
+				if _, errL := os.Stat(lightLocal); errL == nil {
+					candle = candleLocal
+					light = lightLocal
+					errCandle = nil
+					errLight = nil
+				}
+			}
+		}
+
+		if errCandle != nil || errLight != nil {
+			fmt.Println("WiX Toolset not found in PATH or wix_bin directory.")
+			if err := downloadAndExtractWiX(wixBinDir); err != nil {
+				return fmt.Errorf("failed to download WiX Toolset: %w", err)
+			}
+			candle = filepath.Join(wixBinDir, "candle.exe")
+			light = filepath.Join(wixBinDir, "light.exe")
+		}
+
+		wixobjPath := filepath.Join(rootDir, "packaging", "wix", "vpn-share-tool.wixobj")
+		defer os.Remove(wixobjPath)
+
+		err = execCmd(rootDir, nil, candle,
+			"-dVersion="+versionStr,
+			"-dSourceExePath="+exePath,
+			"-out", wixobjPath,
+			wxsPath,
+		)
+		if err != nil {
+			return fmt.Errorf("candle compilation failed: %w", err)
+		}
+
+		err = execCmd(rootDir, nil, light,
+			"-ext", "WixUIExtension",
+			"-out", msiOutPath,
+			wixobjPath,
+		)
+		if err != nil {
+			return fmt.Errorf("light linking failed: %w", err)
+		}
+
+	} else {
+		wixl, err := exec.LookPath("wixl")
+		if err != nil {
+			return fmt.Errorf("wixl not found in PATH. Please install 'msitools' (pacman -S msitools / yay -S msitools) to build MSI on Linux")
+		}
+
+		err = execCmd(rootDir, nil, wixl,
+			"-o", msiOutPath,
+			"-D", "Version="+versionStr,
+			"-D", "SourceExePath="+exePath,
+			wxsPath,
+		)
+		if err != nil {
+			return fmt.Errorf("wixl build failed: %w", err)
+		}
+	}
+
+	fmt.Printf("✅ MSI built successfully: %s\n", msiOutPath)
+	return nil
+}
+
+func downloadAndExtractWiX(destDir string) error {
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	zipPath := filepath.Join(destDir, "wix.zip")
+	defer os.Remove(zipPath)
+
+	fmt.Println("Downloading WiX Toolset binaries from GitHub...")
+	url := "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip"
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	out, err := os.Create(zipPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		return err
+	}
+	out.Close()
+
+	fmt.Println("Extracting WiX Toolset binaries...")
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		fpath := filepath.Join(destDir, f.Name)
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(fpath, os.ModePerm)
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+			return err
+		}
+
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			return err
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			outFile.Close()
+			return err
+		}
+
+		_, err = io.Copy(outFile, rc)
+		rc.Close()
+		outFile.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func parseSuffixToInt(suffix string) int {
+	if suffix == "" {
+		return 0
+	}
+	val := 0
+	for i := 0; i < len(suffix); i++ {
+		char := suffix[i]
+		if char >= 'a' && char <= 'z' {
+			val = val*26 + int(char-'a'+1)
+		} else if char >= 'A' && char <= 'Z' {
+			val = val*26 + int(char-'A'+1)
+		}
+	}
+	return val
 }

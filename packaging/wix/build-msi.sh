@@ -8,9 +8,24 @@ ROOT_DIR="$(dirname "$(dirname "$DIR")")"
 # Read version from Release.toml
 VERSION="1.0.0"
 if [ -f "$ROOT_DIR/Release.toml" ]; then
-    COUNTER=$(grep -E '^Counter\s*=' "$ROOT_DIR/Release.toml" | head -n 1 | awk -F'=' '{print $2}' | tr -d '[:space:]')
+    COUNTER=$(grep -E 'Counter\s*=' "$ROOT_DIR/Release.toml" | head -n 1 | awk -F'=' '{print $2}' | tr -d '[:space:]')
+    SUFFIX=$(grep -E 'Suffix\s*=' "$ROOT_DIR/Release.toml" | head -n 1 | awk -F'=' '{print $2}' | tr -d '[:space:]' | tr -d '"' | tr -d "'")
     if [ -n "$COUNTER" ]; then
-        VERSION="$COUNTER.0.0"
+        MINOR=0
+        if [ -n "$SUFFIX" ]; then
+            for (( i=0; i<${#SUFFIX}; i++ )); do
+                char="${SUFFIX:$i:1}"
+                printf -v ascii "%d" "'$char"
+                if (( ascii >= 97 && ascii <= 122 )); then
+                    val=$(( ascii - 97 + 1 ))
+                    MINOR=$(( MINOR * 26 + val ))
+                elif (( ascii >= 65 && ascii <= 90 )); then
+                    val=$(( ascii - 65 + 1 ))
+                    MINOR=$(( MINOR * 26 + val ))
+                fi
+            done
+        fi
+        VERSION="$COUNTER.$MINOR.0"
     fi
 fi
 
