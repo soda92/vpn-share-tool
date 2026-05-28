@@ -9,6 +9,11 @@ import (
 )
 
 func checkUpdate(w fyne.Window) {
+	if isSystemWideInstallation() {
+		log.Println("System-wide installation detected. Skipping client-side update check (managed centrally by administrator).")
+		return
+	}
+
 	info, err := core.CheckForUpdates()
 	if err != nil {
 		log.Printf("Failed to check for updates: %v", err)
