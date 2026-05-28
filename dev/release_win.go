@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -26,9 +28,11 @@ var releaseCmd = &cobra.Command{
 }
 
 var releaseUpdater bool
+var releaseCleanup bool
 
 func init() {
 	releaseCmd.Flags().BoolVar(&releaseUpdater, "updater", false, "Release the updater instead of the main application")
+	releaseCmd.Flags().BoolVar(&releaseCleanup, "cleanup", false, "Move other versions into the OLD folder")
 	rootCmd.AddCommand(releaseCmd)
 }
 
@@ -304,50 +308,45 @@ func runRelease() error {
 		return fmt.Errorf("share path is unreachable: %s (%w)", sharePath, err)
 	}
 
-	// 1. Publish raw EXE (ONLY for the updater binary, which is small, so old clients can download it)
-	if releaseUpdater {
-		exeFilename := fmt.Sprintf("%s_%s.exe", filePrefix, versionStr)
-		destExePath := filepath.Join(sharePath, exeFilename)
+	// 1. Publish raw EXE (for both updater and app)
+	exeFilename := fmt.Sprintf("%s_%s.exe", filePrefix, versionStr)
+	destExePath := filepath.Join(sharePath, exeFilename)
 
-		fmt.Printf("Publishing EXE release %s...\n", versionStr)
-		fmt.Printf("Source: %s\n", srcPath)
-		fmt.Printf("Dest:   %s\n", destExePath)
-
-		if err := copyFile(srcPath, destExePath); err != nil {
-			return fmt.Errorf("failed to copy exe file: %w", err)
-		}
-	}
-
-	// 2. Publish ZIP package (for both updater and app)
-	zipFilename := fmt.Sprintf("%s_%s.zip", filePrefix, versionStr)
-	destZipPath := filepath.Join(sharePath, zipFilename)
-
-	fmt.Printf("Publishing ZIP release %s...\n", versionStr)
+	fmt.Printf("Publishing EXE release %s...\n", versionStr)
 	fmt.Printf("Source: %s\n", srcPath)
-	fmt.Printf("Dest:   %s\n", destZipPath)
+	fmt.Printf("Dest:   %s\n", destExePath)
 
-	if err := zipFile(srcPath, destZipPath); err != nil {
-		return fmt.Errorf("failed to create zip file: %w", err)
+	if err := copyFile(srcPath, destExePath); err != nil {
+		return fmt.Errorf("failed to copy exe file: %w", err)
 	}
 
-	// Only compute and upload hash for the main application (not the updater)
+	// 2. Compute and upload hash for the main application (not the updater)
+	var shaFilename string
 	if !releaseUpdater {
-		zipSha256Path := destZipPath + ".sha256"
+		exeSha256Path := destExePath + ".sha256"
+		shaFilename = exeFilename + ".sha256"
 
 		// Delete old .sha256 file first if it exists
-		if err := os.Remove(zipSha256Path); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to remove old zip sha256 file: %w", err)
+		if err := os.Remove(exeSha256Path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove old exe sha256 file: %w", err)
 		}
 
-		zipHash, err := computeSHA256(destZipPath)
+		exeHash, err := computeSHA256(destExePath)
 		if err != nil {
-			return fmt.Errorf("failed to compute zip sha256: %w", err)
+			return fmt.Errorf("failed to compute exe sha256: %w", err)
 		}
 
-		if err := os.WriteFile(zipSha256Path, []byte(zipHash), 0644); err != nil {
-			return fmt.Errorf("failed to write zip sha256 file: %w", err)
+		if err := os.WriteFile(exeSha256Path, []byte(exeHash), 0644); err != nil {
+			return fmt.Errorf("failed to write exe sha256 file: %w", err)
 		}
-		fmt.Printf("ZIP SHA256: %s -> %s\n", zipHash, zipSha256Path)
+		fmt.Printf("EXE SHA256: %s -> %s\n", exeHash, exeSha256Path)
+	}
+
+	// 3. Optional cleanup of old versions
+	if releaseCleanup {
+		if err := cleanupOldReleases(sharePath, filePrefix, exeFilename, shaFilename); err != nil {
+			return fmt.Errorf("cleanup failed: %w", err)
+		}
 	}
 
 	fmt.Println("✅ Published successfully.")
@@ -367,4 +366,49 @@ func computeSHA256(path string) (string, error) {
 	}
 
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func cleanupOldReleases(sharePath string, filePrefix string, currentExe string, currentSha string) error {
+	oldDir := filepath.Join(sharePath, "OLD")
+	if err := os.MkdirAll(oldDir, 0755); err != nil {
+		return fmt.Errorf("failed to create OLD directory: %w", err)
+	}
+
+	entries, err := os.ReadDir(sharePath)
+	if err != nil {
+		return fmt.Errorf("failed to read share directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+
+		// Skip the ones we just wrote
+		if name == currentExe || name == currentSha {
+			continue
+		}
+
+		// Check if it's an old release file of the SAME type (e.g. starts with vpn-share-tool-app_ or vpn-share-tool_)
+		isReleaseFile := false
+		if strings.HasPrefix(name, filePrefix+"_") {
+			if strings.HasSuffix(name, ".exe") || strings.HasSuffix(name, ".zip") || 
+				strings.HasSuffix(name, ".sha256") || strings.HasSuffix(name, ".zip.sha256") {
+				isReleaseFile = true
+			}
+		}
+
+		if isReleaseFile {
+			src := filepath.Join(sharePath, name)
+			dst := filepath.Join(oldDir, name)
+			fmt.Printf("Cleaning up old release: moving %s -> %s\n", name, dst)
+			
+			_ = os.Remove(dst)
+			if err := os.Rename(src, dst); err != nil {
+				log.Printf("Warning: failed to move %s to OLD directory: %v", name, err)
+			}
+		}
+	}
+	return nil
 }

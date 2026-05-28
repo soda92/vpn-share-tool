@@ -64,15 +64,19 @@ func handleVersionRequest(w http.ResponseWriter, r *http.Request, isApp bool) {
 	var regexes []*regexp.Regexp
 	if isApp {
 		if useZip {
-			regexes = []*regexp.Regexp{reVersionAppZip, reVersionZip}
+			// Primary: zip, Fallback: exe
+			regexes = []*regexp.Regexp{reVersionAppZip, reVersionAppExe, reVersionZip, reVersionExe}
 		} else {
-			regexes = []*regexp.Regexp{reVersionAppExe, reVersionExe}
+			// Primary: exe, Fallback: zip
+			regexes = []*regexp.Regexp{reVersionAppExe, reVersionAppZip, reVersionExe, reVersionZip}
 		}
 	} else {
 		if useZip {
-			regexes = []*regexp.Regexp{reVersionZip}
+			// Primary: zip, Fallback: exe
+			regexes = []*regexp.Regexp{reVersionZip, reVersionExe}
 		} else {
-			regexes = []*regexp.Regexp{reVersionExe}
+			// Primary: exe, Fallback: zip
+			regexes = []*regexp.Regexp{reVersionExe, reVersionZip}
 		}
 	}
 
