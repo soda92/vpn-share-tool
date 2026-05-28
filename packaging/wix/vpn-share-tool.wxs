@@ -44,7 +44,7 @@
 
         <DirectoryRef Id="ApplicationProgramsFolder">
             <Component Id="ApplicationShortcut" Guid="d6a2f7c3-3b1a-4d7a-8b8a-9f5b2e3c4d5e">
-                <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
+                <RemoveFolder Id="CleanUpShortCut" On="uninstall"/>
                 <RegistryValue Root="HKCU" Key="Software\$(var.ProductManufacturer)\$(var.ProductName)" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
             </Component>
         </DirectoryRef>

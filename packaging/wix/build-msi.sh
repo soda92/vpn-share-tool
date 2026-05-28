@@ -46,6 +46,6 @@ echo "Source EXE: $EXE_PATH"
 echo "Version: $VERSION"
 echo "Output: $OUTPUT_MSI"
 
-wixl -o "$OUTPUT_MSI" -d Version="$VERSION" -d SourceExePath="$EXE_PATH" "$DIR/vpn-share-tool.wxs"
+wixl -o "$OUTPUT_MSI" -D Version="$VERSION" -D SourceExePath="$EXE_PATH" "$DIR/vpn-share-tool.wxs"
 
 echo "✅ MSI built successfully!"
