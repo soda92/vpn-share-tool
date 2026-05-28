@@ -84,3 +84,18 @@ sequenceDiagram
    go run ./dev release-windows
    ```
    将主程序打包成 `vpn-share-tool-app_vXX.zip` 并上传至共享目录，同时写入用于校验文件完整性的 `.sha256` 文件。**主程序只发布 ZIP 格式**，以大幅节省共享目录存储空间并降低网络带宽消耗。
+
+---
+
+## 4. 客户端迁移与后向兼容指南
+
+随着新版本客户端移除了独立的 `updater.exe`，并改回直接使用 `update.bat` 的逻辑，我们需要分两步进行平滑迁移，以保证与各个历史版本（极旧版本如 `v37b`，中代版本如 `v38` - `v40c` 以及全新版本客户端）的完全兼容：
+
+### 阶段一：极旧版本客户端（例如 `v37b`）
+- **行为**：这些客户端直接向 `/latest-version?format=zip` 请求主程序的更新包。
+- **迁移逻辑**：当它们下载到 `vpn-share-tool_vXX.zip`（实际为重命名为 `vpn-share-tool.exe` 的更新器程序）并解压运行时，更新器会检测到自身文件名不是 `updater`，从而进入**引导模式 (Bootstrap Mode)**：复制自身到 `updater.exe` 并启动子进程，随后由该子进程请求 `/latest-app-version` 并下载解压 `vpn-share-tool-app_vXX.zip`（新版主程序）覆盖自身。
+
+### 阶段二：中代版本客户端（如 `v38` - `v40c`）
+- **行为**：这些客户端向 `/latest-app-version` 请求主程序更新，但会通过下载 `/latest-version` (即 `updater.exe`) 来执行覆盖安装。
+- **迁移步骤 1 (全网客户端换代)**：发布带有 `-app` 后缀的新主程序包（如 `vpn-share-tool-app_v40d.zip`）。中代客户端的 `updater.exe` 会自动下载、解压并将其升级至 `v40d`。在此次升级后，**全网已无存活的使用 `updater.exe` 的客户端**，后续全部切换至 `update.bat` 直更逻辑。
+- **迁移步骤 2 (回归标准包名)**：在全网客户端均升级至 `v40d` 或更高版本后，后续的新版本（如 `v41a`）可以直接发布为标准包名 `vpn-share-tool_v41a.zip`。注册发现服务器会自动应用回退匹配机制，当客户端请求 `/latest-app-version` 时会同时检索 `-app` 和标准包名，返回最新版本。

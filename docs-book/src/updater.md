@@ -84,3 +84,18 @@ To build and release updates to the main application:
    go run ./dev release-windows
    ```
    Compresses the application into `vpn-share-tool-app_vXX.zip` and uploads it to the Samba share alongside its `.sha256` integrity verification file. **Only the `.zip` archive is uploaded for the app** to optimize network traffic and disk usage on the share.
+
+---
+
+## 4. Client Transition & Backwards Compatibility Guide
+
+With the removal of the separate `updater.exe` from the new client updating flow, we transition clients in two steps to maintain compatibility with all client eras (Extremely Old e.g. `v37b`, Medium-Old e.g. `v38` - `v40c`, and New client versions):
+
+### Era 1: Extremely Old Clients (e.g., `v37b`)
+- **Behavior**: These clients check `/latest-version?format=zip` directly for the main application update.
+- **Transition**: When we serve `vpn-share-tool_vXX.zip` (containing the updater compiled as `vpn-share-tool.exe`), these clients download it and overwrite themselves. On startup, the updater detects it is named `vpn-share-tool.exe` and enters **Bootstrap Mode**, copying itself to `updater.exe`, spawning it, and exiting. The spawned `updater.exe` then downloads and installs `vpn-share-tool-app_vXX.zip` (the new app).
+
+### Era 2: Medium-Old Clients (e.g., `v38` - `v40c`)
+- **Behavior**: These clients query `/latest-app-version` for the app update, but download `updater.exe` from `/latest-version` to apply it.
+- **Transition Step 1 (Upgrade Clients)**: Publish the new client version using the `vpn-share-tool-app_vXX.zip` naming pattern (e.g., `vpn-share-tool-app_v40d.zip`). Medium-old clients' `updater.exe` will download, extract, and successfully upgrade them to `v40d`. Once upgraded, **no active clients use `updater.exe` anymore**; they all update directly via `update.bat`.
+- **Transition Step 2 (Stop Using `-app` Suffix)**: Once all clients run `v40d` or newer, subsequent versions (e.g., `v41a`) can be published directly as the base package `vpn-share-tool_v41a.zip`. The discovery server will fall back to match both `-app` and base package patterns for `/latest-app-version`, updating the clients successfully.
