@@ -3,7 +3,7 @@
     <!-- Define variables -->
     <?define ProductName = "VPN Share Tool" ?>
     <?define ProductManufacturer = "VPN Share" ?>
-    <?define ProductVersion = "$(var.Version)" ?> <!-- Passed via candle command line, e.g., -dVersion=1.0.0 -->
+    <?define ProductVersion = "$(var.Version)" ?> <!-- Passed via command line, e.g., -dVersion=1.0.0 -->
     <?define UpgradeCode = "a2c3a5ef-e6c8-472e-85a0-9c29d10e53a2" ?>
 
     <Product Id="*" Name="$(var.ProductName)" Language="1033" Version="$(var.ProductVersion)" Manufacturer="$(var.ProductManufacturer)" UpgradeCode="$(var.UpgradeCode)">
@@ -33,6 +33,12 @@
                               IconIndex="0" 
                               Advertise="yes" />
                 </File>
+                <!-- Add Registry Run Key for HKLM (All Users Autostart) with -minimized flag -->
+                <RegistryValue Root="HKLM" 
+                               Key="Software\Microsoft\Windows\CurrentVersion\Run" 
+                               Name="VPNShareTool" 
+                               Type="string" 
+                               Value='"[INSTALLFOLDER]vpn-share-tool.exe" -minimized' />
             </Component>
         </DirectoryRef>
 
@@ -49,5 +55,18 @@
         </Feature>
 
         <Icon Id="Icon.exe" SourceFile="$(var.SourceExePath)" />
+
+        <!-- Custom action to launch application minimized on fresh interactive install -->
+        <CustomAction Id="LaunchApplication" 
+                      FileKey="VpnShareToolExe" 
+                      ExeCommand="-minimized" 
+                      Execute="immediate" 
+                      Impersonate="yes" 
+                      Return="asyncNoWait" />
+
+        <InstallExecuteSequence>
+            <!-- UILevel > 3 ensures it only runs during interactive user installs, not silent GPO installs (Session 0) -->
+            <Custom Action="LaunchApplication" After="InstallFinalize">NOT Installed AND UILevel &gt; 3</Custom>
+        </InstallExecuteSequence>
     </Product>
 </Wix>
