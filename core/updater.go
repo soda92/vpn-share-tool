@@ -101,7 +101,6 @@ func ApplyUpdate(info *UpdateInfo) error {
 		return fmt.Errorf("download verification failed: %w", err)
 	}
 
-	var exeHash string
 	if isZip {
 		log.Printf("Extracting %s to %s...", downloadDest, newExe)
 		if err := unzipFile(downloadDest, newExe); err != nil {
@@ -110,15 +109,6 @@ func ApplyUpdate(info *UpdateInfo) error {
 			return fmt.Errorf("failed to unzip update: %w", err)
 		}
 		os.Remove(downloadDest)
-
-		var err error
-		exeHash, err = getFileSHA256(newExe)
-		if err != nil {
-			os.Remove(newExe)
-			return fmt.Errorf("failed to compute extracted exe hash: %w", err)
-		}
-	} else {
-		exeHash = info.Sha256
 	}
 
 	os.Chmod(newExe, 0755)
@@ -133,21 +123,8 @@ func ApplyUpdate(info *UpdateInfo) error {
 		}
 		argsStr := strings.Join(args, " ")
 
-		var hashCheck string
-		if exeHash != "" {
-			hashCheck = fmt.Sprintf("rem Verify hash of new executable using powershell\r\n"+
-				"powershell -Command \"if ((Get-FileHash -Path '%s' -Algorithm SHA256).Hash.ToLower() -ne '%s') { exit 1 }\"\r\n"+
-				"if errorlevel 1 (\r\n"+
-				"    echo Error: Hash verification of new executable failed.\r\n"+
-				"    del \"%s\"\r\n"+
-				"    pause\r\n"+
-				"    exit\r\n"+
-				")\r\n", filepath.Base(newExe), strings.ToLower(exeHash), filepath.Base(newExe))
-		}
-
 		batContent := fmt.Sprintf(`@echo off
 pushd "%%~dp0"
-%s
 set /a retries=0
 :loop
 set /a retries+=1
@@ -161,7 +138,7 @@ exit
 :fail
 echo Failed to update after 30 retries.
 pause
-`, hashCheck, filepath.Base(newExe), exeName, exeName, argsStr)
+`, filepath.Base(newExe), exeName, exeName, argsStr)
 
 		if err := os.WriteFile(batPath, []byte(batContent), 0755); err != nil {
 			return fmt.Errorf("failed to create update script: %w", err)
