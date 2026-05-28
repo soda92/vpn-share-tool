@@ -83,13 +83,20 @@ func copySelfTo(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
 
-	if _, err = io.Copy(destFile, sourceFile); err != nil {
-		return err
+	var copyErr error
+	if _, copyErr = io.Copy(destFile, sourceFile); copyErr != nil {
+		destFile.Close()
+		return copyErr
 	}
 
-	return destFile.Sync()
+	syncErr := destFile.Sync()
+	closeErr := destFile.Close()
+
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
 }
 
 func runUpgradeMode(sourceExe string) {
@@ -357,20 +364,26 @@ func downloadFileWithProgress(client *http.Client, url string, destPath string) 
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
 	pw := &progressWriter{
 		total:      resp.ContentLength,
 		lastUpdate: time.Now(),
 	}
 
-	_, err = io.Copy(io.MultiWriter(out, pw), resp.Body)
+	var copyErr error
+	_, copyErr = io.Copy(io.MultiWriter(out, pw), resp.Body)
 	fmt.Println()
-	if err != nil {
-		return err
-	}
 
-	return out.Sync()
+	syncErr := out.Sync()
+	closeErr := out.Close()
+
+	if copyErr != nil {
+		return copyErr
+	}
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
 }
 
 func getFileSHA256(filePath string) (string, error) {
@@ -438,8 +451,13 @@ func extractZip(zipPath, destPath string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
-	_, err = io.Copy(out, rc)
-	return err
+	var copyErr error
+	_, copyErr = io.Copy(out, rc)
+
+	closeErr := out.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
 }

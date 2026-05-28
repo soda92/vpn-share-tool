@@ -60,7 +60,21 @@ var (
 
 	// HTTPClient is injected by core package to trust the custom root CA pool
 	HTTPClient *http.Client
+
+	// Pre-compiled regular expressions for parsing static assets
+	reSrc    = regexp.MustCompile(`(?i)\bsrc=["']([^"']+)["']`)
+	reHref   = regexp.MustCompile(`(?i)\bhref=["']([^"']+)["']`)
+	reSrcset = regexp.MustCompile(`(?i)\bsrcset=["']([^"']+)["']`)
+	reUrl    = regexp.MustCompile(`(?i)\burl\(\s*['"]?([^'")]+)['"]?\s*\)`)
 )
+
+func isVideoExtension(ext string) bool {
+	switch ext {
+	case ".mp4", ".webm", ".mov", ".mkv", ".avi", ".flv", ".wmv", ".m4v", ".3gp":
+		return true
+	}
+	return false
+}
 
 // StartSession initializes a recording session for a proxy port
 func StartSession(p *models.SharedProxy, name string) (string, error) {
@@ -171,8 +185,7 @@ func Record(p *models.SharedProxy, req *http.Request, resp *http.Response, reqBo
 
 	urlPath := strings.ToLower(req.URL.Path)
 	ext := filepath.Ext(urlPath)
-	switch ext {
-	case ".mp4", ".webm", ".mov", ".mkv", ".avi", ".flv", ".wmv", ".m4v", ".3gp":
+	if isVideoExtension(ext) {
 		log.Printf("[Archive] Skipping video file extension: %s", ext)
 		return
 	}
@@ -324,10 +337,6 @@ func performSaveResourceRecord(sessionID string, method string, urlStr string, r
 
 func prefetchAssets(sessionID string, origReq *http.Request, htmlBody []byte) {
 	html := string(htmlBody)
-	reSrc := regexp.MustCompile(`(?i)\bsrc=["']([^"']+)["']`)
-	reHref := regexp.MustCompile(`(?i)\bhref=["']([^"']+)["']`)
-	reSrcset := regexp.MustCompile(`(?i)\bsrcset=["']([^"']+)["']`)
-	reUrl := regexp.MustCompile(`(?i)\burl\(\s*['"]?([^'")]+)['"]?\s*\)`)
 
 	uniqueURLs := make(map[string]bool)
 
@@ -367,8 +376,7 @@ func prefetchAssets(sessionID string, origReq *http.Request, htmlBody []byte) {
 		ext := strings.ToLower(filepath.Ext(resolved.Path))
 		
 		// Filter out video extensions to prevent DB bloating
-		switch ext {
-		case ".mp4", ".webm", ".mov", ".mkv", ".avi", ".flv", ".wmv", ".m4v", ".3gp":
+		if isVideoExtension(ext) {
 			return
 		}
 
@@ -434,7 +442,6 @@ func prefetchAssets(sessionID string, origReq *http.Request, htmlBody []byte) {
 
 func prefetchCSSAssets(sessionID string, origReq *http.Request, cssBody []byte) {
 	css := string(cssBody)
-	reUrl := regexp.MustCompile(`(?i)\burl\(\s*['"]?([^'")]+)['"]?\s*\)`)
 
 	uniqueURLs := make(map[string]bool)
 
@@ -455,8 +462,7 @@ func prefetchCSSAssets(sessionID string, origReq *http.Request, cssBody []byte) 
 		ext := strings.ToLower(filepath.Ext(resolved.Path))
 		
 		// Filter out video extensions
-		switch ext {
-		case ".mp4", ".webm", ".mov", ".mkv", ".avi", ".flv", ".wmv", ".m4v", ".3gp":
+		if isVideoExtension(ext) {
 			return
 		}
 

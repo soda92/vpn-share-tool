@@ -315,7 +315,7 @@ func servePlaybackResource(w http.ResponseWriter, r *http.Request, sessionID str
 		let url = typeof input === 'string' ? input : (input && input.url);
 		if (url) {
 			let targetURL = new URL(url, originalPageURL).href;
-			if (!targetURL.includes('/archive/')) {
+			if (!targetURL.startsWith(window.location.origin + '/archive/')) {
 				url = "/archive/ajax/" + sessionID + "/" + timestamp + "/" + targetURL.replace("://", ":/");
 			}
 		}
@@ -326,7 +326,7 @@ func servePlaybackResource(w http.ResponseWriter, r *http.Request, sessionID str
 	XMLHttpRequest.prototype.open = function(method, url, ...args) {
 		if (url) {
 			let targetURL = new URL(url, originalPageURL).href;
-			if (!targetURL.includes('/archive/')) {
+			if (!targetURL.startsWith(window.location.origin + '/archive/')) {
 				url = "/archive/ajax/" + sessionID + "/" + timestamp + "/" + targetURL.replace("://", ":/");
 			}
 		}
@@ -401,9 +401,35 @@ func FindResource(sessionID string, targetURL string, targetTimestamp int64) (*A
 		var closestVal []byte
 		minDiff := int64(math.MaxInt64)
 
-		// Seek to prefix start
-		for k, v := c.Seek([]byte(prefix)); k != nil && strings.HasPrefix(string(k), prefix); k, v = c.Next() {
-			keyStr := string(k)
+		// Seek to the target timestamp or the first key greater than it
+		targetKeyStr := prefix + strconv.FormatInt(targetTimestamp, 10)
+		k, v := c.Seek([]byte(targetKeyStr))
+
+		// Check k (first key >= target) and its predecessor (last key < target)
+		var candidates [][]byte
+		var values [][]byte
+
+		if k != nil && strings.HasPrefix(string(k), prefix) {
+			candidates = append(candidates, k)
+			values = append(values, v)
+		}
+
+		// Also check the previous key
+		var kPrev []byte
+		var vPrev []byte
+		if k != nil {
+			kPrev, vPrev = c.Prev()
+		} else {
+			kPrev, vPrev = c.Last()
+		}
+
+		if kPrev != nil && strings.HasPrefix(string(kPrev), prefix) {
+			candidates = append(candidates, kPrev)
+			values = append(values, vPrev)
+		}
+
+		for idx, candKey := range candidates {
+			keyStr := string(candKey)
 			parts := strings.Split(keyStr, "#")
 			if len(parts) < 2 {
 				continue
@@ -417,8 +443,8 @@ func FindResource(sessionID string, targetURL string, targetTimestamp int64) (*A
 			diff := int64(math.Abs(float64(keyTime - targetTimestamp)))
 			if diff < minDiff {
 				minDiff = diff
-				closestKey = k
-				closestVal = v
+				closestKey = candKey
+				closestVal = values[idx]
 			}
 		}
 

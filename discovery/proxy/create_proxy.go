@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/soda92/vpn-share-tool/discovery/registry"
 	"log"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
+
+	"github.com/soda92/vpn-share-tool/discovery/registry"
 )
 
 func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
@@ -38,26 +40,37 @@ func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
 	reachableNodeFound := false
 
 	nodesWithActiveProxy := make(map[string]bool)
+	var mu sync.Mutex
+
 	if req.NodeAddress == "auto_another" {
+		var wg sync.WaitGroup
 		for _, instance := range activeInstances {
-			client := &http.Client{Timeout: 3 * time.Second}
-			resp, err := client.Get(fmt.Sprintf("http://%s/active-proxies", instance.Address))
-			if err != nil {
-				continue
-			}
-			var proxies []struct {
-				OriginalURL string `json:"original_url"`
-			}
-			if err := json.NewDecoder(resp.Body).Decode(&proxies); err == nil {
-				for _, p := range proxies {
-					if p.OriginalURL == req.URL {
-						nodesWithActiveProxy[instance.Address] = true
-						break
+			wg.Add(1)
+			go func(addr string) {
+				defer wg.Done()
+				client := &http.Client{Timeout: 3 * time.Second}
+				resp, err := client.Get(fmt.Sprintf("http://%s/active-proxies", addr))
+				if err != nil {
+					return
+				}
+				defer resp.Body.Close()
+
+				var proxies []struct {
+					OriginalURL string `json:"original_url"`
+				}
+				if err := json.NewDecoder(resp.Body).Decode(&proxies); err == nil {
+					for _, p := range proxies {
+						if p.OriginalURL == req.URL {
+							mu.Lock()
+							nodesWithActiveProxy[addr] = true
+							mu.Unlock()
+							break
+						}
 					}
 				}
-			}
-			resp.Body.Close()
+			}(instance.Address)
 		}
+		wg.Wait()
 
 		if len(nodesWithActiveProxy) == len(activeInstances) {
 			w.Header().Set("Content-Type", "application/json")
@@ -67,6 +80,8 @@ func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 1. Gather candidate instances
+	var candidates []registry.Instance
 	for _, instance := range activeInstances {
 		if req.NodeAddress != "" && req.NodeAddress != "auto" && req.NodeAddress != "auto_another" && instance.Address != req.NodeAddress {
 			continue
@@ -74,36 +89,74 @@ func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
 		if req.NodeAddress == "auto_another" && nodesWithActiveProxy[instance.Address] {
 			continue
 		}
-		// Check if the instance can reach the URL
-		canReachURL := fmt.Sprintf("http://%s/can-reach?url=%s", instance.Address, url.QueryEscape(req.URL))
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, err := client.Get(canReachURL)
-		if err != nil {
-			log.Printf("Error checking reachability on %s: %v", instance.Address, err)
+		candidates = append(candidates, instance)
+	}
+
+	if len(candidates) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "No available nodes match the selection criteria."})
+		return
+	}
+
+	type checkResult struct {
+		address   string
+		reachable bool
+		err       error
+	}
+
+	resultChan := make(chan checkResult, len(candidates))
+	var checkWg sync.WaitGroup
+
+	// 2. Perform can-reach checks in parallel
+	for _, instance := range candidates {
+		checkWg.Add(1)
+		go func(addr string) {
+			defer checkWg.Done()
+			canReachURL := fmt.Sprintf("http://%s/can-reach?url=%s", addr, url.QueryEscape(req.URL))
+			client := &http.Client{Timeout: 10 * time.Second}
+			resp, err := client.Get(canReachURL)
+			if err != nil {
+				resultChan <- checkResult{address: addr, reachable: false, err: err}
+				return
+			}
+			defer resp.Body.Close()
+
+			var canReachResp struct {
+				Reachable bool `json:"reachable"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&canReachResp); err != nil {
+				resultChan <- checkResult{address: addr, reachable: false, err: err}
+				return
+			}
+
+			resultChan <- checkResult{address: addr, reachable: canReachResp.Reachable, err: nil}
+		}(instance.Address)
+	}
+
+	// Close channel when all reachability checks complete
+	go func() {
+		checkWg.Wait()
+		close(resultChan)
+	}()
+
+	// 3. Process reachability results as they arrive and create proxy on the first success
+	for res := range resultChan {
+		if res.err != nil {
+			log.Printf("Error checking reachability on %s: %v", res.address, res.err)
 			continue
 		}
 
-		var canReachResp struct {
-			Reachable bool `json:"reachable"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&canReachResp); err != nil {
-			log.Printf("Error decoding reachability response from %s: %v", instance.Address, err)
-			resp.Body.Close()
-			continue
-		}
-		resp.Body.Close()
-
-		if canReachResp.Reachable {
+		if res.reachable {
 			reachableNodeFound = true
-			// This instance can reach the URL, so create the proxy here
-			createProxyURL := fmt.Sprintf("http://%s/proxies", instance.Address)
+			createProxyURL := fmt.Sprintf("http://%s/proxies", res.address)
 			proxyReqBody, _ := json.Marshal(map[string]string{"url": req.URL})
 
 			postClient := &http.Client{Timeout: 10 * time.Second}
 			resp, err := postClient.Post(createProxyURL, "application/json", bytes.NewBuffer(proxyReqBody))
 			if err != nil {
-				log.Printf("Error creating proxy on %s: %v", instance.Address, err)
-				lastError = fmt.Sprintf("Node %s reachable but failed to connect: %v", instance.Address, err)
+				log.Printf("Error creating proxy on %s: %v", res.address, err)
+				lastError = fmt.Sprintf("Node %s reachable but failed to connect: %v", res.address, err)
 				continue
 			}
 
@@ -113,7 +166,7 @@ func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
 					SharedURL   string `json:"shared_url"`
 				}
 				if err := json.NewDecoder(resp.Body).Decode(&proxyResp); err != nil {
-					log.Printf("Error decoding proxy response from %s: %v", instance.Address, err)
+					log.Printf("Error decoding proxy response from %s: %v", res.address, err)
 					resp.Body.Close()
 					continue
 				}
@@ -122,22 +175,21 @@ func HandleCreateProxy(w http.ResponseWriter, r *http.Request) {
 				json.NewEncoder(w).Encode(proxyResp)
 				return
 			} else {
-				// Read error body
 				buf := new(bytes.Buffer)
 				buf.ReadFrom(resp.Body)
 				resp.Body.Close()
 				errorMsg := buf.String()
-				log.Printf("Failed to create proxy on %s. Status: %d, Body: %s", instance.Address, resp.StatusCode, errorMsg)
-				lastError = fmt.Sprintf("Node %s reachable but refused creation (%d): %s", instance.Address, resp.StatusCode, errorMsg)
+				log.Printf("Failed to create proxy on %s. Status: %d, Body: %s", res.address, resp.StatusCode, errorMsg)
+				lastError = fmt.Sprintf("Node %s reachable but refused creation (%d): %s", res.address, resp.StatusCode, errorMsg)
 			}
 		}
 	}
 
-	// If no instance can reach the URL
+	// If no instance was successfully set up
 	w.Header().Set("Content-Type", "application/json")
 
 	if reachableNodeFound {
-		w.WriteHeader(http.StatusBadGateway) // Or 502/500
+		w.WriteHeader(http.StatusBadGateway)
 		json.NewEncoder(w).Encode(map[string]string{"error": lastError})
 	} else {
 		w.WriteHeader(http.StatusNotFound)
