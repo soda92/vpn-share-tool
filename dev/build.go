@@ -386,7 +386,7 @@ func runBuildWindows() error {
 		return nil
 	}
 
-	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "-tags", "secrets_gen", "--app-id", "vpn.share.tool", "./cmd/vpn-share-tool"); err != nil {
+	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-image", "fyne-cross-windows:go1.26", "-arch", "amd64", "-tags", "secrets_gen", "--app-id", "vpn.share.tool", "./cmd/vpn-share-tool"); err != nil {
 		return fmt.Errorf("fyne-cross failed: %w", err)
 	}
 	fmt.Println("✅ Windows build successful.")
