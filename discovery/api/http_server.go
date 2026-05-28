@@ -61,18 +61,18 @@ func handleVersionRequest(w http.ResponseWriter, r *http.Request, isApp bool) {
 	format := r.URL.Query().Get("format")
 	useZip := format == "zip"
 
-	var reVersion *regexp.Regexp
+	var regexes []*regexp.Regexp
 	if isApp {
 		if useZip {
-			reVersion = reVersionAppZip
+			regexes = []*regexp.Regexp{reVersionAppZip, reVersionZip}
 		} else {
-			reVersion = reVersionAppExe
+			regexes = []*regexp.Regexp{reVersionAppExe, reVersionExe}
 		}
 	} else {
 		if useZip {
-			reVersion = reVersionZip
+			regexes = []*regexp.Regexp{reVersionZip}
 		} else {
-			reVersion = reVersionExe
+			regexes = []*regexp.Regexp{reVersionExe}
 		}
 	}
 
@@ -97,7 +97,14 @@ func handleVersionRequest(w http.ResponseWriter, r *http.Request, isApp bool) {
 		if e.IsDir() {
 			continue
 		}
-		matches := reVersion.FindStringSubmatch(e.Name())
+		var matches []string
+		for _, re := range regexes {
+			m := re.FindStringSubmatch(e.Name())
+			if len(m) == 3 {
+				matches = m
+				break
+			}
+		}
 		if len(matches) == 3 {
 			// Check if corresponding .sha256 file exists (marking copy completion)
 			sha256Path := filepath.Join(SharePath, e.Name()+".sha256")
