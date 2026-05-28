@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -38,6 +39,31 @@ const (
 func Run() {
 	// Setup Logging
 	setupLogging()
+
+	// Check if another instance is already running by querying the default port
+	client := &http.Client{Timeout: 1 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/version", startPort))
+	if err == nil {
+		resp.Body.Close()
+		// Another instance is running!
+		if isSystemWideInstallation() {
+			log.Printf("System-wide installation detected. Sending exit signal to running instance on port %d...", startPort)
+			exitResp, exitErr := client.Post(fmt.Sprintf("http://127.0.0.1:%d/exit", startPort), "text/plain", nil)
+			if exitErr == nil {
+				exitResp.Body.Close()
+				// Wait for the other instance to release the port
+				time.Sleep(1 * time.Second)
+			}
+		} else {
+			// We are user-mode. Signal the running instance to show itself, and exit.
+			log.Printf("User-mode instance started manually. Signaling running instance on port %d to show...", startPort)
+			showResp, showErr := client.Get(fmt.Sprintf("http://127.0.0.1:%d/show", startPort))
+			if showErr == nil {
+				showResp.Body.Close()
+			}
+			return
+		}
+	}
 
 	// Initialize Sentry
 	sentryDsn := common.SentryDSN
@@ -134,6 +160,13 @@ func Run() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle") + " " + Version)
 	isVisible := !*startMinimized // Track visibility state
+
+	core.ShowGUICallback = func() {
+		fyne.Do(func() {
+			myWindow.Show()
+			myWindow.RequestFocus()
+		})
+	}
 
 	// Setup restart args provider for updates
 	core.SetRestartArgsProvider(func() []string {
@@ -280,4 +313,21 @@ func Run() {
 		myWindow.Show()
 	}
 	myApp.Run()
+}
+
+func isSystemWideInstallation() bool {
+	exePath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	lowerPath := strings.ToLower(exePath)
+	// Windows system-wide directories
+	if strings.Contains(lowerPath, `\program files\`) || strings.Contains(lowerPath, `\program files (x86)\`) {
+		return true
+	}
+	// Linux system-wide directories
+	if strings.HasPrefix(lowerPath, "/usr/") || strings.HasPrefix(lowerPath, "/opt/") {
+		return true
+	}
+	return false
 }

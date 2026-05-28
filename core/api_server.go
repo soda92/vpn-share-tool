@@ -6,7 +6,9 @@ import (
 	"log"
 	"net/http"
 	"net/http/pprof"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/soda92/vpn-share-tool/core/archive"
 	"github.com/soda92/vpn-share-tool/core/debug"
@@ -16,6 +18,9 @@ import (
 	"github.com/soda92/vpn-share-tool/core/resources"
 	"github.com/soda92/vpn-share-tool/core/utils"
 )
+
+// ShowGUICallback is invoked by the API server to request the GUI window to show itself.
+var ShowGUICallback func()
 
 // SetupApiMux initializes the HTTP serve mux with all API routes.
 func SetupApiMux() http.Handler {
@@ -57,6 +62,24 @@ func SetupApiMux() http.Handler {
 		if err := json.NewEncoder(w).Encode(response); err != nil {
 			http.Error(w, "Failed to encode version", http.StatusInternalServerError)
 		}
+	})
+	mux.HandleFunc("/show", func(w http.ResponseWriter, r *http.Request) {
+		if ShowGUICallback != nil {
+			ShowGUICallback()
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
+		} else {
+			http.Error(w, "Show callback not registered", http.StatusNotFound)
+		}
+	})
+	mux.HandleFunc("/exit", func(w http.ResponseWriter, r *http.Request) {
+		log.Println("Received exit request from system-wide instance. Exiting...")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			os.Exit(0)
+		}()
 	})
 
 	// Profiling endpoints
