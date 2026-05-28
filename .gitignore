@@ -7,6 +7,8 @@ certs.7z
 tagged_urls.json
 *.log
 
+.antigravitycli
+
 /.env
 
 /Icon.png

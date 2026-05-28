@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -231,8 +232,12 @@ func waitForFileRelease(path string, timeout time.Duration) error {
 }
 
 func discoverServer(timeout time.Duration) (string, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	urlChan := make(chan string, 1)
 	regCfg := register.Config{
+		Ctx:               ctx,
 		DiscoverySrvPort:  "45679",
 		FallbackServerIPs: ServerIPs,
 		RootCACert:        resources.RootCACert,
