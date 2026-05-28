@@ -5,6 +5,7 @@ import SavedSession from './views/SavedSession.vue';
 import RequestDetailView from './views/RequestDetailView.vue';
 import FormDecoder from './views/FormDecoder.vue';
 import Sessions from './views/Sessions.vue';
+import Archives from './views/Archives.vue';
 
 const routes: Array<RouteRecordRaw> = [
   { path: '/', redirect: '/live' },
@@ -13,6 +14,7 @@ const routes: Array<RouteRecordRaw> = [
   { path: '/session/:id', component: SavedSession },
   { path: '/request/:id', component: RequestDetailView },
   { path: '/decoder', component: FormDecoder },
+  { path: '/archives', component: Archives },
 ];
 
 const router = createRouter({

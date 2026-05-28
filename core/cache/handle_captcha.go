@@ -5,8 +5,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-
-	"github.com/soda92/vpn-share-tool/core/debug"
 )
 
 func (t *CachingTransport) handleCaptchaImage(req *http.Request, reqBody []byte) (*http.Response, error) {
@@ -57,7 +55,7 @@ func (t *CachingTransport) handleCaptchaImage(req *http.Request, reqBody []byte)
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(respBody))
-	debug.CaptureRequest(req, resp, reqBody, respBody)
+	t.captureAndRecord(req, resp, reqBody, respBody)
 	return resp, nil
 }
 

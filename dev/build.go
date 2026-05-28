@@ -1,8 +1,12 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -13,6 +17,9 @@ import (
 var buildCmd = &cobra.Command{
 	Use:   "build",
 	Short: "Build main application (desktop)",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		return generateSecretsGo()
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runBuildDesktop()
 	},
@@ -75,6 +82,22 @@ var buildLinuxSoCmd = &cobra.Command{
 	},
 }
 
+var buildUpdaterCmd = &cobra.Command{
+	Use:   "updater",
+	Short: "Build Windows updater application",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildUpdater()
+	},
+}
+
+var buildMSICmd = &cobra.Command{
+	Use:   "msi",
+	Short: "Build Windows MSI installer package (requires wixl on Linux or candle/light on Windows)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runBuildMSI()
+	},
+}
+
 var noFrontend bool
 var buildWindowsLocal bool
 
@@ -87,9 +110,12 @@ func init() {
 	buildCmd.AddCommand(buildTestCmd)
 	buildCmd.AddCommand(buildServerCmd)
 	buildCmd.AddCommand(buildLinuxSoCmd)
+	buildCmd.AddCommand(buildUpdaterCmd)
+	buildCmd.AddCommand(buildMSICmd)
 
 	buildCmd.PersistentFlags().BoolVar(&noFrontend, "no-frontend", false, "Skip frontend build")
 	buildWindowsCmd.Flags().BoolVar(&buildWindowsLocal, "local", false, "Build locally using mingw-w64 toolchain instead of fyne-cross")
+	buildUpdaterCmd.Flags().BoolVar(&buildWindowsLocal, "local", false, "Build locally using mingw-w64 toolchain instead of fyne-cross")
 }
 
 func runBuildLinuxSo() error {
@@ -195,7 +221,7 @@ func runBuildServer() error {
 		return err
 	}
 
-	if err := execCmd(rootDir, nil, "go", "build", "-o", output, "./cmd/discovery"); err != nil {
+	if err := execCmd(rootDir, nil, "go", "build", "-tags", "secrets_gen", "-o", output, "./cmd/discovery"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
@@ -250,10 +276,14 @@ func runBuildDesktop() error {
 		fmt.Println("Skipping frontend build.")
 	}
 
+	if err := buildViewers(); err != nil {
+		return fmt.Errorf("failed to build archive viewers: %w", err)
+	}
+
 	toolCmdDir := filepath.Join(rootDir, "cmd", "vpn-share-tool")
 
 	// Build Go binary
-	if err := execCmdFiltered(toolCmdDir, nil, "go", "build", "-o", "vpn-share-tool"); err != nil {
+	if err := execCmdFiltered(toolCmdDir, nil, "go", "build", "-tags", "secrets_gen", "-o", "vpn-share-tool"); err != nil {
 		return fmt.Errorf("go build failed: %w", err)
 	}
 
@@ -334,6 +364,10 @@ func runBuildWindows() error {
 		return fmt.Errorf("failed to write version file: %w", err)
 	}
 
+	if err := buildViewers(); err != nil {
+		return fmt.Errorf("failed to build archive viewers: %w", err)
+	}
+
 	// Build frontend
 	if !noFrontend {
 		if err := buildFrontendIn(filepath.Join(rootDir, "core", "debug_web")); err != nil {
@@ -358,14 +392,14 @@ func runBuildWindows() error {
 			"CXX=x86_64-w64-mingw32-g++",
 		)
 
-		if err := execCmd(rootDir, env, "go", "build", "-ldflags=-H=windowsgui", "-o", output, "./cmd/vpn-share-tool"); err != nil {
+		if err := execCmd(rootDir, env, "fyne", "build", "-os", "windows", "--tags", "secrets_gen", "-o", output, "--src", "./cmd/vpn-share-tool"); err != nil {
 			return fmt.Errorf("local mingw64 build failed: %w", err)
 		}
 		fmt.Printf("✅ Windows build successful: %s\n", output)
 		return nil
 	}
 
-	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-arch", "amd64", "--app-id", "vpn.share.tool", "./cmd/vpn-share-tool"); err != nil {
+	if err := execCmd(rootDir, nil, "fyne-cross", "windows", "-image", "fyne-cross-windows:go1.26", "-arch", "amd64", "-tags", "secrets_gen", "--app-id", "vpn.share.tool", "./cmd/vpn-share-tool"); err != nil {
 		return fmt.Errorf("fyne-cross failed: %w", err)
 	}
 	fmt.Println("✅ Windows build successful.")
@@ -438,4 +472,341 @@ func runBuildPylib() error {
 
 	fmt.Printf("✅ Pylib build successful: %s\n", dstFile)
 	return nil
+}
+
+func runBuildUpdater() error {
+	fmt.Println("Building Updater application (pure Go, console)...")
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get cwd: %w", err)
+	}
+
+	output := filepath.Join(rootDir, "dist", "updater.exe")
+	if err := os.MkdirAll(filepath.Dir(output), 0755); err != nil {
+		return err
+	}
+
+	env := append(os.Environ(),
+		"CGO_ENABLED=0",
+		"GOOS=windows",
+		"GOARCH=amd64",
+	)
+
+	version, _, err := GetCurrentVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get current version: %w", err)
+	}
+	fmt.Printf("Updater Build Version: %s\n", version)
+
+	ldflags := fmt.Sprintf("-s -w -X main.UpdaterVersion=%s", version)
+
+	if err := execCmd(rootDir, env, "go", "build", "-trimpath", "-ldflags="+ldflags, "-o", output, "./cmd/updater"); err != nil {
+		return fmt.Errorf("updater build failed: %w", err)
+	}
+
+	fmt.Printf("✅ Updater build successful: %s\n", output)
+	return nil
+}
+
+func buildViewers() error {
+	fmt.Println("Building standalone archive viewers...")
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	embedDir := filepath.Join(rootDir, "core", "archive", "embed")
+	if err := os.MkdirAll(embedDir, 0755); err != nil {
+		return err
+	}
+
+	// 1. Build Linux viewer
+	linuxOut := filepath.Join(embedDir, "viewer_linux")
+	envLinux := append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH=amd64")
+	if err := execCmd(rootDir, envLinux, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", linuxOut, "./cmd/viewer"); err != nil {
+		return fmt.Errorf("failed to build linux viewer: %w", err)
+	}
+	fmt.Printf("✅ Linux viewer built: %s\n", linuxOut)
+
+	// 2. Build Windows viewer
+	windowsOut := filepath.Join(embedDir, "viewer_windows.exe")
+	envWin := append(os.Environ(), "CGO_ENABLED=0", "GOOS=windows", "GOARCH=amd64")
+	if err := execCmd(rootDir, envWin, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", windowsOut, "./cmd/viewer"); err != nil {
+		return fmt.Errorf("failed to build windows viewer: %w", err)
+	}
+	fmt.Printf("✅ Windows viewer built: %s\n", windowsOut)
+
+	return nil
+}
+
+// generateSecretsGo reads .env and/or system environment variables,
+// and writes common/secrets_gen.go so Go builds can embed telemetry secrets.
+func generateSecretsGo() error {
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	envFile := filepath.Join(rootDir, ".env")
+	envMap := make(map[string]string)
+
+	// Try reading .env
+	if data, err := os.ReadFile(envFile); err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			// Strip quotes
+			if (strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"")) ||
+				(strings.HasPrefix(val, "'") && strings.HasSuffix(val, "'")) {
+				if len(val) >= 2 {
+					val = val[1 : len(val)-1]
+				}
+			}
+			envMap[key] = val
+		}
+	}
+
+	getSecret := func(key string) string {
+		if val, ok := envMap[key]; ok && val != "" {
+			return val
+		}
+		return os.Getenv(key)
+	}
+
+	sentryDSN := getSecret("VITE_SENTRY_DSN")
+	posthogKey := getSecret("VITE_POSTHOG_KEY")
+	posthogHost := getSecret("VITE_POSTHOG_HOST")
+	if posthogHost == "" {
+		posthogHost = "https://us.i.posthog.com"
+	}
+
+	secretsFile := filepath.Join(rootDir, "common", "secrets_gen.go")
+	content := fmt.Sprintf(`//go:build secrets_gen
+
+package common
+
+var (
+	SentryDSN   = "%s"
+	PosthogKey  = "%s"
+	PosthogHost = "%s"
+)
+`, sentryDSN, posthogKey, posthogHost)
+
+	// Ensure common directory exists
+	if err := os.MkdirAll(filepath.Dir(secretsFile), 0755); err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(secretsFile, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write secrets_gen.go: %w", err)
+	}
+
+	fmt.Println("✅ Generated common/secrets_gen.go from environment.")
+	return nil
+}
+
+func runBuildMSI() error {
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	config, err := loadReleaseConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load release config: %w", err)
+	}
+	minorVal := parseSuffixToInt(config.Version.Suffix)
+	versionStr := fmt.Sprintf("%d.%d.0", config.Version.Counter, minorVal)
+	fmt.Printf("Building MSI for version: %s\n", versionStr)
+
+	// Locate source exe
+	var exePath string
+	candidates := []string{
+		filepath.Join(rootDir, "dist", "vpn-share-tool.exe"),
+		filepath.Join(rootDir, "fyne-cross", "bin", "windows-amd64", "vpn-share-tool.exe"),
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			exePath = c
+			break
+		}
+	}
+
+	if exePath == "" {
+		return fmt.Errorf("could not find vpn-share-tool.exe. Please run 'go run ./dev build windows' first")
+	}
+	fmt.Printf("Source EXE: %s\n", exePath)
+
+	wxsPath := filepath.Join(rootDir, "packaging", "wix", "vpn-share-tool.wxs")
+	msiOutPath := filepath.Join(rootDir, "packaging", "wix", fmt.Sprintf("vpn-share-tool-%s.msi", versionStr))
+
+	if runtime.GOOS == "windows" {
+		candle := "candle.exe"
+		light := "light.exe"
+
+		_, errCandle := exec.LookPath(candle)
+		_, errLight := exec.LookPath(light)
+
+		wixBinDir := filepath.Join(rootDir, "packaging", "wix", "wix_bin")
+		if errCandle != nil || errLight != nil {
+			candleLocal := filepath.Join(wixBinDir, "candle.exe")
+			lightLocal := filepath.Join(wixBinDir, "light.exe")
+			if _, errC := os.Stat(candleLocal); errC == nil {
+				if _, errL := os.Stat(lightLocal); errL == nil {
+					candle = candleLocal
+					light = lightLocal
+					errCandle = nil
+					errLight = nil
+				}
+			}
+		}
+
+		if errCandle != nil || errLight != nil {
+			fmt.Println("WiX Toolset not found in PATH or wix_bin directory.")
+			if err := downloadAndExtractWiX(wixBinDir); err != nil {
+				return fmt.Errorf("failed to download WiX Toolset: %w", err)
+			}
+			candle = filepath.Join(wixBinDir, "candle.exe")
+			light = filepath.Join(wixBinDir, "light.exe")
+		}
+
+		wixobjPath := filepath.Join(rootDir, "packaging", "wix", "vpn-share-tool.wixobj")
+		defer os.Remove(wixobjPath)
+
+		err = execCmd(rootDir, nil, candle,
+			"-dVersion="+versionStr,
+			"-dSourceExePath="+exePath,
+			"-out", wixobjPath,
+			wxsPath,
+		)
+		if err != nil {
+			return fmt.Errorf("candle compilation failed: %w", err)
+		}
+
+		err = execCmd(rootDir, nil, light,
+			"-ext", "WixUIExtension",
+			"-out", msiOutPath,
+			wixobjPath,
+		)
+		if err != nil {
+			return fmt.Errorf("light linking failed: %w", err)
+		}
+
+	} else {
+		wixl, err := exec.LookPath("wixl")
+		if err != nil {
+			return fmt.Errorf("wixl not found in PATH. Please install 'msitools' (pacman -S msitools / yay -S msitools) to build MSI on Linux")
+		}
+
+		err = execCmd(rootDir, nil, wixl,
+			"-o", msiOutPath,
+			"-D", "Version="+versionStr,
+			"-D", "SourceExePath="+exePath,
+			wxsPath,
+		)
+		if err != nil {
+			return fmt.Errorf("wixl build failed: %w", err)
+		}
+	}
+
+	fmt.Printf("✅ MSI built successfully: %s\n", msiOutPath)
+	return nil
+}
+
+func downloadAndExtractWiX(destDir string) error {
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	zipPath := filepath.Join(destDir, "wix.zip")
+	defer os.Remove(zipPath)
+
+	fmt.Println("Downloading WiX Toolset binaries from GitHub...")
+	url := "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip"
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	out, err := os.Create(zipPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		return err
+	}
+	out.Close()
+
+	fmt.Println("Extracting WiX Toolset binaries...")
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		fpath := filepath.Join(destDir, f.Name)
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(fpath, os.ModePerm)
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+			return err
+		}
+
+		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			return err
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			outFile.Close()
+			return err
+		}
+
+		_, err = io.Copy(outFile, rc)
+		rc.Close()
+		outFile.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func parseSuffixToInt(suffix string) int {
+	if suffix == "" {
+		return 0
+	}
+	val := 0
+	for i := 0; i < len(suffix); i++ {
+		char := suffix[i]
+		if char >= 'a' && char <= 'z' {
+			val = val*26 + int(char-'a'+1)
+		} else if char >= 'A' && char <= 'Z' {
+			val = val*26 + int(char-'A'+1)
+		}
+	}
+	return val
 }

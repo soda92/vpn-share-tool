@@ -1,11 +1,16 @@
 package main
 
 import (
+	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -22,7 +27,12 @@ var releaseCmd = &cobra.Command{
 	},
 }
 
+var releaseUpdater bool
+var releaseCleanup bool
+
 func init() {
+	releaseCmd.Flags().BoolVar(&releaseUpdater, "updater", false, "Release the updater instead of the main application")
+	releaseCmd.Flags().BoolVar(&releaseCleanup, "cleanup", false, "Move other versions into the OLD folder")
 	rootCmd.AddCommand(releaseCmd)
 }
 
@@ -186,8 +196,64 @@ func copyFile(src, dst string) error {
 	}
 	defer destFile.Close()
 
-	_, err = io.Copy(destFile, sourceFile)
-	return err
+	if _, err = io.Copy(destFile, sourceFile); err != nil {
+		return err
+	}
+
+	return destFile.Sync()
+}
+
+func zipFile(src, dst string) error {
+	// Create destination directory if it doesn't exist
+	destDir := filepath.Dir(dst)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return err
+	}
+
+	archive, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer archive.Close()
+
+	zipWriter := zip.NewWriter(archive)
+	defer zipWriter.Close()
+
+	fileToZip, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer fileToZip.Close()
+
+	info, err := fileToZip.Stat()
+	if err != nil {
+		return err
+	}
+
+	header, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+
+	header.Name = "vpn-share-tool.exe"
+	header.Method = zip.Deflate
+
+	writer, err := zipWriter.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	if _, err = io.Copy(writer, fileToZip); err != nil {
+		return err
+	}
+
+	// Close zipWriter first to write central directory structure to archive
+	if err := zipWriter.Close(); err != nil {
+		return err
+	}
+
+	// Sync file system buffers for archive file
+	return archive.Sync()
 }
 
 func runRelease() error {
@@ -196,13 +262,26 @@ func runRelease() error {
 		return fmt.Errorf("failed to get cwd: %w", err)
 	}
 
-	// Source file (built by `build windows`)
-	srcPath := filepath.Join(rootDir, "dist", "vpn-share-tool.exe")
-	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		// Fallback to legacy fyne-cross path
-		srcPath = filepath.Join(rootDir, "fyne-cross", "bin", "windows-amd64", "vpn-share-tool.exe")
+	var filePrefix string
+	var srcPath string
+
+	if releaseUpdater {
+		filePrefix = "vpn-share-tool"
+		srcPath = filepath.Join(rootDir, "dist", "updater.exe")
 		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-			return fmt.Errorf("source file not found. Please run 'go run dev.go build windows --local' first")
+			srcPath = filepath.Join(rootDir, "fyne-cross", "bin", "windows-amd64", "updater.exe")
+			if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+				return fmt.Errorf("updater source file not found. Please run 'go run dev.go build updater' first")
+			}
+		}
+	} else {
+		filePrefix = "vpn-share-tool-app"
+		srcPath = filepath.Join(rootDir, "dist", "vpn-share-tool.exe")
+		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+			srcPath = filepath.Join(rootDir, "fyne-cross", "bin", "windows-amd64", "vpn-share-tool.exe")
+			if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+				return fmt.Errorf("application source file not found. Please run 'go run dev.go build windows --local' first")
+			}
 		}
 	}
 
@@ -229,18 +308,107 @@ func runRelease() error {
 		return fmt.Errorf("share path is unreachable: %s (%w)", sharePath, err)
 	}
 
-	// Construct destination
-	filename := fmt.Sprintf("vpn-share-tool_%s.exe", versionStr)
-	destPath := filepath.Join(sharePath, filename)
+	// 1. Publish raw EXE (for both updater and app)
+	exeFilename := fmt.Sprintf("%s_%s.exe", filePrefix, versionStr)
+	destExePath := filepath.Join(sharePath, exeFilename)
 
-	fmt.Printf("Publishing release %s...\n", versionStr)
+	fmt.Printf("Publishing EXE release %s...\n", versionStr)
 	fmt.Printf("Source: %s\n", srcPath)
-	fmt.Printf("Dest:   %s\n", destPath)
+	fmt.Printf("Dest:   %s\n", destExePath)
 
-	if err := copyFile(srcPath, destPath); err != nil {
-		return fmt.Errorf("failed to copy file: %w", err)
+	if err := copyFile(srcPath, destExePath); err != nil {
+		return fmt.Errorf("failed to copy exe file: %w", err)
+	}
+
+	// 2. Compute and upload hash for the main application (not the updater)
+	var shaFilename string
+	if !releaseUpdater {
+		exeSha256Path := destExePath + ".sha256"
+		shaFilename = exeFilename + ".sha256"
+
+		// Delete old .sha256 file first if it exists
+		if err := os.Remove(exeSha256Path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove old exe sha256 file: %w", err)
+		}
+
+		exeHash, err := computeSHA256(destExePath)
+		if err != nil {
+			return fmt.Errorf("failed to compute exe sha256: %w", err)
+		}
+
+		if err := os.WriteFile(exeSha256Path, []byte(exeHash), 0644); err != nil {
+			return fmt.Errorf("failed to write exe sha256 file: %w", err)
+		}
+		fmt.Printf("EXE SHA256: %s -> %s\n", exeHash, exeSha256Path)
+	}
+
+	// 3. Optional cleanup of old versions
+	if releaseCleanup {
+		if err := cleanupOldReleases(sharePath, filePrefix, exeFilename, shaFilename); err != nil {
+			return fmt.Errorf("cleanup failed: %w", err)
+		}
 	}
 
 	fmt.Println("✅ Published successfully.")
+	return nil
+}
+
+func computeSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func cleanupOldReleases(sharePath string, filePrefix string, currentExe string, currentSha string) error {
+	oldDir := filepath.Join(sharePath, "OLD")
+	if err := os.MkdirAll(oldDir, 0755); err != nil {
+		return fmt.Errorf("failed to create OLD directory: %w", err)
+	}
+
+	entries, err := os.ReadDir(sharePath)
+	if err != nil {
+		return fmt.Errorf("failed to read share directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+
+		// Skip the ones we just wrote
+		if name == currentExe || name == currentSha {
+			continue
+		}
+
+		// Check if it's an old release file of the SAME type (e.g. starts with vpn-share-tool-app_ or vpn-share-tool_)
+		isReleaseFile := false
+		if strings.HasPrefix(name, filePrefix+"_") {
+			if strings.HasSuffix(name, ".exe") || strings.HasSuffix(name, ".zip") || 
+				strings.HasSuffix(name, ".sha256") || strings.HasSuffix(name, ".zip.sha256") {
+				isReleaseFile = true
+			}
+		}
+
+		if isReleaseFile {
+			src := filepath.Join(sharePath, name)
+			dst := filepath.Join(oldDir, name)
+			fmt.Printf("Cleaning up old release: moving %s -> %s\n", name, dst)
+			
+			_ = os.Remove(dst)
+			if err := os.Rename(src, dst); err != nil {
+				log.Printf("Warning: failed to move %s to OLD directory: %v", name, err)
+			}
+		}
+	}
 	return nil
 }

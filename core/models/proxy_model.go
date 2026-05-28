@@ -42,17 +42,19 @@ type ProxySettings struct {
 }
 
 type SharedProxy struct {
-	OriginalURL   string                 `json:"original_url"`
-	RemotePort    int                    `json:"remote_port"`
-	Path          string                 `json:"path"`
-	Handler       *httputil.ReverseProxy `json:"-"`
-	Server        *http.Server           `json:"-"`
-	Settings      ProxySettings          `json:"settings"`
-	ActiveSystems []string               `json:"active_systems"`
-	RequestRate   float64                `json:"request_rate"`
-	TotalRequests int64                  `json:"total_requests"`
-	Mu            sync.RWMutex           `json:"-"`
-	ReqCounter    int64                  `json:"-"` // Atomic counter for current second
-	Ctx           context.Context        `json:"-"` // Context for lifecycle management
-	Cancel        context.CancelFunc     `json:"-"` // Function to cancel the context
+	OriginalURL     string                 `json:"original_url"`
+	RemotePort      int                    `json:"remote_port"`
+	Path            string                 `json:"path"`
+	Handler         *httputil.ReverseProxy `json:"-"`
+	Server          *http.Server           `json:"-"`
+	Settings        ProxySettings          `json:"settings"`
+	ActiveSystems   []string               `json:"active_systems"`
+	RequestRate     float64                `json:"request_rate"`
+	TotalRequests   int64                  `json:"total_requests"`
+	IsRecording     bool                   `json:"is_recording"`
+	ActiveSessionID string                 `json:"active_session_id"`
+	Mu              sync.RWMutex           `json:"-"`
+	ReqCounter      int64                  `json:"-"` // Atomic counter for current second
+	Ctx             context.Context        `json:"-"` // Context for lifecycle management
+	Cancel          context.CancelFunc     `json:"-"` // Function to cancel the context
 }

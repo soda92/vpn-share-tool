@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"compress/gzip"
 	"fmt"
 	"io"
 	"log"
@@ -138,6 +139,8 @@ func setupLogging() {
 		logPath = "vpn-share-tool.log"
 	}
 
+	rotateLogIfNeeded(logPath)
+
 	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		// Just print to stdout if file fails
@@ -160,4 +163,57 @@ func setupLogging() {
 			_ = os.Remove(legacyLog)
 		}
 	}
+}
+
+func rotateLogIfNeeded(logPath string) {
+	fi, err := os.Stat(logPath)
+	if err != nil {
+		return // File doesn't exist or is not readable
+	}
+
+	// 10 MB limit
+	const maxLogSize = 10 * 1024 * 1024
+	if fi.Size() < maxLogSize {
+		return
+	}
+
+	// Rotate old backups (.3.gz -> delete, .2.gz -> .3.gz, .1.gz -> .2.gz)
+	for i := 2; i >= 1; i-- {
+		oldBackup := fmt.Sprintf("%s.%d.gz", logPath, i)
+		newBackup := fmt.Sprintf("%s.%d.gz", logPath, i+1)
+		if _, err := os.Stat(oldBackup); err == nil {
+			_ = os.Remove(newBackup) // Delete the target backup if it exists to allow rename on all platforms
+			_ = os.Rename(oldBackup, newBackup)
+		}
+	}
+
+	// Compress current log file to .1.gz
+	backupPath := logPath + ".1.gz"
+	if err := gzipFile(logPath, backupPath); err != nil {
+		log.Printf("Failed to gzip log file: %v", err)
+		return
+	}
+
+	// Truncate current log file
+	_ = os.WriteFile(logPath, []byte(""), 0666)
+}
+
+func gzipFile(srcPath, dstPath string) error {
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	gw := gzip.NewWriter(dst)
+	defer gw.Close()
+
+	_, err = io.Copy(gw, src)
+	return err
 }

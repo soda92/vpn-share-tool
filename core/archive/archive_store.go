@@ -1,0 +1,767 @@
+package archive
+
+import (
+	"archive/zip"
+	"embed"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+	"github.com/soda92/vpn-share-tool/core/debug"
+	"github.com/soda92/vpn-share-tool/core/models"
+	"go.etcd.io/bbolt"
+)
+
+//go:embed embed/viewer_linux embed/viewer_windows.exe
+var ViewerFS embed.FS
+
+const (
+	metadataBucketName = "archive_sessions_metadata"
+)
+
+type SessionMetadata struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	ProxyURL  string    `json:"proxy_url"`
+}
+
+type ArchivedResponse struct {
+	Timestamp       time.Time           `json:"timestamp"`
+	Method          string              `json:"method"`
+	URL             string              `json:"url"`
+	RequestHeaders  http.Header         `json:"request_headers"`
+	RequestBody     string              `json:"request_body"`
+	ResponseStatus  int                 `json:"response_status"`
+	ResponseHeaders http.Header         `json:"response_headers"`
+	ResponseBody    string              `json:"response_body"`
+	IsBase64        bool                `json:"is_base64"`
+}
+
+var (
+	// Map to track active recording proxies and synchronize accesses
+	recordingProxies     = make(map[int]string)
+	recordingProxiesLock sync.Mutex
+
+	// Track assets already pre-fetched in active session
+	prefetchedURLs sync.Map
+
+	// HTTPClient is injected by core package to trust the custom root CA pool
+	HTTPClient *http.Client
+
+	// Pre-compiled regular expressions for parsing static assets
+	reSrc    = regexp.MustCompile(`(?i)\bsrc=["']([^"']+)["']`)
+	reHref   = regexp.MustCompile(`(?i)\bhref=["']([^"']+)["']`)
+	reSrcset = regexp.MustCompile(`(?i)\bsrcset=["']([^"']+)["']`)
+	reUrl    = regexp.MustCompile(`(?i)\burl\(\s*['"]?([^'")]+)['"]?\s*\)`)
+)
+
+func isVideoExtension(ext string) bool {
+	switch ext {
+	case ".mp4", ".webm", ".mov", ".mkv", ".avi", ".flv", ".wmv", ".m4v", ".3gp":
+		return true
+	}
+	return false
+}
+
+// StartSession initializes a recording session for a proxy port
+func StartSession(p *models.SharedProxy, name string) (string, error) {
+	p.Mu.Lock()
+	defer p.Mu.Unlock()
+
+	if p.IsRecording {
+		return p.ActiveSessionID, fmt.Errorf("proxy is already recording session %s", p.ActiveSessionID)
+	}
+
+	db := debug.GetDB()
+	if db == nil {
+		return "", fmt.Errorf("debug database not initialized")
+	}
+
+	sessionID := uuid.New().String()
+
+	err := db.Update(func(tx *bbolt.Tx) error {
+		// Create the metadata bucket if it doesn't exist
+		metaBucket, err := tx.CreateBucketIfNotExists([]byte(metadataBucketName))
+		if err != nil {
+			return err
+		}
+
+		// Create a bucket for the session resources
+		_, err = tx.CreateBucketIfNotExists([]byte("archive_session_" + sessionID))
+		if err != nil {
+			return err
+		}
+
+		// Save metadata
+		meta := SessionMetadata{
+			ID:        sessionID,
+			Name:      name,
+			CreatedAt: time.Now(),
+			ProxyURL:  p.OriginalURL,
+		}
+		data, err := json.Marshal(meta)
+		if err != nil {
+			return err
+		}
+
+		return metaBucket.Put([]byte(sessionID), data)
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	p.IsRecording = true
+	p.ActiveSessionID = sessionID
+
+	recordingProxiesLock.Lock()
+	recordingProxies[p.RemotePort] = sessionID
+	recordingProxiesLock.Unlock()
+
+	log.Printf("Started archiving session '%s' (ID: %s) on port %d", name, sessionID, p.RemotePort)
+	return sessionID, nil
+}
+
+// StopSession stops recording for a proxy port
+func StopSession(p *models.SharedProxy) error {
+	p.Mu.Lock()
+	defer p.Mu.Unlock()
+
+	if !p.IsRecording {
+		return fmt.Errorf("proxy is not currently recording")
+	}
+
+	sessionID := p.ActiveSessionID
+	log.Printf("Stopped archiving session %s on port %d", sessionID, p.RemotePort)
+
+	p.IsRecording = false
+	p.ActiveSessionID = ""
+
+	recordingProxiesLock.Lock()
+	delete(recordingProxies, p.RemotePort)
+	recordingProxiesLock.Unlock()
+
+	// Clean up prefetchedURLs for this session
+	prefetchedURLs.Range(func(key, value interface{}) bool {
+		if kStr, ok := key.(string); ok && strings.HasPrefix(kStr, sessionID+"#") {
+			prefetchedURLs.Delete(key)
+		}
+		return true
+	})
+
+	return nil
+}
+
+// Record captures the HTTP request and response into the active session bucket
+func Record(p *models.SharedProxy, req *http.Request, resp *http.Response, reqBody, respBody []byte) {
+	p.Mu.RLock()
+	isRecording := p.IsRecording
+	sessionID := p.ActiveSessionID
+	p.Mu.RUnlock()
+
+	if !isRecording || sessionID == "" {
+		return
+	}
+
+	// 1. Filter out videos based on Content-Type or Extension
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if strings.HasPrefix(contentType, "video/") {
+		log.Printf("[Archive] Skipping video content-type: %s", contentType)
+		return
+	}
+
+	urlPath := strings.ToLower(req.URL.Path)
+	ext := filepath.Ext(urlPath)
+	if isVideoExtension(ext) {
+		log.Printf("[Archive] Skipping video file extension: %s", ext)
+		return
+	}
+	// Capture response details
+	method := req.Method
+	urlStr := req.URL.String()
+
+	reqHeaders := make(http.Header)
+	for k, v := range req.Header {
+		reqHeaders[k] = v
+	}
+
+	respStatus := resp.StatusCode
+	respHeaders := make(http.Header)
+	for k, v := range resp.Header {
+		respHeaders[k] = v
+	}
+
+	// Copy body asynchronously to database via write queue
+	saveResourceRecord(sessionID, method, urlStr, reqHeaders, reqBody, respStatus, respHeaders, respBody)
+
+	// Proactively pre-fetch static assets to resolve browser cache issues
+	if strings.Contains(contentType, "text/html") {
+		prefetchAssets(sessionID, req, respBody)
+	} else if strings.Contains(contentType, "text/css") {
+		prefetchCSSAssets(sessionID, req, respBody)
+	}
+}
+
+type dbWriteTask struct {
+	sessionID   string
+	method      string
+	urlStr      string
+	reqHeaders  http.Header
+	reqBody     []byte
+	respStatus  int
+	respHeaders http.Header
+	respBody    []byte
+}
+
+type prefetchTask struct {
+	sessionID string
+	origReq   *http.Request
+	urlStr    string
+}
+
+var (
+	dbWriteQueue   chan dbWriteTask
+	prefetchQueue  chan prefetchTask
+	workerInitOnce sync.Once
+)
+
+func startWorkers() {
+	workerInitOnce.Do(func() {
+		dbWriteQueue = make(chan dbWriteTask, 10000)
+		prefetchQueue = make(chan prefetchTask, 10000)
+
+		// Single writer worker to serialize all database writes and avoid bbolt lock contention
+		go func() {
+			for task := range dbWriteQueue {
+				performSaveResourceRecord(task.sessionID, task.method, task.urlStr, task.reqHeaders, task.reqBody, task.respStatus, task.respHeaders, task.respBody)
+			}
+		}()
+
+		// Worker pool for parallel assets prefetching to avoid unrestricted goroutine spawning
+		for i := 0; i < 5; i++ {
+			go func() {
+				for task := range prefetchQueue {
+					performPrefetchTask(task)
+				}
+			}()
+		}
+	})
+}
+
+func saveResourceRecord(sessionID string, method string, urlStr string, reqHeaders http.Header, reqBody []byte, respStatus int, respHeaders http.Header, respBody []byte) {
+	startWorkers()
+	select {
+	case dbWriteQueue <- dbWriteTask{
+		sessionID:   sessionID,
+		method:      method,
+		urlStr:      urlStr,
+		reqHeaders:  reqHeaders,
+		reqBody:     reqBody,
+		respStatus:  respStatus,
+		respHeaders: respHeaders,
+		respBody:    respBody,
+	}:
+	default:
+		log.Printf("[Archive] Write queue full, dropping record: %s %s", method, urlStr)
+	}
+}
+
+func performSaveResourceRecord(sessionID string, method string, urlStr string, reqHeaders http.Header, reqBody []byte, respStatus int, respHeaders http.Header, respBody []byte) {
+	db := debug.GetDB()
+	if db == nil {
+		return
+	}
+
+	contentType := strings.ToLower(respHeaders.Get("Content-Type"))
+	isBase64 := false
+	var responseBody string
+
+	if strings.HasPrefix(contentType, "image/") || !utf8.Valid(respBody) {
+		responseBody = base64.StdEncoding.EncodeToString(respBody)
+		isBase64 = true
+	} else {
+		responseBody = string(respBody)
+	}
+
+	timestamp := time.Now()
+	entry := ArchivedResponse{
+		Timestamp:       timestamp,
+		Method:          method,
+		URL:             urlStr,
+		RequestHeaders:  reqHeaders,
+		RequestBody:     string(reqBody),
+		ResponseStatus:  respStatus,
+		ResponseHeaders: respHeaders,
+		ResponseBody:    responseBody,
+		IsBase64:        isBase64,
+	}
+
+	err := db.Update(func(tx *bbolt.Tx) error {
+		bucketName := "archive_session_" + sessionID
+		b := tx.Bucket([]byte(bucketName))
+		if b == nil {
+			return fmt.Errorf("archive session bucket %s not found", bucketName)
+		}
+
+		// Key format: url + "#" + timestamp_nanoseconds
+		key := urlStr + "#" + strconv.FormatInt(timestamp.UnixNano(), 10)
+		value, err := json.Marshal(entry)
+		if err != nil {
+			return err
+		}
+
+		return b.Put([]byte(key), value)
+	})
+
+	if err != nil {
+		log.Printf("[Archive] Error writing resource to DB: %v", err)
+	} else {
+		// Store in prefetchedURLs to prevent pre-fetching what the browser already requested
+		prefetchedURLs.Store(sessionID+"#"+urlStr, true)
+		log.Printf("[Archive] Recorded resource: %s %s (%d bytes)", method, urlStr, len(respBody))
+	}
+}
+
+func prefetchAssets(sessionID string, origReq *http.Request, htmlBody []byte) {
+	html := string(htmlBody)
+
+	uniqueURLs := make(map[string]bool)
+
+	// Check if it is a static asset by file extension (mainly for href link filtering)
+	staticExtensions := map[string]bool{
+		".css":   true,
+		".js":    true,
+		".mjs":   true,
+		".png":   true,
+		".jpg":   true,
+		".jpeg":  true,
+		".gif":   true,
+		".svg":   true,
+		".ico":   true,
+		".webp":  true,
+		".woff":  true,
+		".woff2": true,
+		".ttf":   true,
+		".otf":   true,
+	}
+
+	addURL := func(assetURLRaw string, checkExtension bool) {
+		assetURLRaw = strings.TrimSpace(assetURLRaw)
+		if assetURLRaw == "" || strings.HasPrefix(assetURLRaw, "#") || strings.HasPrefix(assetURLRaw, "data:") || strings.HasPrefix(assetURLRaw, "javascript:") {
+			return
+		}
+
+		// Parse URL relative to origReq.URL
+		resolved, err := origReq.URL.Parse(assetURLRaw)
+		if err != nil {
+			return
+		}
+
+		resolved.Fragment = ""
+		resolvedURL := resolved.String()
+
+		ext := strings.ToLower(filepath.Ext(resolved.Path))
+		
+		// Filter out video extensions to prevent DB bloating
+		if isVideoExtension(ext) {
+			return
+		}
+
+		if checkExtension {
+			if !staticExtensions[ext] {
+				return
+			}
+		}
+
+		uniqueURLs[resolvedURL] = true
+	}
+
+	// 1. Extract from src attributes
+	if matches := reSrc.FindAllStringSubmatch(html, -1); matches != nil {
+		for _, m := range matches {
+			if len(m) >= 2 {
+				addURL(m[1], false)
+			}
+		}
+	}
+
+	// 2. Extract from href attributes
+	if matches := reHref.FindAllStringSubmatch(html, -1); matches != nil {
+		for _, m := range matches {
+			if len(m) >= 2 {
+				addURL(m[1], true)
+			}
+		}
+	}
+
+	// 3. Extract from srcset attributes
+	if matches := reSrcset.FindAllStringSubmatch(html, -1); matches != nil {
+		for _, m := range matches {
+			if len(m) >= 2 {
+				parts := strings.Split(m[1], ",")
+				for _, part := range parts {
+					part = strings.TrimSpace(part)
+					subParts := strings.Fields(part)
+					if len(subParts) > 0 {
+						addURL(subParts[0], false)
+					}
+				}
+			}
+		}
+	}
+
+	// 4. Extract from url(...) in style blocks/attributes
+	if matches := reUrl.FindAllStringSubmatch(html, -1); matches != nil {
+		for _, m := range matches {
+			if len(m) >= 2 {
+				addURL(m[1], false)
+			}
+		}
+	}
+
+	if len(uniqueURLs) == 0 {
+		return
+	}
+
+	log.Printf("[Archive Pre-fetch] Found %d static assets to pre-fetch for %s", len(uniqueURLs), origReq.URL.String())
+	queuePrefetchAssets(sessionID, origReq, uniqueURLs)
+}
+
+func prefetchCSSAssets(sessionID string, origReq *http.Request, cssBody []byte) {
+	css := string(cssBody)
+
+	uniqueURLs := make(map[string]bool)
+
+	addURL := func(assetURLRaw string) {
+		assetURLRaw = strings.TrimSpace(assetURLRaw)
+		if assetURLRaw == "" || strings.HasPrefix(assetURLRaw, "#") || strings.HasPrefix(assetURLRaw, "data:") || strings.HasPrefix(assetURLRaw, "javascript:") {
+			return
+		}
+
+		resolved, err := origReq.URL.Parse(assetURLRaw)
+		if err != nil {
+			return
+		}
+
+		resolved.Fragment = ""
+		resolvedURL := resolved.String()
+
+		ext := strings.ToLower(filepath.Ext(resolved.Path))
+		
+		// Filter out video extensions
+		if isVideoExtension(ext) {
+			return
+		}
+
+		uniqueURLs[resolvedURL] = true
+	}
+
+	if matches := reUrl.FindAllStringSubmatch(css, -1); matches != nil {
+		for _, m := range matches {
+			if len(m) >= 2 {
+				addURL(m[1])
+			}
+		}
+	}
+
+	if len(uniqueURLs) == 0 {
+		return
+	}
+
+	log.Printf("[CSS Pre-fetch] Found %d assets to pre-fetch for %s", len(uniqueURLs), origReq.URL.String())
+	queuePrefetchAssets(sessionID, origReq, uniqueURLs)
+}
+
+func queuePrefetchAssets(sessionID string, origReq *http.Request, uniqueURLs map[string]bool) {
+	startWorkers()
+	for assetURL := range uniqueURLs {
+		// Dedup check using prefetchedURLs map
+		key := sessionID + "#" + assetURL
+		if _, loaded := prefetchedURLs.LoadOrStore(key, true); loaded {
+			continue
+		}
+
+		select {
+		case prefetchQueue <- prefetchTask{
+			sessionID: sessionID,
+			origReq:   origReq,
+			urlStr:    assetURL,
+		}:
+		default:
+			log.Printf("[Archive Pre-fetch] Prefetch queue full, skipping URL: %s", assetURL)
+		}
+	}
+}
+
+func performPrefetchTask(task prefetchTask) {
+	client := HTTPClient
+	if client == nil {
+		client = &http.Client{
+			Timeout: 5 * time.Second,
+		}
+	}
+
+	req, err := http.NewRequest("GET", task.urlStr, nil)
+	if err != nil {
+		return
+	}
+
+	// Copy original request headers (cookies/session state)
+	headersToCopy := []string{"Cookie", "User-Agent", "Authorization", "Accept-Language"}
+	for _, h := range headersToCopy {
+		if val := task.origReq.Header.Get(h); val != "" {
+			req.Header.Set(h, val)
+		}
+	}
+	// Set Referer to the parent request's URL
+	req.Header.Set("Referer", task.origReq.URL.String())
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[Archive Pre-fetch] Failed to pre-fetch %s: %v", task.urlStr, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[Archive Pre-fetch] Non-OK status for %s: %d", task.urlStr, resp.StatusCode)
+		return
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	// Record directly to active session database
+	saveResourceRecord(task.sessionID, "GET", task.urlStr, req.Header, []byte(""), resp.StatusCode, resp.Header, bodyBytes)
+
+	// Recursively pre-fetch if this asset is a CSS or HTML
+	cType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if strings.Contains(cType, "text/html") {
+		prefetchAssets(task.sessionID, req, bodyBytes)
+	} else if strings.Contains(cType, "text/css") {
+		prefetchCSSAssets(task.sessionID, req, bodyBytes)
+	}
+}
+
+// ListSessions returns a list of all saved archive sessions
+func ListSessions() ([]SessionMetadata, error) {
+	db := debug.GetDB()
+	if db == nil {
+		return nil, fmt.Errorf("debug database not initialized")
+	}
+
+	var list []SessionMetadata
+	err := db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(metadataBucketName))
+		if b == nil {
+			return nil // No sessions created yet
+		}
+
+		return b.ForEach(func(k, v []byte) error {
+			var meta SessionMetadata
+			if err := json.Unmarshal(v, &meta); err == nil {
+				list = append(list, meta)
+			}
+			return nil
+		})
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return list, nil
+}
+
+// DeleteSession deletes all data associated with a session
+func DeleteSession(sessionID string) error {
+	db := debug.GetDB()
+	if db == nil {
+		return fmt.Errorf("debug database not initialized")
+	}
+
+	// Clean up prefetchedURLs for this session
+	prefetchedURLs.Range(func(key, value interface{}) bool {
+		if kStr, ok := key.(string); ok && strings.HasPrefix(kStr, sessionID+"#") {
+			prefetchedURLs.Delete(key)
+		}
+		return true
+	})
+
+	return db.Update(func(tx *bbolt.Tx) error {
+		// 1. Remove from metadata bucket
+		metaBucket := tx.Bucket([]byte(metadataBucketName))
+		if metaBucket != nil {
+			if err := metaBucket.Delete([]byte(sessionID)); err != nil {
+				return err
+			}
+		}
+
+		// 2. Delete the session bucket itself
+		bucketName := "archive_session_" + sessionID
+		if tx.Bucket([]byte(bucketName)) != nil {
+			return tx.DeleteBucket([]byte(bucketName))
+		}
+		return nil
+	})
+}
+
+// ExportSessionZip generates a zip package containing a sliced archive.db database,
+// the platform-specific viewer binary, and startup script.
+func ExportSessionZip(sessionID string, platform string, w io.Writer) error {
+	db := debug.GetDB()
+	if db == nil {
+		return fmt.Errorf("debug database not initialized")
+	}
+
+	// 1. Create a temporary bbolt file for the sliced database
+	tempFile, err := os.CreateTemp("", "archive_*.db")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	tempFile.Close()
+	defer os.Remove(tempPath)
+
+	tempDB, err := bbolt.Open(tempPath, 0600, nil)
+	if err != nil {
+		return fmt.Errorf("failed to open temporary database: %w", err)
+	}
+
+	// Copy session data from main DB to temporary DB
+	err = db.View(func(tx *bbolt.Tx) error {
+		return tempDB.Update(func(tempTx *bbolt.Tx) error {
+			// Copy metadata bucket & only this session's key
+			bMeta := tx.Bucket([]byte(metadataBucketName))
+			if bMeta != nil {
+				tempMeta, err := tempTx.CreateBucketIfNotExists([]byte(metadataBucketName))
+				if err != nil {
+					return err
+				}
+				data := bMeta.Get([]byte(sessionID))
+				if data != nil {
+					if err := tempMeta.Put([]byte(sessionID), data); err != nil {
+						return err
+					}
+				}
+			}
+
+			// Copy the session data bucket itself
+			sessionBucketName := "archive_session_" + sessionID
+			bData := tx.Bucket([]byte(sessionBucketName))
+			if bData != nil {
+				tempData, err := tempTx.CreateBucketIfNotExists([]byte(sessionBucketName))
+				if err != nil {
+					return err
+				}
+				return bData.ForEach(func(k, v []byte) error {
+					return tempData.Put(k, v)
+				})
+			}
+			return nil
+		})
+	})
+
+	tempDB.Close()
+	if err != nil {
+		return fmt.Errorf("failed to slice database: %w", err)
+	}
+
+	// 2. Build the Zip Archive
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	// Write database file as archive.db
+	dbFileHeader := &zip.FileHeader{
+		Name:   "archive.db",
+		Method: zip.Deflate,
+	}
+	dbFileHeader.Modified = time.Now()
+	zipFile, err := zipWriter.CreateHeader(dbFileHeader)
+	if err != nil {
+		return err
+	}
+	tempDiskFile, err := os.Open(tempPath)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(zipFile, tempDiskFile)
+	tempDiskFile.Close()
+	if err != nil {
+		return err
+	}
+
+	// Write viewer executable and script based on platform
+	var viewerFilename string
+	var viewerEmbedPath string
+	var scriptFilename string
+	var scriptContent string
+
+	if platform == "windows" {
+		viewerFilename = "viewer_windows.exe"
+		viewerEmbedPath = "embed/viewer_windows.exe"
+		scriptFilename = "run.bat"
+		scriptContent = "@echo off\r\necho Starting VPN Share Tool Archive Viewer...\r\nstart viewer_windows.exe\r\n"
+	} else {
+		viewerFilename = "viewer_linux"
+		viewerEmbedPath = "embed/viewer_linux"
+		scriptFilename = "run.sh"
+		scriptContent = "#!/bin/bash\necho \"Starting VPN Share Tool Archive Viewer...\"\nchmod +x viewer_linux\n./viewer_linux\n"
+	}
+
+	// Copy embedded viewer binary to zip
+	viewerData, err := ViewerFS.ReadFile(viewerEmbedPath)
+	if err != nil {
+		return fmt.Errorf("failed to read embedded viewer binary: %w", err)
+	}
+
+	viewerHeader := &zip.FileHeader{
+		Name:   viewerFilename,
+		Method: zip.Deflate,
+	}
+	viewerHeader.Modified = time.Now()
+	if platform != "windows" {
+		viewerHeader.SetMode(0755)
+	}
+	viewerZipFile, err := zipWriter.CreateHeader(viewerHeader)
+	if err != nil {
+		return err
+	}
+	if _, err := viewerZipFile.Write(viewerData); err != nil {
+		return err
+	}
+
+	// Write startup script to zip
+	scriptHeader := &zip.FileHeader{
+		Name:   scriptFilename,
+		Method: zip.Deflate,
+	}
+	scriptHeader.Modified = time.Now()
+	if platform != "windows" {
+		scriptHeader.SetMode(0755)
+	}
+	scriptZipFile, err := zipWriter.CreateHeader(scriptHeader)
+	if err != nil {
+		return err
+	}
+	if _, err := scriptZipFile.Write([]byte(scriptContent)); err != nil {
+		return err
+	}
+
+	return nil
+}

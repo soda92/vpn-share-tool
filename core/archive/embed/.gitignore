@@ -1,0 +1,3 @@
+# Ignore compiled viewer binaries
+viewer_linux
+viewer_windows.exe

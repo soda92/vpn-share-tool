@@ -15,7 +15,47 @@ const (
 	appName    = "VPNShareTool"
 )
 
+func isAutostartInHKLM() bool {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, runKeyPath, registry.READ)
+	if err != nil {
+		return false
+	}
+	defer key.Close()
+
+	val, _, err := key.GetStringValue(appName)
+	if err != nil {
+		return false
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+
+	// Compare pathways (case-insensitive) to confirm they point to this installation
+	return strings.Contains(strings.ToLower(val), strings.ToLower(exePath))
+}
+
 func SetAutostart(enable bool) {
+	// If HKLM is already handling autostart for this installation, clean up HKCU to prevent double startup
+	if isAutostartInHKLM() {
+		key, err := registry.OpenKey(registry.CURRENT_USER, runKeyPath, registry.SET_VALUE|registry.QUERY_VALUE)
+		if err == nil {
+			defer key.Close()
+			_ = key.DeleteValue(appName)
+			// Also search for any other legacy/contains matches to clean them up
+			names, err := key.ReadValueNames(0)
+			if err == nil {
+				for _, name := range names {
+					if strings.Contains(strings.ToLower(name), "vpn-share-tool") {
+						_ = key.DeleteValue(name)
+					}
+				}
+			}
+		}
+		return
+	}
+
 	key, err := registry.OpenKey(registry.CURRENT_USER, runKeyPath, registry.SET_VALUE|registry.QUERY_VALUE)
 	if err != nil {
 		log.Printf("Failed to open registry key: %v", err)
@@ -55,6 +95,12 @@ func SetAutostart(enable bool) {
 }
 
 func IsAutostartEnabled() bool {
+	// Check HKLM first
+	if isAutostartInHKLM() {
+		return true
+	}
+
+	// Fallback to check HKCU
 	key, err := registry.OpenKey(registry.CURRENT_USER, runKeyPath, registry.READ)
 	if err != nil {
 		return false

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -17,7 +18,9 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/getsentry/sentry-go"
 	"github.com/posthog/posthog-go"
+	"github.com/soda92/vpn-share-tool/common"
 	"github.com/soda92/vpn-share-tool/core"
+	"github.com/soda92/vpn-share-tool/core/archive"
 	"github.com/soda92/vpn-share-tool/core/proxy"
 )
 
@@ -37,52 +40,112 @@ func Run() {
 	// Setup Logging
 	setupLogging()
 
-	// Initialize Sentry
-	err := sentry.Init(sentry.ClientOptions{
-		Dsn:              "https://bc888ace3f8f6751be2c1a8b8d71c71f@benefit.sodacris.com/4511405673480272",
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-	})
-	if err != nil {
-		log.Printf("Sentry initialization failed: %v", err)
-	} else {
-		defer sentry.Flush(2 * time.Second)
+	// Check if another instance is already running by querying the default port
+	client := &http.Client{Timeout: 1 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/version", startPort))
+	if err == nil {
+		resp.Body.Close()
+		// Another instance is running!
+		if isSystemWideInstallation() {
+			log.Printf("System-wide installation detected. Sending exit signal to running instance on port %d...", startPort)
+			exitResp, exitErr := client.Post(fmt.Sprintf("http://127.0.0.1:%d/exit", startPort), "text/plain", nil)
+			if exitErr == nil {
+				exitResp.Body.Close()
+				// Wait for the other instance to release the port
+				time.Sleep(1 * time.Second)
+			}
+		} else {
+			// We are user-mode. Signal the running instance to show itself, and exit.
+			log.Printf("User-mode instance started manually. Signaling running instance on port %d to show...", startPort)
+			showResp, showErr := client.Get(fmt.Sprintf("http://127.0.0.1:%d/show", startPort))
+			if showErr == nil {
+				showResp.Body.Close()
+			}
+			return
+		}
 	}
 
-	// Recover panics with Sentry
-	defer func() {
-		if r := recover(); r != nil {
-			sentry.CurrentHub().Recover(r)
-			sentry.Flush(2 * time.Second)
-			panic(r)
+	// Initialize Sentry
+	sentryDsn := common.SentryDSN
+	if sentryDsn == "" {
+		sentryDsn = os.Getenv("VITE_SENTRY_DSN")
+	}
+	if sentryDsn != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:              sentryDsn,
+			EnableTracing:    true,
+			TracesSampleRate: 1.0,
+		})
+		if err != nil {
+			log.Printf("Sentry initialization failed: %v", err)
+		} else {
+			defer sentry.Flush(2 * time.Second)
 		}
-	}()
+
+		// Recover panics with Sentry
+		defer func() {
+			if r := recover(); r != nil {
+				sentry.CurrentHub().Recover(r)
+				sentry.Flush(2 * time.Second)
+				panic(r)
+			}
+		}()
+	} else {
+		log.Println("VITE_SENTRY_DSN environment variable not set, Sentry integration disabled.")
+	}
 
 	// Initialize PostHog
-	phClient, err := posthog.NewWithConfig(
-		"dummy",
-		posthog.Config{
-			Endpoint: "https://benefit.sodacris.com",
-		},
-	)
-	if err != nil {
-		log.Printf("Failed to initialize PostHog: %v", err)
+	phKey := common.PosthogKey
+	if phKey == "" {
+		phKey = os.Getenv("VITE_POSTHOG_KEY")
+	}
+	if phKey != "" {
+		phEndpoint := common.PosthogHost
+		if phEndpoint == "" {
+			phEndpoint = os.Getenv("VITE_POSTHOG_HOST")
+		}
+		if phEndpoint == "" {
+			phEndpoint = "https://us.i.posthog.com"
+		}
+		phClient, err := posthog.NewWithConfig(
+			phKey,
+			posthog.Config{
+				Endpoint: phEndpoint,
+			},
+		)
+		if err != nil {
+			log.Printf("Failed to initialize PostHog: %v", err)
+		} else {
+			defer phClient.Close()
+			phClient.Enqueue(posthog.Capture{
+				DistinctId: "vpn_client",
+				Event:      "vpn_client_started",
+				Properties: posthog.NewProperties().Set("version", Version),
+			})
+		}
 	} else {
-		defer phClient.Close()
-		phClient.Enqueue(posthog.Capture{
-			DistinctId: "vpn_client",
-			Event:      "vpn_client_started",
-			Properties: posthog.NewProperties().Set("version", Version),
-		})
+		log.Println("VITE_POSTHOG_KEY environment variable not set, PostHog integration disabled.")
 	}
 
 	// Clean up update script if present (from previous update).
 	// We ignore the error because the file usually doesn't exist, which is fine.
 	os.Remove("update.bat")
+	os.Remove("updater.exe")
+	os.Remove("server.txt")
 
 	proxyURL := flag.String("proxy-url", "", "URL to proxy on startup")
 	startMinimized := flag.Bool("minimized", false, "start minimized with windows start")
+	serveArchive := flag.String("serve-archive", "", "Serve a recorded archive session standalone on the specified port")
+	servePort := flag.Int("port", 8080, "Port to serve standalone archive on (used with --serve-archive)")
 	flag.Parse()
+
+	if *serveArchive != "" {
+		log.Printf("Starting standalone archive server for session %s on port %d...", *serveArchive, *servePort)
+		if err := archive.ServeStandalone(*serveArchive, *servePort); err != nil {
+			log.Fatalf("Failed to run standalone archive server: %v", err)
+		}
+		return
+	}
 
 	if v := strings.TrimSpace(versionFile); v != "" {
 		Version = v
@@ -97,6 +160,13 @@ func Run() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow(l("vpnShareToolTitle") + " " + Version)
 	isVisible := !*startMinimized // Track visibility state
+
+	core.ShowGUICallback = func() {
+		fyne.Do(func() {
+			myWindow.Show()
+			myWindow.RequestFocus()
+		})
+	}
 
 	// Setup restart args provider for updates
 	core.SetRestartArgsProvider(func() []string {
@@ -243,4 +313,21 @@ func Run() {
 		myWindow.Show()
 	}
 	myApp.Run()
+}
+
+func isSystemWideInstallation() bool {
+	exePath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	lowerPath := strings.ToLower(exePath)
+	// Windows system-wide directories
+	if strings.Contains(lowerPath, `\program files\`) || strings.Contains(lowerPath, `\program files (x86)\`) {
+		return true
+	}
+	// Linux system-wide directories
+	if strings.HasPrefix(lowerPath, "/usr/") || strings.HasPrefix(lowerPath, "/opt/") {
+		return true
+	}
+	return false
 }

@@ -1,14 +1,20 @@
 __pycache__
+node_modules
+certs.7z
 
 /trace.out
 /rustlib/target
 tagged_urls.json
 *.log
 
+.antigravitycli
+
 /.env
 
 /Icon.png
 /bin
+
+*.msi
 
 /.ruff_cache
 /fyne-cross
@@ -51,3 +57,7 @@ certs/
 certs/*.key
 discovery-server/*.key
 core/resources/ca.crt
+/env.fish
+/common/secrets_gen.go
+
+

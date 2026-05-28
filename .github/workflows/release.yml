@@ -13,6 +13,11 @@ jobs:
     name: Build and Publish Release
     runs-on: ubuntu-latest
 
+    env:
+      VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+      VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
+      VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
+
     steps:
     - name: Check out code
       uses: actions/checkout@v4

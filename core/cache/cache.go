@@ -11,6 +11,8 @@ import (
 	"runtime/trace"
 
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/soda92/vpn-share-tool/core/archive"
+	"github.com/soda92/vpn-share-tool/core/debug"
 	"github.com/soda92/vpn-share-tool/core/models"
 )
 
@@ -83,4 +85,11 @@ func (t *CachingTransport) decompressBody(encoding string, body []byte) ([]byte,
 		return body, nil
 	}
 	return io.ReadAll(reader)
+}
+
+func (t *CachingTransport) captureAndRecord(req *http.Request, resp *http.Response, reqBody, respBody []byte) {
+	debug.CaptureRequest(req, resp, reqBody, respBody)
+	if t.Proxy != nil {
+		archive.Record(t.Proxy, req, resp, reqBody, respBody)
+	}
 }

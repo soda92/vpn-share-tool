@@ -43,30 +43,41 @@
             </div>
           </div>
           <div class="url-actions compact-actions">
-            <el-dropdown trigger="click" @command="(cmd) => handleCreateProxyCommand(url.url, cmd)">
+            <div class="btn-group">
               <button 
                 :disabled="!servers.length || creatingProxyUrls[url.url]" 
-                class="action-btn create"
-                title="Create Proxy"
+                class="action-btn create btn-group-left"
+                title="Create Proxy Fast"
+                @click="handleCreateProxyCommand(url.url, 'auto')"
               >
                 <span v-if="creatingProxyUrls[url.url]" class="spinner"></span>
                 <span v-else>⚡</span>
               </button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="auto">Auto (First Reachable)</el-dropdown-item>
-                  <el-dropdown-item 
-                    v-for="server in servers" 
-                    :key="server.address" 
-                    :command="server.address"
-                    :disabled="isProxyActiveOnNode(url, server.address)"
-                  >
-                    Node: {{ server.address }}
-                    <span v-if="isProxyActiveOnNode(url, server.address)" class="active-indicator"> (active)</span>
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
+              <el-dropdown trigger="click" @command="(cmd) => handleCreateProxyCommand(url.url, cmd)">
+                <button 
+                  :disabled="!servers.length || creatingProxyUrls[url.url]" 
+                  class="action-btn create btn-group-right"
+                  title="Select Node"
+                >
+                  <span>▼</span>
+                </button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="auto">Auto (First Reachable)</el-dropdown-item>
+                    <el-dropdown-item command="auto_another">Auto (Create Another)</el-dropdown-item>
+                    <el-dropdown-item 
+                      v-for="server in servers" 
+                      :key="server.address" 
+                      :command="server.address"
+                      :disabled="isProxyActiveOnNode(url, server.address)"
+                    >
+                      Node: {{ server.address }}
+                      <span v-if="isProxyActiveOnNode(url, server.address)" class="active-indicator"> (active)</span>
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
             <button @click="handleRename(url.id, url.tag)" class="action-btn rename" title="Rename">✎</button>
             <button @click="handleDelete(url.id)" class="action-btn delete" title="Delete">✕</button>
           </div>
@@ -337,6 +348,15 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: opacity 0.15s ease, transform 0.1s ease, background-color 0.15s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.action-btn:active:not(:disabled) {
+  transform: scale(0.95);
 }
 
 .create {
@@ -347,6 +367,33 @@ h2 {
 .create:disabled {
   background-color: #e1f3d8;
   cursor: not-allowed;
+}
+
+.btn-group {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.btn-group :deep(.el-dropdown) {
+  display: inline-flex;
+}
+
+.btn-group-left {
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.btn-group-right {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.3) !important;
+  padding-left: 0.25rem !important;
+  padding-right: 0.25rem !important;
+  min-width: 18px !important;
+}
+
+.btn-group-right:disabled {
+  border-left-color: rgba(0, 0, 0, 0.05) !important;
 }
 
 .settings {

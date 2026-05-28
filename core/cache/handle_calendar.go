@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/soda92/vpn-share-tool/core/debug"
 	"github.com/soda92/vpn-share-tool/core/resources"
 )
 
@@ -25,7 +24,7 @@ func (t *CachingTransport) handleCalendarJS(req *http.Request, reqBody []byte) *
 		resp.Header.Set("Content-Type", "application/javascript")
 		resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(resources.CalendarScript)))
 
-		debug.CaptureRequest(req, resp, reqBody, resources.CalendarScript)
+		t.captureAndRecord(req, resp, reqBody, resources.CalendarScript)
 		return resp
 	}
 	return nil

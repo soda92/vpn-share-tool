@@ -1,41 +1,85 @@
 package api
 
 import (
+	"crypto/sha256"
 	"crypto/tls"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/soda92/vpn-share-tool/discovery/proxy"
 	"github.com/soda92/vpn-share-tool/discovery/registry"
 	"github.com/soda92/vpn-share-tool/discovery/resources"
 	"github.com/soheilhy/cmux"
-	"time"
 )
 
 const (
 	httpListenPort = "8080"
-	SharePath      = "/sambashare/VPN共享工具"
+)
+
+var (
+	SharePath = "/sambashare/VPN共享工具"
 )
 
 type updateInfo struct {
 	Version string `json:"version"`
 	URL     string `json:"url"`
+	Sha256  string `json:"sha256"`
 }
 
-var reVersion = regexp.MustCompile(`vpn-share-tool_v(\d+)([a-z]+)\.exe`)
+var (
+	reVersionExe    = regexp.MustCompile(`^vpn-share-tool_v(\d+)([a-z]+)\.exe$`)
+	reVersionZip    = regexp.MustCompile(`^vpn-share-tool_v(\d+)([a-z]+)\.zip$`)
+	reVersionAppExe = regexp.MustCompile(`^vpn-share-tool-app_v(\d+)([a-z]+)\.exe$`)
+	reVersionAppZip = regexp.MustCompile(`^vpn-share-tool-app_v(\d+)([a-z]+)\.zip$`)
+)
 
 func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
+	handleVersionRequest(w, r, false)
+}
+
+func handleLatestAppVersion(w http.ResponseWriter, r *http.Request) {
+	handleVersionRequest(w, r, true)
+}
+
+func handleVersionRequest(w http.ResponseWriter, r *http.Request, isApp bool) {
+	format := r.URL.Query().Get("format")
+	useZip := format == "zip"
+
+	var regexes []*regexp.Regexp
+	if isApp {
+		if useZip {
+			// Primary: zip, Fallback: exe
+			regexes = []*regexp.Regexp{reVersionAppZip, reVersionAppExe, reVersionZip, reVersionExe}
+		} else {
+			// Primary: exe, Fallback: zip
+			regexes = []*regexp.Regexp{reVersionAppExe, reVersionAppZip, reVersionExe, reVersionZip}
+		}
+	} else {
+		if useZip {
+			// Primary: zip, Fallback: exe
+			regexes = []*regexp.Regexp{reVersionZip, reVersionExe}
+		} else {
+			// Primary: exe, Fallback: zip
+			regexes = []*regexp.Regexp{reVersionExe, reVersionZip}
+		}
+	}
+
 	entries, err := os.ReadDir(SharePath)
 	if err != nil {
 		log.Printf("Failed to read share path: %v", err)
@@ -48,6 +92,7 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 		Suffix  string
 		Full    string
 		File    string
+		Sha256  string
 	}
 
 	var versions []version
@@ -56,8 +101,41 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 		if e.IsDir() {
 			continue
 		}
-		matches := reVersion.FindStringSubmatch(e.Name())
+		var matches []string
+		for _, re := range regexes {
+			m := re.FindStringSubmatch(e.Name())
+			if len(m) == 3 {
+				matches = m
+				break
+			}
+		}
 		if len(matches) == 3 {
+			// Check if corresponding .sha256 file exists (marking copy completion)
+			sha256Path := filepath.Join(SharePath, e.Name()+".sha256")
+			shaBytes, err := os.ReadFile(sha256Path)
+			var hash string
+			if err != nil {
+				if isApp {
+					// Skip if .sha256 doesn't exist (copy incomplete) for app
+					continue
+				}
+				// For updater, it's ok if there's no .sha256 file
+			} else {
+				hash = strings.TrimSpace(string(shaBytes))
+				fields := strings.Fields(hash)
+				if len(fields) > 0 {
+					hash = fields[0]
+				}
+
+				// Verify that the actual hash of the file on disk matches the expected hash in the .sha256 file.
+				// This prevents serving an incomplete file during release copy.
+				exePath := filepath.Join(SharePath, e.Name())
+				if err := verifyLocalFileHash(exePath, hash); err != nil {
+					log.Printf("Version %s has .sha256 file but actual file verification failed: %v", e.Name(), err)
+					continue
+				}
+			}
+
 			counter, err := strconv.Atoi(matches[1])
 			if err != nil {
 				log.Printf("Failed to parse version counter from %s: %v", e.Name(), err)
@@ -69,6 +147,7 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 				Suffix:  suffix,
 				Full:    fmt.Sprintf("v%d%s", counter, suffix),
 				File:    e.Name(),
+				Sha256:  hash,
 			})
 		}
 	}
@@ -94,6 +173,7 @@ func handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 	resp := updateInfo{
 		Version: latest.Full,
 		URL:     fmt.Sprintf("/download/%s", latest.File),
+		Sha256:  latest.Sha256,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -224,6 +304,7 @@ func StartHTTPServer(insecure bool) {
 
 	// Public Routes (for Auto-Update)
 	rootMux.HandleFunc("/latest-version", handleLatestVersion)
+	rootMux.HandleFunc("/latest-app-version", handleLatestAppVersion)
 	rootMux.Handle("/download/", http.StripPrefix("/download/", http.FileServer(http.Dir(SharePath))))
 	rootMux.HandleFunc("/solve-captcha", handleSolveCaptchaRequest)
 	rootMux.HandleFunc("/upload-logs", handleUploadLogs)
@@ -299,4 +380,58 @@ func StartHTTPServer(insecure bool) {
 	if err := m.Serve(); err != nil {
 		log.Fatalf("Multiplexer error: %v", err)
 	}
+}
+
+type cacheEntry struct {
+	Hash    string
+	Size    int64
+	ModTime time.Time
+}
+
+var (
+	verifiedHashesCache     = make(map[string]cacheEntry)
+	verifiedHashesCacheLock sync.RWMutex
+)
+
+func verifyLocalFileHash(filePath string, expectedHash string) error {
+	fi, err := os.Stat(filePath)
+	if err != nil {
+		return err
+	}
+
+	verifiedHashesCacheLock.RLock()
+	cached, ok := verifiedHashesCache[filePath]
+	verifiedHashesCacheLock.RUnlock()
+
+	if ok && cached.Size == fi.Size() && cached.ModTime.Equal(fi.ModTime()) && strings.EqualFold(cached.Hash, expectedHash) {
+		return nil
+	}
+
+	// Not cached or modified, compute hash
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	actualHash := hex.EncodeToString(h.Sum(nil))
+
+	if !strings.EqualFold(actualHash, expectedHash) {
+		return fmt.Errorf("hash mismatch: expected %s, got %s", expectedHash, actualHash)
+	}
+
+	// Cache the verified hash along with size and mod time
+	verifiedHashesCacheLock.Lock()
+	verifiedHashesCache[filePath] = cacheEntry{
+		Hash:    actualHash,
+		Size:    fi.Size(),
+		ModTime: fi.ModTime(),
+	}
+	verifiedHashesCacheLock.Unlock()
+
+	return nil
 }

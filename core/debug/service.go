@@ -20,6 +20,7 @@ const (
 )
 
 var DebugStoragePath string
+var dbFilePath string
 
 //go:embed dist
 var debugFrontend embed.FS
@@ -67,6 +68,8 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 		os.MkdirAll(filepath.Dir(dbPath), 0755)
 	}
 
+	dbFilePath = dbPath
+
 	log.Printf("Initializing debug database at: %s", dbPath)
 
 	if err := InitDB(dbPath); err != nil {
@@ -105,6 +108,29 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/debug/clear-live", handleClearLiveRequests)
 	mux.HandleFunc("/debug/ws", handleDebugWS)
 	mux.HandleFunc("/api/debug/requests/", handleSingleRequest) // New unambiguous endpoint
+	mux.HandleFunc("/api/debug/download-db", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if dbFilePath == "" {
+			http.Error(w, "Database path not configured", http.StatusInternalServerError)
+			return
+		}
+
+		if _, err := os.Stat(dbFilePath); os.IsNotExist(err) {
+			http.Error(w, "Database file not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Disposition", "attachment; filename=debug_requests.db")
+		w.Header().Set("Content-Type", "application/octet-stream")
+		http.ServeFile(w, r, dbFilePath)
+	})
 
 	log.Println("Debug UI registered at /debug/")
 }

@@ -16,6 +16,10 @@ import (
 
 var db *bbolt.DB
 
+func GetDB() *bbolt.DB {
+	return db
+}
+
 const sessionsMetadataBucket = "sessions_metadata"
 
 func InitDB(dbPath string) error {

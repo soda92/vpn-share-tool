@@ -22,6 +22,7 @@ func Start(cfg Config) {
 	currentIP := cfg.MyIP
 	// Local Mode flag to avoid repeated signals/logs
 	inLocalMode := false
+	retryDelay := 5 * time.Second
 
 	for {
 		select {
@@ -38,6 +39,7 @@ func Start(cfg Config) {
 			if err == nil {
 				// Connected successfully
 				inLocalMode = false
+				retryDelay = 5 * time.Second
 				manageConnection(cfg.Ctx, conn, cfg)
 				log.Printf("Connection to discovery server lost. Retrying...")
 				
@@ -99,18 +101,28 @@ func Start(cfg Config) {
 				inLocalMode = true
 			}
 
-			log.Printf("Retrying in 5 seconds.")
+			// Implement backoff or longer delay if in Local Mode
+			if inLocalMode {
+				retryDelay = 60 * time.Second
+			} else {
+				retryDelay = retryDelay * 2
+				if retryDelay > 30*time.Second {
+					retryDelay = 30 * time.Second
+				}
+			}
+			log.Printf("Retrying discovery in %v.", retryDelay)
 			
 			select {
 			case <-cfg.Ctx.Done():
 				return
-			case <-time.After(5 * time.Second):
+			case <-time.After(retryDelay):
 				continue
 			}
 		}
 
 		// Connected successfully
 		inLocalMode = false
+		retryDelay = 5 * time.Second
 		saveDiscoveryCache(connectedIP)
 
 		manageConnection(cfg.Ctx, conn, cfg)

@@ -6,8 +6,11 @@ import (
 	"log"
 	"net/http"
 	"net/http/pprof"
+	"os"
 	"strings"
+	"time"
 
+	"github.com/soda92/vpn-share-tool/core/archive"
 	"github.com/soda92/vpn-share-tool/core/debug"
 	"github.com/soda92/vpn-share-tool/core/handlers"
 	"github.com/soda92/vpn-share-tool/core/proxy"
@@ -16,8 +19,11 @@ import (
 	"github.com/soda92/vpn-share-tool/core/utils"
 )
 
+// ShowGUICallback is invoked by the API server to request the GUI window to show itself.
+var ShowGUICallback func()
+
 // SetupApiMux initializes the HTTP serve mux with all API routes.
-func SetupApiMux() *http.ServeMux {
+func SetupApiMux() http.Handler {
 	addProxyHandler := &handlers.AddProxyHandler{
 		GetIP:       func() string { return MyIP },
 		CreateProxy: proxy.ShareUrlAndGetProxy,
@@ -57,6 +63,24 @@ func SetupApiMux() *http.ServeMux {
 			http.Error(w, "Failed to encode version", http.StatusInternalServerError)
 		}
 	})
+	mux.HandleFunc("/show", func(w http.ResponseWriter, r *http.Request) {
+		if ShowGUICallback != nil {
+			ShowGUICallback()
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
+		} else {
+			http.Error(w, "Show callback not registered", http.StatusNotFound)
+		}
+	})
+	mux.HandleFunc("/exit", func(w http.ResponseWriter, r *http.Request) {
+		log.Println("Received exit request from system-wide instance. Exiting...")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			os.Exit(0)
+		}()
+	})
 
 	// Profiling endpoints
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -66,7 +90,19 @@ func SetupApiMux() *http.ServeMux {
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	debug.RegisterDebugRoutes(mux)
-	return mux
+	archive.RegisterArchiveRoutes(mux, proxy.GetProxies)
+
+	// Wrap with CORS middleware
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 // StartRegistration starts the background discovery and registration process.
