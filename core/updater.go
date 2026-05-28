@@ -4,12 +4,12 @@ import (
 	"archive/zip"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -52,93 +52,7 @@ func ApplyUpdate(info *UpdateInfo) error {
 
 	exeDir := filepath.Dir(currentExe)
 
-	if runtime.GOOS == "windows" {
-		// Windows: Download updater.exe, launch it, and exit
-		updaterExe := filepath.Join(exeDir, "updater.exe")
-
-		// 1. Get latest updater info from discovery server
-		client := GetHTTPClient()
-		resp, err := client.Get(DiscoveryServerURL + "/latest-version?format=zip")
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("failed to get updater info: status %d", resp.StatusCode)
-		}
-
-		var updaterInfo UpdateInfo
-		if err := json.NewDecoder(resp.Body).Decode(&updaterInfo); err != nil {
-			return err
-		}
-
-		// 2. Download updater
-		downloadDest := updaterExe
-		isZip := strings.HasSuffix(updaterInfo.URL, ".zip")
-		if isZip {
-			downloadDest = updaterExe + ".zip"
-		}
-
-		log.Printf("Downloading updater %s to %s...", updaterInfo.URL, downloadDest)
-		updaterResp, err := client.Get(DiscoveryServerURL + updaterInfo.URL)
-		if err != nil {
-			return err
-		}
-		defer updaterResp.Body.Close()
-
-		if updaterResp.StatusCode != http.StatusOK {
-			return fmt.Errorf("updater download failed: status %d", updaterResp.StatusCode)
-		}
-
-		out, err := os.Create(downloadDest)
-		if err != nil {
-			return err
-		}
-
-		if _, err := io.Copy(out, updaterResp.Body); err != nil {
-			out.Close()
-			os.Remove(downloadDest)
-			return err
-		}
-		out.Close()
-
-		// Verify checksum of updater
-		if err := verifySHA256(downloadDest, updaterInfo.Sha256); err != nil {
-			os.Remove(downloadDest)
-			return fmt.Errorf("updater verification failed: %w", err)
-		}
-
-		// Unzip updater if it's a zip file
-		if isZip {
-			log.Printf("Extracting updater %s to %s...", downloadDest, updaterExe)
-			if err := unzipFile(downloadDest, updaterExe); err != nil {
-				os.Remove(downloadDest)
-				os.Remove(updaterExe)
-				return fmt.Errorf("failed to unzip updater: %w", err)
-			}
-			os.Remove(downloadDest)
-		}
-
-		// Make executable
-		os.Chmod(updaterExe, 0755)
-
-		// Write DiscoveryServerURL to server.txt so the updater doesn't need to do LAN discovery
-		if err := os.WriteFile("server.txt", []byte(DiscoveryServerURL), 0644); err != nil {
-			log.Printf("Warning: failed to write server.txt: %v", err)
-		}
-
-		// 3. Launch updater and exit
-		log.Printf("Launching updater and exiting...")
-		if err := spawnUpdater(updaterExe, currentExe); err != nil {
-			return fmt.Errorf("failed to start updater: %w", err)
-		}
-
-		os.Exit(0)
-		return nil
-	}
-
-	// Linux/Unix: Keep the clean rename-based updater as it doesn't suffer from locking issues
+	// Download new release (app version) directly as vpn-share-tool.exe.new or similar
 	newExe := filepath.Join(exeDir, filepath.Base(currentExe)+".new")
 	isZip := strings.HasSuffix(info.URL, ".zip")
 	downloadDest := newExe
@@ -187,6 +101,7 @@ func ApplyUpdate(info *UpdateInfo) error {
 		return fmt.Errorf("download verification failed: %w", err)
 	}
 
+	var exeHash string
 	if isZip {
 		log.Printf("Extracting %s to %s...", downloadDest, newExe)
 		if err := unzipFile(downloadDest, newExe); err != nil {
@@ -195,10 +110,75 @@ func ApplyUpdate(info *UpdateInfo) error {
 			return fmt.Errorf("failed to unzip update: %w", err)
 		}
 		os.Remove(downloadDest)
+
+		var err error
+		exeHash, err = getFileSHA256(newExe)
+		if err != nil {
+			os.Remove(newExe)
+			return fmt.Errorf("failed to compute extracted exe hash: %w", err)
+		}
+	} else {
+		exeHash = info.Sha256
 	}
 
 	os.Chmod(newExe, 0755)
 
+	if runtime.GOOS == "windows" {
+		batPath := filepath.Join(exeDir, "update.bat")
+		exeName := filepath.Base(currentExe)
+
+		var args []string
+		if RestartArgsProvider != nil {
+			args = RestartArgsProvider()
+		}
+		argsStr := strings.Join(args, " ")
+
+		var hashCheck string
+		if exeHash != "" {
+			hashCheck = fmt.Sprintf("rem Verify hash of new executable using powershell\r\n"+
+				"powershell -Command \"if ((Get-FileHash -Path '%s' -Algorithm SHA256).Hash.ToLower() -ne '%s') { exit 1 }\"\r\n"+
+				"if errorlevel 1 (\r\n"+
+				"    echo Error: Hash verification of new executable failed.\r\n"+
+				"    del \"%s\"\r\n"+
+				"    pause\r\n"+
+				"    exit\r\n"+
+				")\r\n", filepath.Base(newExe), strings.ToLower(exeHash), filepath.Base(newExe))
+		}
+
+		batContent := fmt.Sprintf(`@echo off
+pushd "%%~dp0"
+%s
+set /a retries=0
+:loop
+set /a retries+=1
+if %%retries%% geq 30 goto fail
+timeout /t 1 >nul
+move /y "%s" "%s"
+if errorlevel 1 goto loop
+start "" "%s" %s
+exit
+
+:fail
+echo Failed to update after 30 retries.
+pause
+`, hashCheck, filepath.Base(newExe), exeName, exeName, argsStr)
+
+		if err := os.WriteFile(batPath, []byte(batContent), 0755); err != nil {
+			return fmt.Errorf("failed to create update script: %w", err)
+		}
+
+		log.Printf("Starting update script and exiting...")
+		cmd := exec.Command("cmd", "/c", "start", "/min", "cmd", "/c", "update.bat")
+		cmd.Dir = exeDir
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("failed to start update script: %w", err)
+		}
+
+		os.Exit(0)
+		return nil
+	}
+
+	// Linux/Unix: Rename running file and restart
 	oldExe := currentExe + ".old"
 	if err := os.Rename(currentExe, oldExe); err != nil {
 		return fmt.Errorf("failed to rename current exe: %w", err)
