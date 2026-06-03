@@ -17,17 +17,17 @@ import (
 
 func main() {
 	insecure := flag.Bool("insecure", false, "Disable TLS and run on HTTP only")
-	resetPass := flag.String("reset-password", "", "Reset password for the specified user (e.g. -reset-password mypass)")
-	resetUser := flag.String("reset-user", "admin", "User to reset password for")
+	resetUser := flag.String("reset-password", "", "Reset password for the specified user and generate a new random password")
 	flag.Parse()
 
-	if *resetPass != "" {
+	if *resetUser != "" {
 		store.LoadUsers()
-		err := store.UpdatePassword(*resetUser, *resetPass)
-		if err != nil {
-			log.Fatalf("Failed to reset password for user %s: %v", *resetUser, err)
-		}
-		log.Printf("Successfully reset password for user %s.", *resetUser)
+		genPass := store.ResetPasswordAndGet(*resetUser)
+		log.Printf("==================================================")
+		log.Printf("Password reset for user: %s", *resetUser)
+		log.Printf("New Generated Password: %s", genPass)
+		log.Printf("Please log in and change this password immediately.")
+		log.Printf("==================================================")
 		os.Exit(0)
 	}
 

@@ -33,6 +33,35 @@
       </el-card>
     </div>
 
+    <div v-else-if="mustChangePassword" class="login-wrapper">
+      <el-card class="login-card">
+        <template #header>
+          <div class="card-header">
+            <h3>Change Your Password</h3>
+            <p style="margin: 5px 0 0 0; font-size: 0.85rem; color: #909399; text-align: center;">
+              You must change your password before continuing.
+            </p>
+          </div>
+        </template>
+        <el-form :model="changePasswordForm" label-position="top" @submit.prevent="handleChangePassword">
+          <el-form-item label="Current Password">
+            <el-input v-model="changePasswordForm.oldPassword" type="password" show-password placeholder="Enter current password" />
+          </el-form-item>
+          <el-form-item label="New Password">
+            <el-input v-model="changePasswordForm.newPassword" type="password" show-password placeholder="Enter new password" />
+          </el-form-item>
+          <el-form-item label="Confirm New Password">
+            <el-input v-model="changePasswordForm.confirmPassword" type="password" show-password placeholder="Confirm new password" />
+          </el-form-item>
+          <div class="login-btn-wrapper">
+            <el-button type="primary" native-type="submit" :loading="changePasswordLoading" class="login-btn">
+              Change Password
+            </el-button>
+          </div>
+        </el-form>
+      </el-card>
+    </div>
+
     <div v-else>
       <div class="main-grid" :class="{ 'single-column': !showAllProxies }">
         <!-- Left Column: Tagged URLs (Primary Action) -->
@@ -83,6 +112,10 @@ const authUsername = ref('');
 const loginForm = ref({ username: '', password: '' });
 const loginLoading = ref(false);
 
+const mustChangePassword = ref(false);
+const changePasswordForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' });
+const changePasswordLoading = ref(false);
+
 // Response interceptor to catch 401 Unauthorized
 axios.interceptors.response.use(
   (response) => response,
@@ -100,6 +133,7 @@ const checkAuth = async () => {
     if (response.data && response.data.authenticated) {
       isAuthenticated.value = true;
       authUsername.value = response.data.username;
+      mustChangePassword.value = !!response.data.must_change_password;
       return true;
     }
   } catch (err) {
@@ -111,14 +145,17 @@ const checkAuth = async () => {
 const handleLogin = async () => {
   loginLoading.value = true;
   try {
-    await axios.post('/login', loginForm.value);
+    const response = await axios.post('/login', loginForm.value);
     isAuthenticated.value = true;
     authUsername.value = loginForm.value.username;
+    mustChangePassword.value = !!response.data.must_change_password;
     ElNotification({ title: 'Success', message: 'Logged in successfully.', type: 'success' });
     
-    // Start data loading and polling
-    fetchLatestVersion();
-    startPolling();
+    // Start data loading and polling if we don't need to change password
+    if (!mustChangePassword.value) {
+      fetchLatestVersion();
+      startPolling();
+    }
   } catch (err) {
     ElNotification({
       title: 'Error',
@@ -135,9 +172,43 @@ const handleLogout = async () => {
     await axios.post('/logout');
     isAuthenticated.value = false;
     authUsername.value = '';
+    mustChangePassword.value = false;
     ElNotification({ title: 'Success', message: 'Logged out successfully.', type: 'success' });
   } catch (err) {
     ElNotification({ title: 'Error', message: 'Logout failed.', type: 'error' });
+  }
+};
+
+const handleChangePassword = async () => {
+  if (changePasswordForm.value.newPassword !== changePasswordForm.value.confirmPassword) {
+    ElNotification({ title: 'Error', message: 'New passwords do not match.', type: 'error' });
+    return;
+  }
+  if (changePasswordForm.value.newPassword.length < 6) {
+    ElNotification({ title: 'Error', message: 'New password must be at least 6 characters long.', type: 'error' });
+    return;
+  }
+  changePasswordLoading.value = true;
+  try {
+    await axios.post('/change-password', {
+      old_password: changePasswordForm.value.oldPassword,
+      new_password: changePasswordForm.value.newPassword
+    });
+    mustChangePassword.value = false;
+    changePasswordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' };
+    ElNotification({ title: 'Success', message: 'Password changed successfully.', type: 'success' });
+    
+    // Start standard flows
+    fetchLatestVersion();
+    startPolling();
+  } catch (err) {
+    ElNotification({
+      title: 'Error',
+      message: err.response?.data || err.response?.data?.error || 'Failed to change password.',
+      type: 'error'
+    });
+  } finally {
+    changePasswordLoading.value = false;
   }
 };
 const taggedUrls = ref([]);
@@ -313,15 +384,15 @@ const startPolling = () => {
   pollingStarted = true;
 
   const pollServers = () => {
-    if (!isAuthenticated.value) { pollingStarted = false; return; }
+    if (!isAuthenticated.value || mustChangePassword.value) { pollingStarted = false; return; }
     fetchServers().finally(() => setTimeout(pollServers, 5000));
   };
   const pollTaggedURLs = () => {
-    if (!isAuthenticated.value) { pollingStarted = false; return; }
+    if (!isAuthenticated.value || mustChangePassword.value) { pollingStarted = false; return; }
     fetchTaggedURLs().finally(() => setTimeout(pollTaggedURLs, 5000));
   };
   const pollClusterProxies = () => {
-    if (!isAuthenticated.value) { pollingStarted = false; return; }
+    if (!isAuthenticated.value || mustChangePassword.value) { pollingStarted = false; return; }
     fetchClusterProxies().finally(() => setTimeout(pollClusterProxies, 5000));
   };
 
@@ -332,7 +403,7 @@ const startPolling = () => {
 
 onMounted(async () => {
   const authed = await checkAuth();
-  if (authed) {
+  if (authed && !mustChangePassword.value) {
     fetchLatestVersion();
     startPolling();
   }

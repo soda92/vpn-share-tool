@@ -297,8 +297,14 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   86400 * 30, // 30 days
 	})
 
+	mustChange := store.MustChangePassword(creds.Username)
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "username": creds.Username})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":               "ok",
+		"username":             creds.Username,
+		"must_change_password": mustChange,
+	})
 }
 
 func handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -341,8 +347,63 @@ func handleCheckAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	mustChange := store.MustChangePassword(username)
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"authenticated": true, "username": username})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"authenticated":        true,
+		"username":             username,
+		"must_change_password": mustChange,
+	})
+}
+
+func handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	sessionsMutex.RLock()
+	username, exists := sessions[cookie.Value]
+	sessionsMutex.RUnlock()
+
+	if !exists {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if !store.VerifyPassword(username, req.OldPassword) {
+		http.Error(w, "Incorrect current password", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.NewPassword) < 6 {
+		http.Error(w, "New password must be at least 6 characters long", http.StatusBadRequest)
+		return
+	}
+
+	if err := store.UpdatePassword(username, req.NewPassword, false); err != nil {
+		http.Error(w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 
@@ -401,6 +462,7 @@ func StartHTTPServer(insecure bool) {
 	rootMux.HandleFunc("/login", handleLogin)
 	rootMux.HandleFunc("/logout", handleLogout)
 	rootMux.HandleFunc("/check-auth", handleCheckAuth)
+	rootMux.HandleFunc("/change-password", handleChangePassword)
 
 	// Register specific protected API endpoints directly on rootMux
 	rootMux.Handle("/create-proxy", protectedHandler)

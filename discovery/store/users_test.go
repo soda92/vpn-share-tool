@@ -6,7 +6,14 @@ import (
 )
 
 func TestUserManagement(t *testing.T) {
-	// Setup
+	// Setup env
+	os.Setenv("BASIC_AUTH_USER", "admin")
+	os.Setenv("BASIC_AUTH_PASS", "admin")
+	defer func() {
+		os.Unsetenv("BASIC_AUTH_USER")
+		os.Unsetenv("BASIC_AUTH_PASS")
+	}()
+
 	origPath := usersFilePath
 	usersFilePath = "users_test.json"
 	defer func() {
@@ -32,9 +39,12 @@ func TestUserManagement(t *testing.T) {
 	if !VerifyPassword("admin", "admin") {
 		t.Error("Expected default admin/admin to be valid")
 	}
+	if MustChangePassword("admin") {
+		t.Error("Expected MustChangePassword to be false when configured via environment variable")
+	}
 
 	// 3. Update password
-	err := UpdatePassword("admin", "newpassword")
+	err := UpdatePassword("admin", "newpassword", false)
 	if err != nil {
 		t.Fatalf("Failed to update password: %v", err)
 	}
@@ -56,5 +66,14 @@ func TestUserManagement(t *testing.T) {
 	LoadUsers()
 	if !VerifyPassword("admin", "newpassword") {
 		t.Error("Loaded password should match persisted password")
+	}
+
+	// 5. Test generated reset password
+	genPass := ResetPasswordAndGet("admin")
+	if !VerifyPassword("admin", genPass) {
+		t.Error("Generated reset password should work")
+	}
+	if !MustChangePassword("admin") {
+		t.Error("Expected MustChangePassword to be true after reset")
 	}
 }
