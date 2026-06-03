@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	_ "embed"
@@ -22,9 +23,11 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/google/uuid"
 	"github.com/soda92/vpn-share-tool/discovery/proxy"
 	"github.com/soda92/vpn-share-tool/discovery/registry"
 	"github.com/soda92/vpn-share-tool/discovery/resources"
+	"github.com/soda92/vpn-share-tool/discovery/store"
 	"github.com/soheilhy/cmux"
 )
 
@@ -226,25 +229,122 @@ func handleTriggerUpdateRemote(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func BasicAuth(next http.Handler) http.Handler {
-	user := os.Getenv("BASIC_AUTH_USER")
-	pass := os.Getenv("BASIC_AUTH_PASS")
+var (
+	sessions      = make(map[string]string) // sessionToken -> username
+	sessionsMutex = &sync.RWMutex{}
+)
 
-	if user == "" || pass == "" {
-		log.Println("Warning: BASIC_AUTH_USER/PASS not set. Web UI is unsecured.")
-		return next
+func generateSessionToken() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return uuid.New().String()
 	}
+	return hex.EncodeToString(b)
+}
 
+func RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		u, p, ok := r.BasicAuth()
-		if !ok || u != user || p != pass {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+		cookie, err := r.Cookie("session_id")
+		if err != nil {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
+
+		sessionsMutex.RLock()
+		_, exists := sessions[cookie.Value]
+		sessionsMutex.RUnlock()
+
+		if !exists {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }
+
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var creds struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if !store.VerifyPassword(creds.Username, creds.Password) {
+		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		return
+	}
+
+	token := generateSessionToken()
+	sessionsMutex.Lock()
+	sessions[token] = creds.Username
+	sessionsMutex.Unlock()
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_id",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false, // Can be true if running strictly TLS, but since -insecure is an option, false is safer/easier
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400 * 30, // 30 days
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "username": creds.Username})
+}
+
+func handleLogout(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err == nil {
+		sessionsMutex.Lock()
+		delete(sessions, cookie.Value)
+		sessionsMutex.Unlock()
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_id",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		MaxAge:   -1,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleCheckAuth(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_id")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]interface{}{"authenticated": false})
+		return
+	}
+
+	sessionsMutex.RLock()
+	username, exists := sessions[cookie.Value]
+	sessionsMutex.RUnlock()
+
+	if !exists {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]interface{}{"authenticated": false})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"authenticated": true, "username": username})
+}
+
 
 func handleGetInstances(w http.ResponseWriter, r *http.Request) {
 	activeInstances := registry.GetActiveInstances()
@@ -285,19 +385,7 @@ func StartHTTPServer(insecure bool) {
 		panic("Sentry Go Test Panic!")
 	})
 
-	// Serve the Vue frontend (Protected)
-	fsys, err := fs.Sub(frontendDist, "dist")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fileServer := http.FileServer(http.FS(fsys))
-	protectedMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := fsys.Open(strings.TrimPrefix(r.URL.Path, "/"))
-		if os.IsNotExist(err) {
-			r.URL.Path = "/"
-		}
-		fileServer.ServeHTTP(w, r)
-	}))
+	protectedHandler := RequireAuth(protectedMux)
 
 	// Root Mux
 	rootMux := http.NewServeMux()
@@ -309,8 +397,35 @@ func StartHTTPServer(insecure bool) {
 	rootMux.HandleFunc("/solve-captcha", handleSolveCaptchaRequest)
 	rootMux.HandleFunc("/upload-logs", handleUploadLogs)
 
-	// Delegate everything else to Protected Mux
-	rootMux.Handle("/", BasicAuth(protectedMux))
+	// Auth routes
+	rootMux.HandleFunc("/login", handleLogin)
+	rootMux.HandleFunc("/logout", handleLogout)
+	rootMux.HandleFunc("/check-auth", handleCheckAuth)
+
+	// Register specific protected API endpoints directly on rootMux
+	rootMux.Handle("/create-proxy", protectedHandler)
+	rootMux.Handle("/instances", protectedHandler)
+	rootMux.Handle("/tagged-urls", protectedHandler)
+	rootMux.Handle("/tagged-urls/", protectedHandler)
+	rootMux.Handle("/cluster-proxies", protectedHandler)
+	rootMux.Handle("/update-proxy-settings", protectedHandler)
+	rootMux.Handle("/trigger-update-remote", protectedHandler)
+	rootMux.Handle("/logs", protectedHandler)
+	rootMux.Handle("/debug-panic", protectedHandler)
+
+	// Serve the Vue frontend (Public)
+	fsys, err := fs.Sub(frontendDist, "dist")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fileServer := http.FileServer(http.FS(fsys))
+	rootMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := fsys.Open(strings.TrimPrefix(r.URL.Path, "/"))
+		if os.IsNotExist(err) {
+			r.URL.Path = "/"
+		}
+		fileServer.ServeHTTP(w, r)
+	}))
 
 	// Wrap root handler with Sentry recovery middleware
 	mainHandler := SentryPanicRecovery(rootMux)

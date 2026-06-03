@@ -17,7 +17,20 @@ import (
 
 func main() {
 	insecure := flag.Bool("insecure", false, "Disable TLS and run on HTTP only")
+	resetPass := flag.String("reset-password", "", "Reset password for the specified user (e.g. -reset-password mypass)")
+	resetUser := flag.String("reset-user", "admin", "User to reset password for")
 	flag.Parse()
+
+	if *resetPass != "" {
+		store.LoadUsers()
+		err := store.UpdatePassword(*resetUser, *resetPass)
+		if err != nil {
+			log.Fatalf("Failed to reset password for user %s: %v", *resetUser, err)
+		}
+		log.Printf("Successfully reset password for user %s.", *resetUser)
+		os.Exit(0)
+	}
+
 
 	// Initialize Sentry
 	sentryDsn := common.SentryDSN
@@ -80,6 +93,8 @@ func main() {
 	}
 
 	store.LoadTaggedURLs()
+	store.LoadUsers()
+	store.InitDefaultUser()
 	// Start TCP server for vpn-share-tool instances
 	go transport.StartTCPServer()
 	// Start the automatic proxy creator

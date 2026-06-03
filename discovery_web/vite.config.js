@@ -17,6 +17,9 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/login': { target: 'http://localhost:8080', changeOrigin: true },
+      '/logout': { target: 'http://localhost:8080', changeOrigin: true },
+      '/check-auth': { target: 'http://localhost:8080', changeOrigin: true },
       '/instances': { target: 'http://localhost:8080', changeOrigin: true },
       '/cluster-proxies': { target: 'http://localhost:8080', changeOrigin: true },
       '/tagged-urls': { target: 'http://localhost:8080', changeOrigin: true },
