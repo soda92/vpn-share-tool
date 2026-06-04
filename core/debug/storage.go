@@ -151,8 +151,34 @@ func createSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func getSessionRequests(w http.ResponseWriter, r *http.Request, sessionID string) {
+	// Parse query parameters
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
+	search := strings.ToLower(r.URL.Query().Get("search"))
+	hideErrors := r.URL.Query().Get("hide_errors") == "true"
+	typesStr := r.URL.Query().Get("types")
+
+	page := 0
+	limit := 0
+	var err error
+	if pageStr != "" {
+		if page, err = strconv.Atoi(pageStr); err != nil || page < 1 {
+			page = 1
+		}
+	}
+	if limitStr != "" {
+		if limit, err = strconv.Atoi(limitStr); err != nil || limit < 1 {
+			limit = 50
+		}
+	}
+
+	var allowedTypes []string
+	if typesStr != "" {
+		allowedTypes = strings.Split(typesStr, ",")
+	}
+
 	var requests []*CapturedRequestSummary
-	err := db.View(func(tx *bbolt.Tx) error {
+	err = db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(sessionID))
 		if b == nil {
 			return fmt.Errorf("session not found")
@@ -160,6 +186,31 @@ func getSessionRequests(w http.ResponseWriter, r *http.Request, sessionID string
 		return b.ForEach(func(k, v []byte) error {
 			var req CapturedRequestSummary
 			if err := json.Unmarshal(v, &req); err == nil {
+				// 1. Filter by Hide Errors
+				if hideErrors && req.ResponseStatus >= 400 {
+					return nil
+				}
+
+				// 2. Filter by Search Query
+				if search != "" && !strings.Contains(strings.ToLower(req.URL), search) {
+					return nil
+				}
+
+				// 3. Filter by Resource Types
+				if len(allowedTypes) > 0 {
+					matchedType := false
+					reqType := getResourceType(&req)
+					for _, t := range allowedTypes {
+						if t == "ALL" || t == reqType {
+							matchedType = true
+							break
+						}
+					}
+					if !matchedType {
+						return nil
+					}
+				}
+
 				requests = append(requests, &req)
 			}
 			return nil
@@ -176,15 +227,88 @@ func getSessionRequests(w http.ResponseWriter, r *http.Request, sessionID string
 		return requests[i].ID > requests[j].ID
 	})
 
+	total := len(requests)
+	var paginatedRequests []*CapturedRequestSummary
+
+	if page > 0 && limit > 0 {
+		startIndex := (page - 1) * limit
+		if startIndex < total {
+			endIndex := startIndex + limit
+			if endIndex > total {
+				endIndex = total
+			}
+			paginatedRequests = requests[startIndex:endIndex]
+		} else {
+			paginatedRequests = []*CapturedRequestSummary{}
+		}
+	} else {
+		paginatedRequests = requests
+	}
+
 	w.Header().Set("Content-Type", "application/json")
+
+	type GetRequestsResponse struct {
+		Requests []*CapturedRequestSummary `json:"requests"`
+		Total    int                      `json:"total"`
+		Page     int                      `json:"page"`
+		Limit    int                      `json:"limit"`
+	}
+
+	resp := GetRequestsResponse{
+		Requests: paginatedRequests,
+		Total:    total,
+		Page:     page,
+		Limit:    limit,
+	}
+
 	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 		w.Header().Set("Content-Encoding", "gzip")
 		gz := gzip.NewWriter(w)
 		defer gz.Close()
-		json.NewEncoder(gz).Encode(requests)
+		json.NewEncoder(gz).Encode(resp)
 	} else {
-		json.NewEncoder(w).Encode(requests)
+		json.NewEncoder(w).Encode(resp)
 	}
+}
+
+func getResourceType(req *CapturedRequestSummary) string {
+	url := strings.ToLower(req.URL)
+	if strings.Contains(url, ".js") || strings.Contains(url, "javascript") {
+		return "JS"
+	}
+	if strings.Contains(url, ".css") {
+		return "CSS"
+	}
+	for _, ext := range []string{".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico"} {
+		if strings.Contains(url, ext) {
+			return "IMG"
+		}
+	}
+	if strings.Contains(url, ".html") || strings.Contains(url, ".htm") {
+		return "DOC"
+	}
+
+	if req.ResponseHeaders != nil {
+		contentType := strings.ToLower(req.ResponseHeaders.Get("Content-Type"))
+		if contentType != "" {
+			if strings.Contains(contentType, "javascript") {
+				return "JS"
+			}
+			if strings.Contains(contentType, "css") {
+				return "CSS"
+			}
+			if strings.Contains(contentType, "image") {
+				return "IMG"
+			}
+			if strings.Contains(contentType, "html") {
+				return "DOC"
+			}
+			if strings.Contains(contentType, "json") || strings.Contains(contentType, "xml") {
+				return "XHR"
+			}
+		}
+	}
+	return "OTHER"
 }
 
 func updateSession(w http.ResponseWriter, r *http.Request, sessionID string) {

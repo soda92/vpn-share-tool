@@ -12,13 +12,13 @@
         <button @click="$emit('clear')" title="Clear">🚫</button>
       </div>
       <div class="type-filters">
-        <button :class="{ active: resourceTypeFilter.has('ALL') }" @click="toggleFilter('ALL')">All</button>
-        <button :class="{ active: resourceTypeFilter.has('XHR') }" @click="toggleFilter('XHR')">XHR</button>
-        <button :class="{ active: resourceTypeFilter.has('JS') }" @click="toggleFilter('JS')">JS</button>
-        <button :class="{ active: resourceTypeFilter.has('CSS') }" @click="toggleFilter('CSS')">CSS</button>
-        <button :class="{ active: resourceTypeFilter.has('IMG') }" @click="toggleFilter('IMG')">Img</button>
-        <button :class="{ active: resourceTypeFilter.has('DOC') }" @click="toggleFilter('DOC')">Doc</button>
-        <button :class="{ active: resourceTypeFilter.has('OTHER') }" @click="toggleFilter('OTHER')">Other</button>
+        <button :class="{ active: resourceTypeFilter.includes('ALL') }" @click="toggleFilter('ALL')">All</button>
+        <button :class="{ active: resourceTypeFilter.includes('XHR') }" @click="toggleFilter('XHR')">XHR</button>
+        <button :class="{ active: resourceTypeFilter.includes('JS') }" @click="toggleFilter('JS')">JS</button>
+        <button :class="{ active: resourceTypeFilter.includes('CSS') }" @click="toggleFilter('CSS')">CSS</button>
+        <button :class="{ active: resourceTypeFilter.includes('IMG') }" @click="toggleFilter('IMG')">Img</button>
+        <button :class="{ active: resourceTypeFilter.includes('DOC') }" @click="toggleFilter('DOC')">Doc</button>
+        <button :class="{ active: resourceTypeFilter.includes('OTHER') }" @click="toggleFilter('OTHER')">Other</button>
       </div>
     </div>
     <div v-if="filteredRequests.length === 0" class="no-requests">
@@ -43,6 +43,11 @@
           </div>
         </li>
       </template>
+      <li v-if="hasMore" class="load-more-item">
+        <button class="load-more-btn" :disabled="loadingMore" @click="$emit('load-more')">
+          {{ loadingMore ? 'Loading...' : 'Load More Requests' }}
+        </button>
+      </li>
     </ul>
   </div>
 </template>
@@ -60,6 +65,8 @@ const props = defineProps<{
   selectedRequest: CapturedRequest | null;
   searchQuery: string;
   methodFilter: string;
+  hasMore: boolean;
+  loadingMore: boolean;
 }>();
 
 defineEmits<{
@@ -69,10 +76,11 @@ defineEmits<{
   (e: 'update:searchQuery', value: string): void;
   (e: 'update:methodFilter', value: string): void;
   (e: 'clear'): void;
+  (e: 'load-more'): void;
 }>();
 
-const resourceTypeFilter = ref<Set<string>>(new Set(['DOC', 'XHR']));
-const hideErrors = ref(true);
+const hideErrors = defineModel<boolean>('hideErrors', { default: true });
+const resourceTypeFilter = defineModel<string[]>('resourceTypeFilter', { default: () => ['DOC', 'XHR'] });
 
 const getUrlOrigin = (url: string) => {
   try {
@@ -104,20 +112,18 @@ const getBarePath = (url: string) => {
 
 const toggleFilter = (type: string) => {
   if (type === 'ALL') {
-    resourceTypeFilter.value.clear();
-    resourceTypeFilter.value.add('ALL');
+    resourceTypeFilter.value = ['ALL'];
   } else {
-    if (resourceTypeFilter.value.has('ALL')) {
-      resourceTypeFilter.value.delete('ALL');
-    }
-    if (resourceTypeFilter.value.has(type)) {
-      resourceTypeFilter.value.delete(type);
-      if (resourceTypeFilter.value.size === 0) {
-        resourceTypeFilter.value.add('ALL'); // Default back to ALL if empty
+    let nextFilters = resourceTypeFilter.value.filter(t => t !== 'ALL');
+    if (nextFilters.includes(type)) {
+      nextFilters = nextFilters.filter(t => t !== type);
+      if (nextFilters.length === 0) {
+        nextFilters = ['ALL'];
       }
     } else {
-      resourceTypeFilter.value.add(type);
+      nextFilters.push(type);
     }
+    resourceTypeFilter.value = nextFilters;
   }
 };
 
@@ -172,10 +178,10 @@ const filteredRequests = computed(() => {
     if (!searchMatch) return false;
 
     // Resource Type Filter
-    if (resourceTypeFilter.value.has('ALL')) return true;
+    if (resourceTypeFilter.value.includes('ALL')) return true;
 
     const type = getResourceType(req);
-    return resourceTypeFilter.value.has(type);
+    return resourceTypeFilter.value.includes(type);
   });
 });
 
@@ -329,15 +335,9 @@ const groupedRequests = computed(() => {
 
 .type-filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.3rem;
-  overflow-x: auto;
   padding-bottom: 2px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.type-filters::-webkit-scrollbar {
-  display: none;
 }
 
 .type-filters button {
@@ -518,5 +518,34 @@ const groupedRequests = computed(() => {
   color: #757575;
   font-size: 0.9rem;
   font-style: italic;
+}
+
+.load-more-item {
+  padding: 1rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #fafafa;
+}
+
+.load-more-btn {
+  background-color: #ffffff;
+  color: #673ab7;
+  border: 1px solid #673ab7;
+  padding: 0.5rem 1.5rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.load-more-btn:hover:not(:disabled) {
+  background-color: #f3e5f5;
+}
+
+.load-more-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>
