@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad-discovery" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00c6ff" />
+      <stop offset="100%" stop-color="#0072ff" />
+    </linearGradient>
+  </defs>
+  <!-- Central node -->
+  <circle cx="256" cy="256" r="90" fill="url(#grad-discovery)" />
+  <!-- Connection lines -->
+  <line x1="256" y1="256" x2="90" y2="90" stroke="url(#grad-discovery)" stroke-width="24" stroke-linecap="round" />
+  <line x1="256" y1="256" x2="422" y2="90" stroke="url(#grad-discovery)" stroke-width="24" stroke-linecap="round" />
+  <line x1="256" y1="256" x2="90" y2="422" stroke="url(#grad-discovery)" stroke-width="24" stroke-linecap="round" />
+  <line x1="256" y1="256" x2="422" y2="422" stroke="url(#grad-discovery)" stroke-width="24" stroke-linecap="round" />
+  <!-- Outer nodes -->
+  <circle cx="90" cy="90" r="55" fill="#ffffff" stroke="url(#grad-discovery)" stroke-width="16" />
+  <circle cx="422" cy="90" r="55" fill="#ffffff" stroke="url(#grad-discovery)" stroke-width="16" />
+  <circle cx="90" cy="422" r="55" fill="#ffffff" stroke="url(#grad-discovery)" stroke-width="16" />
+  <circle cx="422" cy="422" r="55" fill="#ffffff" stroke="url(#grad-discovery)" stroke-width="16" />
+</svg>
