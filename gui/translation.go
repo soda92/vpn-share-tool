@@ -34,8 +34,8 @@ func initI18n() {
 	localizer = i18n.NewLocalizer(bundle, tag.String())
 }
 
-func l(messageID string, templateData ...map[string]interface{}) string {
-	var data map[string]interface{}
+func l(messageID string, templateData ...map[string]any) string {
+	var data map[string]any
 	if len(templateData) > 0 {
 		data = templateData[0]
 	}
