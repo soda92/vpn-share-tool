@@ -1,6 +1,7 @@
 __pycache__
 node_modules
 certs.7z
+users.json
 
 /trace.out
 /rustlib/target

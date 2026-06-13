@@ -17,15 +17,20 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/instances': { target: 'http://localhost:8080', changeOrigin: true },
-      '/cluster-proxies': { target: 'http://localhost:8080', changeOrigin: true },
-      '/tagged-urls': { target: 'http://localhost:8080', changeOrigin: true },
-      '/latest-version': { target: 'http://localhost:8080', changeOrigin: true },
-      '/trigger-update-remote': { target: 'http://localhost:8080', changeOrigin: true },
-      '/create-proxy': { target: 'http://localhost:8080', changeOrigin: true },
-      '/toggle-debug-proxy': { target: 'http://localhost:8080', changeOrigin: true },
-      '/toggle-captcha-proxy': { target: 'http://localhost:8080', changeOrigin: true },
-      '/update-proxy-settings': { target: 'http://localhost:8080', changeOrigin: true },
+      '/login': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/logout': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/check-auth': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/instances': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/cluster-proxies': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/change-password': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/tagged-urls': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/latest-version': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/trigger-update-remote': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/create-proxy': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/toggle-debug-proxy': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/toggle-captcha-proxy': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/update-proxy-settings': { target: 'https://localhost:8080', changeOrigin: true, secure: false },
+      '/logs': { target: 'https://localhost:8080', changeOrigin: true, secure: false, ws: true },
     }
   }
 })
