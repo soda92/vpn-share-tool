@@ -3,9 +3,9 @@
     <div class="header-section">
       <h1 class="app-title">{{ $t('title') }}</h1>
       <div v-if="isAuthenticated" class="user-info">
-        <span>Logged in as <strong>{{ authUsername }}</strong></span>
+        <span>{{ $t('logged_in_as') }} <strong>{{ authUsername }}</strong></span>
         <el-button size="small" type="danger" plain @click="handleLogout">
-          Logout
+          {{ $t('logout_button') }}
         </el-button>
       </div>
     </div>
@@ -14,19 +14,19 @@
       <el-card class="login-card">
         <template #header>
           <div class="card-header">
-            <h3>Login to Control Panel</h3>
+            <h3>{{ $t('login_title') }}</h3>
           </div>
         </template>
         <el-form :model="loginForm" label-position="top" @submit.prevent="handleLogin">
-          <el-form-item label="Username">
-            <el-input v-model="loginForm.username" placeholder="Enter username" />
+          <el-form-item :label="$t('username')">
+            <el-input v-model="loginForm.username" :placeholder="$t('username_placeholder')" />
           </el-form-item>
-          <el-form-item label="Password">
-            <el-input v-model="loginForm.password" type="password" show-password placeholder="Enter password" />
+          <el-form-item :label="$t('password')">
+            <el-input v-model="loginForm.password" type="password" show-password :placeholder="$t('password_placeholder')" />
           </el-form-item>
           <div class="login-btn-wrapper">
             <el-button type="primary" native-type="submit" :loading="loginLoading" class="login-btn">
-              Login
+              {{ $t('login_button') }}
             </el-button>
           </div>
         </el-form>
@@ -37,25 +37,25 @@
       <el-card class="login-card">
         <template #header>
           <div class="card-header">
-            <h3>Change Your Password</h3>
+            <h3>{{ $t('change_password_title') }}</h3>
             <p style="margin: 5px 0 0 0; font-size: 0.85rem; color: #909399; text-align: center;">
-              You must change your password before continuing.
+              {{ $t('change_password_desc') }}
             </p>
           </div>
         </template>
         <el-form :model="changePasswordForm" label-position="top" @submit.prevent="handleChangePassword">
-          <el-form-item label="Current Password">
-            <el-input v-model="changePasswordForm.oldPassword" type="password" show-password placeholder="Enter current password" />
+          <el-form-item :label="$t('current_password')">
+            <el-input v-model="changePasswordForm.oldPassword" type="password" show-password :placeholder="$t('current_password_placeholder')" />
           </el-form-item>
-          <el-form-item label="New Password">
-            <el-input v-model="changePasswordForm.newPassword" type="password" show-password placeholder="Enter new password" />
+          <el-form-item :label="$t('new_password')">
+            <el-input v-model="changePasswordForm.newPassword" type="password" show-password :placeholder="$t('new_password_placeholder')" />
           </el-form-item>
-          <el-form-item label="Confirm New Password">
-            <el-input v-model="changePasswordForm.confirmPassword" type="password" show-password placeholder="Confirm new password" />
+          <el-form-item :label="$t('confirm_new_password')">
+            <el-input v-model="changePasswordForm.confirmPassword" type="password" show-password :placeholder="$t('confirm_new_password_placeholder')" />
           </el-form-item>
           <div class="login-btn-wrapper">
             <el-button type="primary" native-type="submit" :loading="changePasswordLoading" class="login-btn">
-              Change Password
+              {{ $t('change_password_button') }}
             </el-button>
           </div>
         </el-form>
@@ -99,12 +99,15 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
+import { useI18n } from 'vue-i18n';
 import { ElNotification } from 'element-plus';
 import TaggedList from './components/TaggedList.vue';
 import ProxyList from './components/ProxyList.vue';
 import ServerInfo from './components/ServerInfo.vue';
 import SettingsDialog from './components/SettingsDialog.vue';
 import LogViewer from './components/LogViewer.vue';
+
+const { t } = useI18n();
 
 const servers = ref([]);
 const isAuthenticated = ref(false);
@@ -149,7 +152,7 @@ const handleLogin = async () => {
     isAuthenticated.value = true;
     authUsername.value = loginForm.value.username;
     mustChangePassword.value = !!response.data.must_change_password;
-    ElNotification({ title: 'Success', message: 'Logged in successfully.', type: 'success' });
+    ElNotification({ title: t('success'), message: t('login_success'), type: 'success' });
     
     // Start data loading and polling if we don't need to change password
     if (!mustChangePassword.value) {
@@ -158,8 +161,8 @@ const handleLogin = async () => {
     }
   } catch (err) {
     ElNotification({
-      title: 'Error',
-      message: err.response?.data?.error || err.response?.data?.message || 'Invalid username or password.',
+      title: t('error'),
+      message: err.response?.data?.error || err.response?.data?.message || t('login_failed'),
       type: 'error'
     });
   } finally {
@@ -173,19 +176,19 @@ const handleLogout = async () => {
     isAuthenticated.value = false;
     authUsername.value = '';
     mustChangePassword.value = false;
-    ElNotification({ title: 'Success', message: 'Logged out successfully.', type: 'success' });
+    ElNotification({ title: t('success'), message: t('logout_success'), type: 'success' });
   } catch (err) {
-    ElNotification({ title: 'Error', message: 'Logout failed.', type: 'error' });
+    ElNotification({ title: t('error'), message: t('logout_failed'), type: 'error' });
   }
 };
 
 const handleChangePassword = async () => {
   if (changePasswordForm.value.newPassword !== changePasswordForm.value.confirmPassword) {
-    ElNotification({ title: 'Error', message: 'New passwords do not match.', type: 'error' });
+    ElNotification({ title: t('error'), message: t('password_mismatch'), type: 'error' });
     return;
   }
   if (changePasswordForm.value.newPassword.length < 6) {
-    ElNotification({ title: 'Error', message: 'New password must be at least 6 characters long.', type: 'error' });
+    ElNotification({ title: t('error'), message: t('password_too_short'), type: 'error' });
     return;
   }
   changePasswordLoading.value = true;
@@ -196,15 +199,15 @@ const handleChangePassword = async () => {
     });
     mustChangePassword.value = false;
     changePasswordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' };
-    ElNotification({ title: 'Success', message: 'Password changed successfully.', type: 'success' });
+    ElNotification({ title: t('success'), message: t('password_change_success'), type: 'success' });
     
     // Start standard flows
     fetchLatestVersion();
     startPolling();
   } catch (err) {
     ElNotification({
-      title: 'Error',
-      message: err.response?.data || err.response?.data?.error || 'Failed to change password.',
+      title: t('error'),
+      message: err.response?.data?.error || err.response?.data || t('password_change_failed'),
       type: 'error'
     });
   } finally {
