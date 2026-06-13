@@ -24,7 +24,7 @@ func TestRegistry_Registration(t *testing.T) {
 	go HandleConnection(server)
 
 	// Send REGISTER
-	fmt.Fprintf(client, "REGISTER 8080 v1.0\n")
+	fmt.Fprintf(client, "REGISTER 8081 v1.0\n")
 
 	// Read response
 	buf := make([]byte, 1024)
@@ -33,6 +33,7 @@ func TestRegistry_Registration(t *testing.T) {
 		t.Fatalf("Failed to read: %v", err)
 	}
 
+	// Verify response
 	resp := string(buf[:n])
 	if !strings.HasPrefix(resp, "OK") {
 		t.Errorf("Expected OK response, got %q", resp)
@@ -57,7 +58,7 @@ func TestRegistry_Heartbeat(t *testing.T) {
 	go HandleConnection(server)
 
 	// 1. Heartbeat before registration should fail
-	fmt.Fprintf(client, "HEARTBEAT 8080\n")
+	fmt.Fprintf(client, "HEARTBEAT 8082\n")
 	buf := make([]byte, 1024)
 	n, _ := client.Read(buf)
 	if !strings.Contains(string(buf[:n]), "ERR_NOT_REGISTERED") {
@@ -65,11 +66,11 @@ func TestRegistry_Heartbeat(t *testing.T) {
 	}
 
 	// 2. Register
-	fmt.Fprintf(client, "REGISTER 8080 v1.0\n")
+	fmt.Fprintf(client, "REGISTER 8082 v1.0\n")
 	client.Read(buf) // Consume OK
 
 	// 3. Heartbeat after registration should succeed
-	fmt.Fprintf(client, "HEARTBEAT 8080\n")
+	fmt.Fprintf(client, "HEARTBEAT 8082\n")
 	n, _ = client.Read(buf)
 	if !strings.Contains(string(buf[:n]), "OK") {
 		t.Errorf("Expected OK heartbeat, got %q", string(buf[:n]))

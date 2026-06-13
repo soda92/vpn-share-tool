@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad-debug" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff9b00" />
+      <stop offset="100%" stop-color="#ff3b00" />
+    </linearGradient>
+  </defs>
+  <!-- Handle -->
+  <rect x="232" y="180" width="48" height="260" rx="24" fill="url(#grad-debug)" />
+  <!-- Handle Grip -->
+  <rect x="232" y="320" width="48" height="120" rx="12" fill="#ffffff" opacity="0.2" />
+  <!-- Central head block -->
+  <rect x="220" y="140" width="72" height="60" rx="8" fill="url(#grad-debug)" />
+  <!-- Striking Face (Right) -->
+  <rect x="292" y="120" width="80" height="100" rx="12" fill="url(#grad-debug)" />
+  <rect x="372" y="135" width="16" height="70" rx="6" fill="url(#grad-debug)" />
+  <!-- Claw (Left) -->
+  <path d="M 220 130 Q 140 120 100 200 Q 150 185 220 190 Z" fill="url(#grad-debug)" />
+</svg>

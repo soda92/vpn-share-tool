@@ -11,10 +11,15 @@
           :selectedRequest="selectedRequest"
           v-model:searchQuery="searchQuery"
           v-model:methodFilter="methodFilter"
+          v-model:hideErrors="hideErrors"
+          v-model:resourceTypeFilter="resourceTypeFilter"
+          :has-more="hasMoreRequests"
+          :loading-more="loadingMore"
           @select-request="selectRequest"
           @show-context-menu="showContextMenu"
           @toggle-bookmark="toggleBookmark"
           @clear="clearHistory"
+          @load-more="loadMoreRequests"
         />
       </div>
       <div 
@@ -59,9 +64,16 @@ const props = defineProps<{
 }>();
 
 const requests = ref<CapturedRequest[]>([]);
+const totalRequests = ref(0);
+const limit = ref(50);
+const loadingMore = ref(false);
+
+const hasMoreRequests = computed(() => requests.value.length < totalRequests.value);
 const selectedRequest = ref<CapturedRequest | null>(null);
 const searchQuery = ref('');
 const methodFilter = ref('ALL');
+const hideErrors = ref(true);
+const resourceTypeFilter = ref<string[]>(['DOC', 'XHR']);
 const selectedForCompare = ref<CapturedRequest | null>(null);
 const contextMenu = ref({
   visible: false,
@@ -100,13 +112,60 @@ const saveNote = async () => {
 const fetchRequests = async () => {
   if (!activeSessionId.value) return;
   try {
-    const response = await axios.get(`/debug/sessions/${activeSessionId.value}/requests`);
-    requests.value = response.data || [];
+    const response = await axios.get(`/debug/sessions/${activeSessionId.value}/requests`, {
+      params: { 
+        page: 1, 
+        limit: limit.value,
+        search: searchQuery.value,
+        hide_errors: hideErrors.value,
+        types: resourceTypeFilter.value.join(',')
+      }
+    });
+    requests.value = response.data.requests || [];
+    totalRequests.value = response.data.total || 0;
   } catch (error) {
     console.error('Error fetching requests:', error);
     requests.value = []; // Clear requests on error
+    totalRequests.value = 0;
   }
 };
+
+const loadMoreRequests = async () => {
+  if (loadingMore.value || !hasMoreRequests.value) return;
+  loadingMore.value = true;
+  try {
+    const nextPage = Math.floor(requests.value.length / limit.value) + 1;
+    const response = await axios.get(`/debug/sessions/${activeSessionId.value}/requests`, {
+      params: { 
+        page: nextPage, 
+        limit: limit.value,
+        search: searchQuery.value,
+        hide_errors: hideErrors.value,
+        types: resourceTypeFilter.value.join(',')
+      }
+    });
+    
+    const newItems = response.data.requests || [];
+    newItems.forEach((item: CapturedRequest) => {
+      if (!requests.value.some(r => r.id === item.id)) {
+        requests.value.push(item);
+      }
+    });
+    totalRequests.value = response.data.total || 0;
+  } catch (error) {
+    console.error('Error loading more requests:', error);
+  } finally {
+    loadingMore.value = false;
+  }
+};
+
+let searchDebounceTimeout: number | undefined;
+watch([searchQuery, hideErrors, resourceTypeFilter], () => {
+  clearTimeout(searchDebounceTimeout);
+  searchDebounceTimeout = window.setTimeout(() => {
+    fetchRequests();
+  }, 300);
+});
 
 const clearHistory = async () => {
   if (props.isLive) {
@@ -246,6 +305,7 @@ const connectWebSocket = () => {
       const existingIndex = requests.value.findIndex(r => r.id === newRequest.id);
       if (existingIndex === -1) {
         requests.value.unshift(newRequest);
+        totalRequests.value++;
       } else {
         requests.value[existingIndex] = newRequest;
       }
