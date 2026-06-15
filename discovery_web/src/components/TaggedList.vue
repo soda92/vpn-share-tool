@@ -264,9 +264,10 @@ h2 {
   color: #909399;
   font-size: 0.75rem;
   margin-bottom: 0.2rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-all;
+  overflow: visible;
+  text-overflow: clip;
   display: block;
 }
 
@@ -284,9 +285,10 @@ h2 {
   color: #2ecc71;
   font-weight: 500;
   text-decoration: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-all;
+  overflow: visible;
+  text-overflow: clip;
   flex-grow: 1;
   min-width: 0;
 }
