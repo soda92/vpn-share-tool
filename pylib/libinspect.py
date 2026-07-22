@@ -44,14 +44,14 @@ class SiteInspector:
         except Exception as e:
             raise RuntimeError(f"Connection to API server at {self.api_url} failed: {e}")
 
-    def get_requests(self, search: Optional[str] = None, hide_errors: bool = False, types: Optional[str] = None, page: int = 1, limit: int = 50) -> Dict[str, Any]:
+    def get_requests(self, search: Optional[str] = None, hide_errors: bool = False, types: Optional[str] = None, page: int = 1, limit: int = 10) -> Dict[str, Any]:
         """
         Get captured request summaries.
         :param search: Substring to filter requests by URL
         :param hide_errors: Hide requests with status >= 400
-        :param types: Comma-separated list of types (XHR, DOC, JS, CSS, IMG, OTHER)
+        :param types: Comma-separated list of types (XHR, DOC, JS, CSS, IMG, OTHER, ALL)
         :param page: Page number (1-indexed)
-        :param limit: Number of requests per page
+        :param limit: Number of requests per page (default: 10)
         """
         params = {
             "page": str(page),
@@ -67,19 +67,24 @@ class SiteInspector:
         path = f"/debug/sessions/{self.session_id}/requests?{query_str}"
         return self._request(path)
 
-    def get_xhr_requests(self, search: Optional[str] = None, page: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_req_requests(self, search: Optional[str] = None, types: str = "XHR,DOC", page: int = 1, limit: int = 10) -> List[Dict[str, Any]]:
         """
-        Get only XHR (API/JSON) requests.
+        Get requests matching specified types (defaults to XHR,DOC, limit 10).
         """
-        res = self.get_requests(search=search, types="XHR", page=page, limit=limit)
+        res = self.get_requests(search=search, types=types, page=page, limit=limit)
         return res.get("requests", [])
 
-    def get_doc_requests(self, search: Optional[str] = None, page: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_xhr_requests(self, search: Optional[str] = None, page: int = 1, limit: int = 10) -> List[Dict[str, Any]]:
         """
-        Get only HTML/Document requests.
+        Get only XHR (API/JSON) requests (default limit 10).
         """
-        res = self.get_requests(search=search, types="DOC", page=page, limit=limit)
-        return res.get("requests", [])
+        return self.get_req_requests(search=search, types="XHR", page=page, limit=limit)
+
+    def get_doc_requests(self, search: Optional[str] = None, page: int = 1, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get only HTML/Document requests (default limit 10).
+        """
+        return self.get_req_requests(search=search, types="DOC", page=page, limit=limit)
 
     def get_details(self, request_id: int) -> Dict[str, Any]:
         """
@@ -111,7 +116,11 @@ class SiteInspector:
     def save_doc_response(self, url_pattern: str, output_path: str) -> bool:
         """
         Find the most recent HTML/Document request matching url_pattern and save its response body to output_path.
+        If url_pattern is a numeric request ID, directly fetch by ID.
         """
+        if url_pattern.isdigit():
+            self.save_response_body(int(url_pattern), output_path)
+            return True
         requests = self.get_doc_requests(search=url_pattern, page=1, limit=10)
         if not requests:
             return False
@@ -122,7 +131,11 @@ class SiteInspector:
     def save_xhr_response(self, url_pattern: str, output_path: str) -> bool:
         """
         Find the most recent XHR request matching url_pattern and save its response body to output_path.
+        If url_pattern is a numeric request ID, directly fetch by ID.
         """
+        if url_pattern.isdigit():
+            self.save_response_body(int(url_pattern), output_path)
+            return True
         requests = self.get_xhr_requests(search=url_pattern, page=1, limit=10)
         if not requests:
             return False
@@ -143,13 +156,21 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # list-req command (both XHR and DOC by default, or configurable via --types)
+    req_parser = subparsers.add_parser("list-req", help="List captured requests (XHR and DOC by default)")
+    req_parser.add_argument("search", nargs="?", default=None, help="Search pattern for URL")
+    req_parser.add_argument("--types", "-t", default="XHR,DOC", help="Comma-separated types to include (default: XHR,DOC)")
+    req_parser.add_argument("--limit", "-n", type=int, default=10, help="Maximum number of requests to list (default: 10)")
+
     # list-xhr command
     xhr_parser = subparsers.add_parser("list-xhr", help="List captured XHR requests")
     xhr_parser.add_argument("search", nargs="?", default=None, help="Search pattern for URL")
+    xhr_parser.add_argument("--limit", "-n", type=int, default=10, help="Maximum number of requests to list (default: 10)")
 
     # list-doc command
     doc_parser = subparsers.add_parser("list-doc", help="List captured Document requests")
     doc_parser.add_argument("search", nargs="?", default=None, help="Search pattern for URL")
+    doc_parser.add_argument("--limit", "-n", type=int, default=10, help="Maximum number of requests to list (default: 10)")
 
     # save-xhr command
     save_xhr_parser = subparsers.add_parser("save-xhr", help="Save the response body of latest matching XHR request")
@@ -171,15 +192,21 @@ def main():
     inspector = SiteInspector(addr=args.addr, session_id=args.session)
 
     try:
-        if args.command == "list-xhr":
-            reqs = inspector.get_xhr_requests(search=args.search)
-            print(f"Found {len(reqs)} XHR requests:")
+        if args.command == "list-req":
+            reqs = inspector.get_req_requests(search=args.search, types=args.types, limit=args.limit)
+            print(f"Found {len(reqs)} requests (types: {args.types}, limit: {args.limit}):")
+            for r in reqs:
+                print(f"  [{r['response_status']}] {r['method']} {r['url']} (ID: {r['id']})")
+
+        elif args.command == "list-xhr":
+            reqs = inspector.get_xhr_requests(search=args.search, limit=args.limit)
+            print(f"Found {len(reqs)} XHR requests (limit: {args.limit}):")
             for r in reqs:
                 print(f"  [{r['response_status']}] {r['method']} {r['url']} (ID: {r['id']})")
 
         elif args.command == "list-doc":
-            reqs = inspector.get_doc_requests(search=args.search)
-            print(f"Found {len(reqs)} Document requests:")
+            reqs = inspector.get_doc_requests(search=args.search, limit=args.limit)
+            print(f"Found {len(reqs)} Document requests (limit: {args.limit}):")
             for r in reqs:
                 print(f"  [{r['response_status']}] {r['method']} {r['url']} (ID: {r['id']})")
 
