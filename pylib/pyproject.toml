@@ -7,3 +7,29 @@ requires-python = ">=3.10"
 dependencies = [
     "zeroconf>=0.148.0",
 ]
+
+[tool.ruff]
+# 显式限定 Python 3.8 兼容约束目标版本
+target-version = "py38"
+
+
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9", "F",
+    "C4",   # flake8-comprehensions (更清晰高效的列表/字典推导式)
+    "UP",   # pyupgrade (自动升级 Python 3.8 兼容的标准基础语法)
+    "YTT",  # flake8-2020 (防范 sys.version 比较漏洞)
+    "PIE",  # flake8-pie (精简冗余结构与 UTF-8 声明)
+]
+ignore = [
+    # "E402", # 允许在顶部前导入
+    "B008",   # 允许在函数默认参数中使用 Field(...) (Pydantic 标准模式)
+    "RUF001", # 允许在字符串中使用中文标点 (中文注释与提示词)
+    "RUF002", # 允许在 Docstring 中使用中文标点
+    "RUF003", # 允许在注释中使用中文标点
+    "A001",   # 允许字段名遮蔽内置函数 (如 id, type 等标准 schema 字段)
+    "A002",   # 允许参数名遮蔽内置函数
+    "LOG",    # 禁用所有 LOG 日志检查 (屏蔽 LOG105 等噪音)
+    "I",      # 禁用 Import 重新排序 (屏蔽 I001 防止造成大量 Commit Diff)
+    "FA",     # 禁用 Future-Annotations (屏蔽 FA100 保持 100% Python 3.8 原生兼容)
+]
