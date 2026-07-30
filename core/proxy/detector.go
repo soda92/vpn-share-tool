@@ -1,14 +1,21 @@
 package proxy
 
 import (
+	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/soda92/vpn-share-tool/core/models"
 	"github.com/soda92/vpn-share-tool/core/pipeline"
+)
+
+var (
+	detectorClient     http.Client
+	detectorClientOnce sync.Once
 )
 
 // StartSystemDetector runs periodically to detect which systems are active on the proxy target
@@ -50,9 +57,6 @@ func detectSystems(p *models.SharedProxy) {
 			}
 			targetURL := baseParsed.ResolveReference(probeURL).String()
 
-			// We can use IsURLReachable from utils, but we might want more specific check (200 OK)
-			// IsURLReachable returns true for 403/401 too.
-			// For asset probing, we usually expect 200.
 			if checkProbe(targetURL) {
 				log.Printf("Detected system %s on %s", sys.Name, p.OriginalURL)
 				detected = append(detected, sys.ID)
@@ -67,15 +71,29 @@ func detectSystems(p *models.SharedProxy) {
 }
 
 func checkProbe(targetURL string) bool {
-	client := &http.Client{Timeout: 5 * time.Second}
+	detectorClientOnce.Do(func() {
+		tr := &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 20,
+			IdleConnTimeout:     90 * time.Second,
+		}
+		detectorClient = http.Client{
+			Transport: tr,
+			Timeout:   5 * time.Second,
+		}
+	})
+
 	req, err := http.NewRequest("HEAD", targetURL, nil)
 	if err != nil {
 		return false
 	}
-	resp, err := client.Do(req)
+	resp, err := detectorClient.Do(req)
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 	return resp.StatusCode == http.StatusOK
 }
