@@ -6,10 +6,17 @@ import (
 	"net"
 )
 
-// isPortAvailable checks if a TCP port is available to be listened on.
+// isPortAvailable checks if a TCP port is available to be listened on for both IPv4 and wildcard.
 func isPortAvailable(port int) bool {
-	address := fmt.Sprintf(":%d", port)
-	ln, err := net.Listen("tcp", address)
+	// Must be available on IPv4 0.0.0.0
+	ln4, err := net.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", port))
+	if err != nil {
+		return false
+	}
+	_ = ln4.Close()
+
+	// Also verify wildcard tcp listener
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return false
 	}
@@ -20,22 +27,28 @@ func isPortAvailable(port int) bool {
 func SelectAvailablePort(requestedPort int, startPort int, proxiesCount int) (int, error) {
 	remotePort := 0
 
-	// Try requested port first
-	if requestedPort > 0 {
-		isUsed := false
-		ProxiesLock.RLock()
+	isPortUsed := func(port int) bool {
+		if APIPort > 0 && port == APIPort {
+			return true
+		}
 		for _, p := range Proxies {
-			if p.RemotePort == requestedPort {
-				isUsed = true
-				break
+			if p.RemotePort == port {
+				return true
 			}
 		}
+		return false
+	}
+
+	// Try requested port first
+	if requestedPort > 0 {
+		ProxiesLock.RLock()
+		inUse := isPortUsed(requestedPort)
 		ProxiesLock.RUnlock()
 
-		if !isUsed && isPortAvailable(requestedPort) {
+		if !inUse && isPortAvailable(requestedPort) {
 			remotePort = requestedPort
 		} else {
-			log.Printf("Requested port %d is not available or in use, falling back to auto-selection.", requestedPort)
+			log.Printf("Requested port %d is not available or in use (APIPort: %d), falling back to auto-selection.", requestedPort, APIPort)
 		}
 	}
 
@@ -45,21 +58,7 @@ func SelectAvailablePort(requestedPort int, startPort int, proxiesCount int) (in
 		defer ProxiesLock.Unlock()
 
 		for {
-			isUsed := false
-			for _, p := range Proxies {
-				if p.RemotePort == port {
-					isUsed = true
-					break
-				}
-			}
-			// Release lock temporarily to check port availability (avoid holding lock during system call)
-			// But wait, checking usage requires lock.
-			// We can check usage in memory quickly.
-			// isPortAvailable might take a few ms.
-			// It is safer to keep lock if we want to guarantee no race condition within our own app,
-			// but we can't guarantee other apps don't take it.
-
-			if !isUsed && isPortAvailable(port) {
+			if !isPortUsed(port) && isPortAvailable(port) {
 				remotePort = port
 				break
 			}

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -16,8 +17,14 @@ var (
 
 func IsURLReachable(targetURL string) bool {
 	once.Do(func() {
+		tr := &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 20,
+			IdleConnTimeout:     90 * time.Second,
+		}
 		reachableClient = http.Client{
-			Timeout: 10 * time.Second,
+			Transport: tr,
+			Timeout:   10 * time.Second,
 		}
 	})
 	// Use HEAD request for efficiency
@@ -32,7 +39,10 @@ func IsURLReachable(targetURL string) bool {
 		log.Printf("Discovery: URL %s is not reachable: %v", targetURL, err)
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	// Any status code (even 401/403) means the server is alive.
 	log.Printf("Discovery: URL %s is reachable with status %d", targetURL, resp.StatusCode)
