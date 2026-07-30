@@ -101,13 +101,13 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 		fileServer.ServeHTTP(w, r)
 	})))
 
-	// Add debug API endpoints
-	mux.HandleFunc("/debug/sessions", handleSessions)
-	mux.HandleFunc("/debug/sessions/", handleSessionOrHar)
-	mux.HandleFunc("/debug/har/import", importHar)
-	mux.HandleFunc("/debug/clear-live", handleClearLiveRequests)
-	mux.HandleFunc("/debug/ws", handleDebugWS)
-	mux.HandleFunc("/api/debug/requests/", handleSingleRequest) // New unambiguous endpoint
+	// Add debug API endpoints under /api/debug to prevent collision with SPA routes
+	mux.HandleFunc("/api/debug/sessions", handleSessions)
+	mux.HandleFunc("/api/debug/sessions/", handleSessionOrHar)
+	mux.HandleFunc("/api/debug/har/import", importHar)
+	mux.HandleFunc("/api/debug/clear-live", handleClearLiveRequests)
+	mux.HandleFunc("/api/debug/ws", handleDebugWS)
+	mux.HandleFunc("/api/debug/requests/", handleSingleRequest)
 	mux.HandleFunc("/api/debug/download-db", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")

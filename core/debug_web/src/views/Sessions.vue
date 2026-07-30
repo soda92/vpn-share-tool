@@ -43,7 +43,7 @@ const downloadDb = () => {
 
 const fetchSessions = async () => {
   try {
-    const response = await axios.get('/debug/sessions');
+    const response = await axios.get('/api/debug/sessions');
     sessions.value = response.data || [];
   } catch (e) {
     console.error('Failed to fetch sessions', e);
@@ -53,20 +53,20 @@ const fetchSessions = async () => {
 const renameSession = async (id, oldName) => {
   const newName = prompt('Enter new session name:', oldName);
   if (newName && newName !== oldName) {
-    await axios.put(`/debug/sessions/${id}`, { name: newName });
+    await axios.put(`/api/debug/sessions/${id}`, { name: newName });
     fetchSessions();
   }
 };
 
 const deleteSession = async (id) => {
   if (confirm('Are you sure you want to delete this session?')) {
-    await axios.delete(`/debug/sessions/${id}`);
+    await axios.delete(`/api/debug/sessions/${id}`);
     fetchSessions();
   }
 };
 
 const exportHar = (id, name) => {
-  window.open(`/debug/sessions/${id}/har`, '_blank');
+  window.open(`/api/debug/sessions/${id}/har`, '_blank');
 };
 
 const triggerImport = () => {

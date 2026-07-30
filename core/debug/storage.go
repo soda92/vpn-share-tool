@@ -71,7 +71,8 @@ func handleSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleSession(w http.ResponseWriter, r *http.Request) {
-	sessionID := strings.TrimPrefix(r.URL.Path, "/debug/sessions/")
+	sessionID := strings.TrimPrefix(r.URL.Path, "/api/debug/sessions/")
+	sessionID = strings.TrimPrefix(sessionID, "/debug/sessions/")
 	sessionID = strings.TrimSuffix(sessionID, "/requests")
 
 	switch r.Method {
@@ -87,9 +88,12 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func listSessions(w http.ResponseWriter, _ *http.Request) {
-	var sessions []map[string]string
+	sessions := make([]map[string]string, 0)
 	err := db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(sessionsMetadataBucket))
+		if b == nil {
+			return nil
+		}
 		return b.ForEach(func(k, v []byte) error {
 			// Do not list the internal live session
 			if string(k) != liveSessionBucketName {

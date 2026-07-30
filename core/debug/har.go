@@ -101,7 +101,8 @@ func importHar(w http.ResponseWriter, r *http.Request) {
 }
 
 func exportHar(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/debug/sessions/")
+	path := strings.TrimPrefix(r.URL.Path, "/api/debug/sessions/")
+	path = strings.TrimPrefix(path, "/debug/sessions/")
 	sessionID := strings.TrimSuffix(path, "/har")
 
 	var requests []*CapturedRequest

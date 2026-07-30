@@ -24,7 +24,7 @@ const saveSession = async () => {
   const name = prompt('Enter a name for this session:');
   if (name) {
     try {
-      const response = await axios.post('/debug/sessions', { name });
+      const response = await axios.post('/api/debug/sessions', { name });
       toast.success(`Session saved as '${name}'.`);
       router.push(`/session/${response.data.id}`);
     } catch (error) {

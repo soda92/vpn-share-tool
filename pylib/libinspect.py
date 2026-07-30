@@ -64,7 +64,7 @@ class SiteInspector:
             params["types"] = types
 
         query_str = urllib.parse.urlencode(params)
-        path = f"/debug/sessions/{self.session_id}/requests?{query_str}"
+        path = f"/api/debug/sessions/{self.session_id}/requests?{query_str}"
         return self._request(path)
 
     def get_req_requests(
@@ -99,7 +99,7 @@ class SiteInspector:
         """
         Get all active/captured debug sessions from server.
         """
-        res = self._request("/debug/sessions")
+        res = self._request("/api/debug/sessions")
         if isinstance(res, list):
             return res
         return []

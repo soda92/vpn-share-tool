@@ -112,7 +112,7 @@ const saveNote = async () => {
 const fetchRequests = async () => {
   if (!activeSessionId.value) return;
   try {
-    const response = await axios.get(`/debug/sessions/${activeSessionId.value}/requests`, {
+    const response = await axios.get(`/api/debug/sessions/${activeSessionId.value}/requests`, {
       params: { 
         page: 1, 
         limit: limit.value,
@@ -135,7 +135,7 @@ const loadMoreRequests = async () => {
   loadingMore.value = true;
   try {
     const nextPage = Math.floor(requests.value.length / limit.value) + 1;
-    const response = await axios.get(`/debug/sessions/${activeSessionId.value}/requests`, {
+    const response = await axios.get(`/api/debug/sessions/${activeSessionId.value}/requests`, {
       params: { 
         page: nextPage, 
         limit: limit.value,
@@ -170,7 +170,7 @@ watch([searchQuery, hideErrors, resourceTypeFilter], () => {
 const clearHistory = async () => {
   if (props.isLive) {
     try {
-      await axios.post('/debug/clear-live');
+      await axios.post('/api/debug/clear-live');
       fetchRequests(); // Refetch to show only persisted items
     } catch (error) {
       console.error('Error clearing history:', error);

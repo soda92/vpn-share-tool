@@ -22,10 +22,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/debug/sessions': 'http://localhost:10081',
-      '/api/debug/requests': 'http://localhost:10081',
-      '/debug/clear-live': 'http://localhost:10081',
-      '/debug/ws': {
+      '/api/debug': 'http://localhost:10081',
+      '/api/debug/ws': {
         target: 'ws://localhost:10081',
         ws: true,
       },
