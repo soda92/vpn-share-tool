@@ -6,10 +6,17 @@ import (
 	"net"
 )
 
-// isPortAvailable checks if a TCP port is available to be listened on.
+// isPortAvailable checks if a TCP port is available to be listened on for both IPv4 and wildcard.
 func isPortAvailable(port int) bool {
-	address := fmt.Sprintf(":%d", port)
-	ln, err := net.Listen("tcp", address)
+	// Must be available on IPv4 0.0.0.0
+	ln4, err := net.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", port))
+	if err != nil {
+		return false
+	}
+	_ = ln4.Close()
+
+	// Also verify wildcard tcp listener
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return false
 	}

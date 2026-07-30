@@ -90,41 +90,60 @@ func LoadProxies() {
 		return
 	}
 
-	log.Printf("Loading %d proxies from config...", len(config))
-	for _, item := range config {
-		log.Printf("Restoring proxy: %s -> :%d", item.OriginalURL, item.RemotePort)
-		// We use the new requestedPort parameter (0 for now, will update ShareUrlAndGetProxy next)
-		proxy, err := ShareUrlAndGetProxy(item.OriginalURL, item.RemotePort)
-		if err != nil {
-			log.Printf("Failed to restore proxy for %s: %v", item.OriginalURL, err)
-			continue
-		}
+	log.Printf("Loading %d proxies from config using differential port allocation...", len(config))
 
-		// Restore settings
-		// Check if Settings is populated, otherwise try legacy
-		if item.Settings == (models.ProxySettings{}) {
-			// Zero value settings, check if we should migrate legacy
-			if item.LegacyEnableDebug {
-				// Legacy EnableDebug mapped to what? Maybe EnableContentMod?
-				// Since legacy debug script is controlled by EnableDebug flag in RunPipeline...
-				// But we removed EnableDebug from SharedProxy model!
-				// So we must map it to Settings.EnableContentMod? Or ignore it?
-				// The prompt said "Legacy Debug Script" is enabled by "EnableDebug" property in Settings? No.
-				// In RunPipeline:
-				/*
-					// 2. Debug Script (Legacy Flag)
-					if ctx.Proxy.GetEnableDebug() { ... }
-				*/
-				// But I removed GetEnableDebug() method and field!
-				// So RunPipeline is broken now. I need to fix it.
+	type pendingProxy struct {
+		item         ProxyConfigItem
+		assignedPort int
+	}
+
+	pending := make([]pendingProxy, len(config))
+	claimedPorts := make(map[int]bool)
+
+	// Pass 1: Find all available ports corresponding to original requests
+	for i, item := range config {
+		pending[i] = pendingProxy{item: item, assignedPort: 0}
+		if item.RemotePort > 0 {
+			if !claimedPorts[item.RemotePort] && isPortAvailable(item.RemotePort) {
+				pending[i].assignedPort = item.RemotePort
+				claimedPorts[item.RemotePort] = true
 			}
+		}
+	}
 
-			// Map legacy to new settings
+	restoreProxySettings := func(proxy *models.SharedProxy, item ProxyConfigItem) {
+		if item.Settings == (models.ProxySettings{}) {
 			proxy.Settings.EnableContentMod = item.LegacyEnableCaptcha || item.LegacyEnableDebug
 			proxy.Settings.EnableDebugScript = item.LegacyEnableDebug
-			proxy.Settings.EnableUrlRewrite = true // Default true
+			proxy.Settings.EnableUrlRewrite = true
 		} else {
 			proxy.Settings = item.Settings
+		}
+	}
+
+	// Pass 2 Phase 1: Restore proxies that claimed their original ports
+	for _, entry := range pending {
+		if entry.assignedPort > 0 {
+			log.Printf("Restoring proxy on original port: %s -> :%d", entry.item.OriginalURL, entry.assignedPort)
+			proxy, err := ShareUrlAndGetProxy(entry.item.OriginalURL, entry.assignedPort)
+			if err != nil {
+				log.Printf("Failed to restore proxy for %s on port %d: %v", entry.item.OriginalURL, entry.assignedPort, err)
+				continue
+			}
+			restoreProxySettings(proxy, entry.item)
+		}
+	}
+
+	// Pass 2 Phase 2: Re-assign ports for proxies whose original ports were unavailable
+	for _, entry := range pending {
+		if entry.assignedPort == 0 {
+			log.Printf("Restoring proxy with new port (original :%d unavailable): %s", entry.item.RemotePort, entry.item.OriginalURL)
+			proxy, err := ShareUrlAndGetProxy(entry.item.OriginalURL, 0)
+			if err != nil {
+				log.Printf("Failed to restore proxy for %s: %v", entry.item.OriginalURL, err)
+				continue
+			}
+			restoreProxySettings(proxy, entry.item)
 		}
 	}
 }

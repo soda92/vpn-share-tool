@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -206,9 +207,18 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 		return pipeline.RunPipeline(ctx, body)
 	})
 
+	ln, err := net.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", remotePort))
+	if err != nil {
+		ln, err = net.Listen("tcp", fmt.Sprintf(":%d", remotePort))
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("failed to listen on port %d: %w", remotePort, err)
+		}
+	}
+
 	go func() {
 		log.Printf("Starting proxy for %s on port %d", rawURL, remotePort)
-		if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Printf("Proxy for %s on port %d stopped: %v", rawURL, remotePort, err)
 		}
 		log.Printf("Proxy for %s on port %d stopped gracefully.", rawURL, remotePort)
