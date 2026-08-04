@@ -2,9 +2,13 @@ package proxy
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/soda92/vpn-share-tool/core/debug"
 	"github.com/soda92/vpn-share-tool/core/models"
@@ -146,4 +150,120 @@ func LoadProxies() {
 			restoreProxySettings(proxy, entry.item)
 		}
 	}
+}
+
+var (
+	portHistory         = make(map[string]int)
+	portHistoryLock     sync.RWMutex
+	loadPortHistoryOnce sync.Once
+)
+
+func getPortHistoryFile() (string, error) {
+	if debug.DebugStoragePath != "" {
+		if err := os.MkdirAll(debug.DebugStoragePath, 0755); err != nil {
+			return "", err
+		}
+		return filepath.Join(debug.DebugStoragePath, "port_history.json"), nil
+	}
+
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	appDir := filepath.Join(configDir, "vpn-share-tool")
+	if err := os.MkdirAll(appDir, 0755); err != nil {
+		return "", err
+	}
+	return filepath.Join(appDir, "port_history.json"), nil
+}
+
+func loadPortHistory() {
+	file, err := getPortHistoryFile()
+	if err != nil {
+		return
+	}
+
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return
+	}
+
+	portHistoryLock.Lock()
+	defer portHistoryLock.Unlock()
+	_ = json.Unmarshal(data, &portHistory)
+}
+
+func savePortHistory() {
+	file, err := getPortHistoryFile()
+	if err != nil {
+		return
+	}
+
+	portHistoryLock.RLock()
+	data, err := json.MarshalIndent(portHistory, "", "  ")
+	portHistoryLock.RUnlock()
+
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(file, data, 0644)
+}
+
+func normalizeTargetHost(u string) string {
+	if !strings.Contains(u, "://") {
+		u = "http://" + u
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return u
+	}
+	host := parsed.Hostname()
+	port := parsed.Port()
+	if host == "localhost" {
+		host = "127.0.0.1"
+	}
+	if port != "" {
+		return fmt.Sprintf("%s:%s", host, port)
+	}
+	return host
+}
+
+func RecordPortHistory(rawURL string, port int) {
+	if rawURL == "" || port <= 0 {
+		return
+	}
+	loadPortHistoryOnce.Do(loadPortHistory)
+
+	hostKey := normalizeTargetHost(rawURL)
+
+	portHistoryLock.Lock()
+	if portHistory == nil {
+		portHistory = make(map[string]int)
+	}
+	portHistory[rawURL] = port
+	if hostKey != "" {
+		portHistory[hostKey] = port
+	}
+	portHistoryLock.Unlock()
+
+	savePortHistory()
+}
+
+func GetHistoricalPort(rawURL string) int {
+	loadPortHistoryOnce.Do(loadPortHistory)
+
+	portHistoryLock.RLock()
+	defer portHistoryLock.RUnlock()
+
+	if port, ok := portHistory[rawURL]; ok && port > 0 {
+		return port
+	}
+
+	hostKey := normalizeTargetHost(rawURL)
+	if hostKey != "" {
+		if port, ok := portHistory[hostKey]; ok && port > 0 {
+			return port
+		}
+	}
+	return 0
 }

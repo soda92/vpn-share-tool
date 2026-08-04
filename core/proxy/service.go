@@ -57,12 +57,10 @@ func removeProxy(p *models.SharedProxy) {
 		p.Cancel()
 	}
 
-	// 1. Shutdown the HTTP server
+	// 1. Shutdown the HTTP server immediately to free socket
 	if p.Server != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if err := p.Server.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down proxy server for %s: %v", p.OriginalURL, err)
+		if err := p.Server.Close(); err != nil {
+			log.Printf("Error closing proxy server for %s: %v", p.OriginalURL, err)
 		}
 	}
 
@@ -140,10 +138,19 @@ func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy,
 		return HandleRedirect(resp, target)
 	}
 
+	if requestedPort <= 0 {
+		if histPort := GetHistoricalPort(rawURL); histPort > 0 {
+			log.Printf("Re-using historical port %d for %s", histPort, rawURL)
+			requestedPort = histPort
+		}
+	}
+
 	remotePort, err := SelectAvailablePort(requestedPort, startPort, len(Proxies))
 	if err != nil {
 		return nil, err
 	}
+
+	RecordPortHistory(rawURL, remotePort)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// Pre-create the struct to allow closure capture

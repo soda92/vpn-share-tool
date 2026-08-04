@@ -97,3 +97,45 @@ func TestLoadProxies_DifferentialAllocation(t *testing.T) {
 		t.Errorf("Expected site1 to be assigned a new un-conflicting port, got %d", site1Port)
 	}
 }
+
+func TestPortHistory_Reuse(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "proxy_history_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	origDebugPath := debug.DebugStoragePath
+	debug.DebugStoragePath = tmpDir
+	defer func() { debug.DebugStoragePath = origDebugPath }()
+
+	testURL := "http://test-history-site.local:8080/app"
+
+	// 1. Create a proxy with requestedPort 0
+	proxy1, err := ShareUrlAndGetProxy(testURL, 0)
+	if err != nil {
+		t.Fatalf("Failed to create proxy: %v", err)
+	}
+	assignedPort := proxy1.RemotePort
+
+	// 2. Tear down / stop the proxy
+	removeProxy(proxy1)
+
+	// 3. Verify history recorded the port
+	histPort := GetHistoricalPort(testURL)
+	if histPort != assignedPort {
+		t.Fatalf("Expected historical port %d, got %d", assignedPort, histPort)
+	}
+
+	// 4. Re-create the proxy with requestedPort 0 (simulating re-discovery when site comes back up)
+	proxy2, err := ShareUrlAndGetProxy(testURL, 0)
+	if err != nil {
+		t.Fatalf("Failed to re-create proxy: %v", err)
+	}
+	defer removeProxy(proxy2)
+
+	// 5. Verify it re-claimed the same port!
+	if proxy2.RemotePort != assignedPort {
+		t.Errorf("Expected re-created proxy to re-use port %d, but got %d", assignedPort, proxy2.RemotePort)
+	}
+}
