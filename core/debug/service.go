@@ -108,6 +108,8 @@ func RegisterDebugRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/debug/clear-live", handleClearLiveRequests)
 	mux.HandleFunc("/api/debug/ws", handleDebugWS)
 	mux.HandleFunc("/api/debug/requests/", handleSingleRequest)
+	mux.HandleFunc("/api/debug/proxies", handleDebugProxies)
+	mux.HandleFunc("/api/debug/logs", handleDebugLogs)
 	mux.HandleFunc("/api/debug/download-db", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")

@@ -23,24 +23,46 @@ type ProxyConfigItem struct {
 	LegacyEnableCaptcha bool `json:"enable_captcha,omitempty"`
 }
 
-func getConfigFile() (string, error) {
+func getAppStorageDir() (string, error) {
 	if debug.DebugStoragePath != "" {
-		// Ensure the directory exists
 		if err := os.MkdirAll(debug.DebugStoragePath, 0755); err != nil {
 			return "", err
 		}
-		return filepath.Join(debug.DebugStoragePath, "proxies.json"), nil
+		return debug.DebugStoragePath, nil
 	}
 
-	configDir, err := os.UserConfigDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	appDir := filepath.Join(configDir, "vpn-share-tool")
+	appDir := filepath.Join(home, ".vpn-share-tool")
 	if err := os.MkdirAll(appDir, 0755); err != nil {
 		return "", err
 	}
-	return filepath.Join(appDir, "proxies.json"), nil
+
+	// Auto-migrate legacy files from os.UserConfigDir() (e.g. %APPDATA%/vpn-share-tool) if present
+	if configDir, err := os.UserConfigDir(); err == nil {
+		legacyDir := filepath.Join(configDir, "vpn-share-tool")
+		for _, filename := range []string{"proxies.json", "port_history.json"} {
+			targetFile := filepath.Join(appDir, filename)
+			legacyFile := filepath.Join(legacyDir, filename)
+			if _, err := os.Stat(targetFile); os.IsNotExist(err) {
+				if data, err := os.ReadFile(legacyFile); err == nil {
+					_ = os.WriteFile(targetFile, data, 0644)
+				}
+			}
+		}
+	}
+
+	return appDir, nil
+}
+
+func getConfigFile() (string, error) {
+	dir, err := getAppStorageDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "proxies.json"), nil
 }
 
 func SaveProxies() {
@@ -159,22 +181,11 @@ var (
 )
 
 func getPortHistoryFile() (string, error) {
-	if debug.DebugStoragePath != "" {
-		if err := os.MkdirAll(debug.DebugStoragePath, 0755); err != nil {
-			return "", err
-		}
-		return filepath.Join(debug.DebugStoragePath, "port_history.json"), nil
-	}
-
-	configDir, err := os.UserConfigDir()
+	dir, err := getAppStorageDir()
 	if err != nil {
 		return "", err
 	}
-	appDir := filepath.Join(configDir, "vpn-share-tool")
-	if err := os.MkdirAll(appDir, 0755); err != nil {
-		return "", err
-	}
-	return filepath.Join(appDir, "port_history.json"), nil
+	return filepath.Join(dir, "port_history.json"), nil
 }
 
 func loadPortHistory() {

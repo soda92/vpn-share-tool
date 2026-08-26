@@ -10,12 +10,25 @@ import (
 	"time"
 
 	"github.com/soda92/vpn-share-tool/core/archive"
+	"github.com/soda92/vpn-share-tool/core/debug"
 	"github.com/soda92/vpn-share-tool/core/proxy"
 	"github.com/soda92/vpn-share-tool/core/resources"
 )
 
 func init() {
 	archive.HTTPClient = GetHTTPClient()
+	debug.ProxyProvider = proxy.GetProxies
+	debug.ShareProxyFunc = proxy.ShareUrlAndGetProxy
+	debug.RemoveProxyFunc = proxy.RemoveProxyByPort
+	debug.InstanceIP = func() string {
+		if MyIP != "" {
+			return MyIP
+		}
+		if proxy.MyIP != "" {
+			return proxy.MyIP
+		}
+		return "127.0.0.1"
+	}
 }
 
 const (

@@ -2,6 +2,7 @@ __pycache__
 node_modules
 certs.7z
 users.json
+fyne.syso
 
 /trace.out
 /rustlib/target

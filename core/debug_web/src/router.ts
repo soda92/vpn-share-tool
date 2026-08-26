@@ -6,10 +6,14 @@ import RequestDetailView from './views/RequestDetailView.vue';
 import FormDecoder from './views/FormDecoder.vue';
 import Sessions from './views/Sessions.vue';
 import Archives from './views/Archives.vue';
+import Proxies from './views/Proxies.vue';
+import Logs from './views/Logs.vue';
 
 const routes: Array<RouteRecordRaw> = [
   { path: '/', redirect: '/live' },
   { path: '/live', component: LiveSession },
+  { path: '/proxies', component: Proxies },
+  { path: '/logs', component: Logs },
   { path: '/sessions', component: Sessions },
   { path: '/session/:id', component: SavedSession },
   { path: '/request/:id', component: RequestDetailView },
