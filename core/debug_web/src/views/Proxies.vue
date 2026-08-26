@@ -183,6 +183,10 @@ onUnmounted(() => {
   max-width: 1000px;
   margin: 0 auto;
   padding: 1.5rem 1rem;
+  overflow-y: auto;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .header-card {
