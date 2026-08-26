@@ -82,6 +82,31 @@ func removeProxy(p *models.SharedProxy) {
 	SaveProxies()
 }
 
+// RemoveProxy shuts down a proxy server and removes it from the list.
+func RemoveProxy(p *models.SharedProxy) {
+	removeProxy(p)
+}
+
+// RemoveProxyByPort finds a proxy by its remote port, shuts it down, and removes it.
+func RemoveProxyByPort(port int) error {
+	ProxiesLock.RLock()
+	var target *models.SharedProxy
+	for _, p := range Proxies {
+		if p.RemotePort == port {
+			target = p
+			break
+		}
+	}
+	ProxiesLock.RUnlock()
+
+	if target == nil {
+		return fmt.Errorf("no proxy found on port %d", port)
+	}
+
+	removeProxy(target)
+	return nil
+}
+
 func ShareUrlAndGetProxy(rawURL string, requestedPort int) (*models.SharedProxy, error) {
 	if rawURL == "" {
 		return nil, fmt.Errorf("URL cannot be empty")

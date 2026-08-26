@@ -2,6 +2,8 @@
   <nav class="toolbar">
     <div class="toolbar-nav">
       <router-link to="/live" class="toolbar-link">Live Session</router-link>
+      <router-link to="/proxies" class="toolbar-link">Proxies</router-link>
+      <router-link to="/logs" class="toolbar-link">Logs</router-link>
       <router-link to="/sessions" class="toolbar-link">Saved Sessions</router-link>
       <router-link to="/archives" class="toolbar-link">Archives</router-link>
       <router-link to="/decoder" class="toolbar-link">Decoder</router-link>
